@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Reseal">
+  <title>Reseal</title>
+  <style>
+    /* Fonts zui uses for text (the same stack as Maps-js). Everything else is drawn by zui. */
+    :root {
+      --zui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans Arabic", Tahoma, sans-serif;
+      --zui-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    }
+    html, body { margin: 0; height: 100%; }
+    body { font-family: var(--zui-font); -webkit-text-size-adjust: 100%; }
+  </style>
+</head>
+<body>
+  <script type="module">
+    import { start } from '/zui.js';
+    start('/app.wasm');
+  </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+name: iOS simulator
+
+# Builds the iOS app on a macOS runner (no Xcode project: zig build links it), launches it in
+# the iOS simulator and uploads a screenshot. Also runs the client and server tests.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  ios-simulator:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig 0.17.0
+        run: |
+          curl -sSL https://ziglang.org/download/index.json -o "$RUNNER_TEMP/index.json"
+          read -r url sha < <(python3 -c 'import json,sys; v=json.load(open(sys.argv[1]))["0.17.0"]["aarch64-macos"]; print(v["tarball"], v["shasum"])' "$RUNNER_TEMP/index.json")
+          curl -sSL "$url" -o "$RUNNER_TEMP/zig.tar.xz"
+          echo "$sha  $RUNNER_TEMP/zig.tar.xz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/zig"
+          tar -xf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Test
+        run: zig build test
+
+      - name: Build the simulator app
+        run: zig build ios-sim-app -Doptimize=ReleaseSmall
+
+      - name: Run in the simulator
+        run: |
+          # Newest iOS runtime, first iPhone in it.
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          runtimes = sorted((k for k in devices if ".iOS-" in k), key=lambda k: [int(x) for x in k.rsplit("iOS-", 1)[1].split("-")])
+          print(next(d["udid"] for d in devices[runtimes[-1]] if d["name"].startswith("iPhone")))')
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" zig-out/ios/reseal.app
+          mkdir -p screenshots
+
+          # run <name> [launch arguments]: launch, screenshot, fail if the app is no longer running.
+          run() {
+            name=$1; shift
+            xcrun simctl terminate "$udid" com.wufour.reseal 2>/dev/null || true
+            xcrun simctl launch --stderr="$PWD/screenshots/$name.log" "$udid" com.wufour.reseal "$@"
+            sleep 6
+            xcrun simctl io "$udid" screenshot "screenshots/$name.png"
+            xcrun simctl spawn "$udid" launchctl list | grep com.wufour.reseal
+            cat "screenshots/$name.log" || true
+          }
+          xcrun simctl ui "$udid" appearance light
+          run english
+          run arabic -AppleLanguages "(ar)"
+          xcrun simctl ui "$udid" appearance dark
+          run arabic-dark -AppleLanguages "(ar)"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulator-screenshots
+          path: screenshots
+          if-no-files-found: ignore
