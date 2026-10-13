@@ -60,8 +60,10 @@ pub const FileState = enum { loading, ready, failed };
 
 pub const File = struct {
     state: FileState = .loading,
-    /// What to show: a signed link (plain chats) or a data: address (decrypted).
+    /// What to show: a signed link (plain chats)...
     url: []u8 = "",
+    /// ...or the decrypted bytes (shown with ui.imageBytes, saved with saveFile).
+    bytes: []u8 = &.{},
     key: ?crypto.FileKey = null,
     mime: []u8 = "",
     name: []u8 = "",
@@ -221,6 +223,11 @@ pub fn file(s: *State, item: j.Value, save: bool) ?*File {
     return f;
 }
 
+/// A ready picture: its decrypted bytes (known by the media id) or its signed link.
+pub fn draw(ui: anytype, f: *const File, id: []const u8, style: zui.Style, k: u64) void {
+    if (f.bytes.len > 0) ui.imageBytes(f.bytes, id, style, k) else ui.image(f.url, style, k);
+}
+
 /// What a media item shows right now, without fetching (views are read-only).
 pub fn shown(s: *const State, item: j.Value) ?*const File {
     const id = j.str(item, "id") orelse return null;
@@ -264,14 +271,8 @@ fn onChunk(s: *State, id: []const u8, index: u32, r: zui.Response) void {
     };
     f.parts.appendSlice(gpa, plain) catch return;
     if (index + 1 < f.chunks) return fetchChunk(s, id, f);
-    // Done: a data: address the image views (and the web shell's save) take.
-    const enc = std.base64.standard.Encoder;
-    const prefix = std.fmt.allocPrint(tmp(), "data:{s};base64,", .{f.mime}) catch return;
-    const url = gpa.alloc(u8, prefix.len + enc.calcSize(f.parts.items.len)) catch return;
-    @memcpy(url[0..prefix.len], prefix);
-    _ = enc.encode(url[prefix.len..], f.parts.items);
-    f.parts.clearAndFree(gpa);
-    f.url = url;
+    // Done: the bytes, drawn with ui.imageBytes.
+    f.bytes = f.parts.toOwnedSlice(gpa) catch return;
     f.state = .ready;
     if (f.save) saveFile(f);
 }
@@ -281,13 +282,8 @@ fn onChunk(s: *State, id: []const u8, index: u32, r: zui.Response) void {
 /// and opens in the browser on phones.
 fn saveFile(f: *File) void {
     f.save = false;
-    if (std.mem.startsWith(u8, f.url, "data:")) {
-        const comma = std.mem.indexOfScalar(u8, f.url, ',') orelse return;
-        const b64 = f.url[comma + 1 ..];
-        const dec = std.base64.standard.Decoder;
-        const bytes = tmp().alloc(u8, dec.calcSizeForSlice(b64) catch return) catch return;
-        dec.decode(bytes, b64) catch return;
-        app.fx.saveFile(.{ .name = f.name, .mime = f.mime, .data = bytes });
+    if (f.bytes.len > 0) {
+        app.fx.saveFile(.{ .name = f.name, .mime = f.mime, .data = f.bytes });
     } else if (zui.platform == .web) {
         const a = tmp();
         app.post(std.fmt.allocPrint(a, "{{\"t\":\"save\",\"name\":{s},\"url\":{s}}}", .{ j.quote(a, f.name) catch "\"file\"", j.quote(a, f.url) catch "\"\"" }) catch return);

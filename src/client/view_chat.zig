@@ -553,7 +553,7 @@ fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out:
                 ui.icon(icons.play, 26, Color.white, .{}, 0);
                 ui.end();
             } else if (f) |file| {
-                if (file.state == .ready) ui.image(file.url, .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "full", j.strOr(item, "id", "") }));
+                if (file.state == .ready) media.draw(ui, file, j.strOr(item, "id", ""), .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "full", j.strOr(item, "id", "") }));
             }
             if (m.local_id != 0 and m.state == .sending) {
                 ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1480"), .align_items = .center, .justify = .center }, .{});
@@ -1102,7 +1102,7 @@ pub fn viewer(cx: Cx) void {
             const h = h0 * scale;
             if (media.shown(s, item)) |f| {
                 if (f.state == .ready) {
-                    ui.image(f.url, .{ .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "view", j.strOr(item, "id", "") }));
+                    media.draw(ui, f, j.strOr(item, "id", ""), .{ .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "view", j.strOr(item, "id", "") }));
                     shown_any = true;
                 }
             }
