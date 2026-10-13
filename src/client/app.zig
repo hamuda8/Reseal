@@ -141,6 +141,7 @@ pub const Modal = union(enum) {
     safety: Id,
     reactions: Id,
     join: Id,
+    forward: Id,
 };
 
 pub const Msg = union(enum) {
@@ -200,6 +201,7 @@ pub const Msg = union(enum) {
     retry_send: u32,
     cancel_send: u32,
     open_media: struct { msg: Id, index: u8 },
+    forward_to: Id,
     close_viewer,
     download: struct { msg: Id, index: u8 },
     pick_user: Id,

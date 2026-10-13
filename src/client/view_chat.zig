@@ -117,6 +117,11 @@ fn header(cx: Cx, c: *const data.Chat) void {
     kit.divider(cx);
 }
 
+fn nonEmpty(x: ?[]const u8) ?[]const u8 {
+    const v = x orelse return null;
+    return if (v.len == 0) null else v;
+}
+
 const Status = struct { text: []const u8, accent: bool = false };
 
 fn status(cx: Cx, c: *const data.Chat) Status {
@@ -132,7 +137,7 @@ fn status(cx: Cx, c: *const data.Chat) Status {
         }
         const online = if (s.members) |m| j.intOr(m.v, "online", 0) else 0;
         if (online > 1) return .{ .text = t("online"), .accent = true };
-        return .{ .text = j.str(c.o.v, "team.about") orelse t("Your messages reach the whole team") };
+        return .{ .text = nonEmpty(j.str(c.o.v, "team.about")) orelse t("Your messages reach the whole team") };
     }
     if (c.is("private")) {
         const p = s.store.peer(c) orelse return .{ .text = "" };
@@ -154,7 +159,7 @@ fn status(cx: Cx, c: *const data.Chat) Status {
         };
         return .{ .text = tx };
     }
-    if (c.is("saved")) return .{ .text = c.o.s("about") orelse t("Notes, links and files · only you") };
+    if (c.is("saved")) return .{ .text = nonEmpty(c.o.s("about")) orelse t("Notes, links and files · only you") };
     return .{ .text = "" };
 }
 
@@ -797,10 +802,21 @@ fn messageMenu(cx: Cx, chat_id: Id, item: Id) void {
         if (x == .string and std.mem.eql(u8, x.string, m.id())) break true;
     } else false;
     if (can(c, "pinMessages") and !m.deleted()) views.menuItem(cx, if (pinned) icons.unpin else icons.pin, if (pinned) t("Unpin") else t("Pin"), act(if (pinned) .unpin else .pin, id), false);
+    if (content_ok and !c.o.b("protectedContent") and feature(s, "forwarding")) views.menuItem(cx, icons.forward, t("Forward"), act(.forward, id), false);
     if (content_ok and !c.is("saved") and s.mode == .app and m.text().len > 0) views.menuItem(cx, icons.bookmark, t("Save to Saved Messages"), act(.save, id), false);
     if (j.arr(m.o.v, "reactions").len > 0) views.menuItem(cx, icons.heart, t("Reactions"), .{ .menu = .{ .reactions = id } }, false);
     const deletable = mine or can(c, "deleteMessages") or c.is("private") or c.is("saved") or c.is("bot") or !c.is("channel");
     if (deletable) views.menuItem(cx, icons.trash, t("Delete"), act(.delete, id), true);
+    views.endSheet(cx);
+}
+
+pub fn forwardSheet(cx: Cx) void {
+    const s = cx.s;
+    views.sheet(cx, t("Forward to…"));
+    for (s.store.sorted(cx.a(), false)) |c| {
+        if (c.o.b("preview")) continue;
+        vlist.chatItem(cx, c, .{ .forward_to = Id.of(c.id()) });
+    }
     views.endSheet(cx);
 }
 

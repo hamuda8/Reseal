@@ -29,6 +29,8 @@ pub const Out = struct {
     media_json: std.ArrayList([]u8) = .empty,
     attempt: u8 = 0,
     failed: bool = false,
+    /// Forwarded: {"fromUserId","fromName","date"} (owned).
+    fwd_json: ?[]u8 = null,
 };
 
 pub const Outbox = struct {
@@ -46,6 +48,7 @@ fn removeOut(s: *State, local: u32) void {
     for (s.out.items.items, 0..) |o, i| if (o.local == local) {
         var x = s.out.items.orderedRemove(i);
         for (x.media_json.items) |m| gpa.free(m);
+        if (x.fwd_json) |f| gpa.free(f);
         x.media_json.deinit(gpa);
         x.uploads.deinit(gpa);
         return;
@@ -192,6 +195,7 @@ pub fn pump(s: *State, chat_id: []const u8) void {
         payload.appendSlice(a, "{\"v\":1") catch return;
         if (text.len > 0) payload.print(a, ",\"t\":{s}", .{j.quote(a, text) catch return}) catch return;
         if (o.media_json.items.len > 0) payload.print(a, ",\"media\":{s}", .{media_arr.items}) catch return;
+        if (o.fwd_json) |f| payload.print(a, ",\"fwd\":{s}", .{f}) catch return;
         payload.append(a, '}') catch return;
         const env = keys.encrypt(s, c, payload.items) orelse return fail(s, o, t("Could not encrypt the message"));
         body.print(a, ",\"enc\":{s},\"tags\":[{s}]", .{ env, tagsOf(a, text, o.media_json.items) }) catch return;
@@ -202,6 +206,12 @@ pub fn pump(s: *State, chat_id: []const u8) void {
         }
     } else {
         if (text.len > 0) body.print(a, ",\"text\":{s}", .{j.quote(a, text) catch return}) catch return;
+        if (o.fwd_json) |f| {
+            // A copy forwarded from an encrypted chat: the label is informational (date in ms).
+            const fv = j.parse(a, f);
+            const date = @import("sys.zig").parseIso(j.strOr(fv, "date", "")) orelse 0;
+            body.print(a, ",\"forwarded\":{{\"fromName\":{s},\"fromUserId\":{s},\"date\":{d}}}", .{ j.stringify(a, j.field(fv, "fromName") orelse .null) catch "null", j.stringify(a, j.field(fv, "fromUserId") orelse .null) catch "null", date }) catch return;
+        }
         if (o.media_json.items.len > 0) {
             // Plain chats: the files without their (absent) keys.
             body.appendSlice(a, ",\"media\":[") catch return;
@@ -364,4 +374,24 @@ pub fn onPickedFile(s: *State, v: j.Value) void {
         .encrypted = c.encrypted(),
     }) orelse return;
     o.uploads.append(gpa, up) catch {};
+}
+
+/// Forwards a message's content into another chat (re-encrypted there when needed).
+pub fn forward(s: *State, to_chat: []const u8, text: []const u8, media_items: []j.Value, fwd_json: []const u8) void {
+    const local = queue(s, to_chat, text, .{}) orelse return;
+    const o = find(s, local) orelse return;
+    o.fwd_json = gpa.dupe(u8, fwd_json) catch null;
+    const a = tmp();
+    for (media_items) |it| {
+        const mj = j.stringify(a, it) catch continue;
+        o.media_json.append(gpa, gpa.dupe(u8, mj) catch continue) catch {};
+    }
+    if (s.store.existingTimeline(to_chat)) |tl| if (tl.findPending(local)) |m| {
+        const ma = m.o.alloc();
+        if (m.content) |*c| {
+            if (c.object.getPtr("media")) |arr| for (media_items) |it| arr.array.append(j.clone(ma, it) catch continue) catch {};
+            if (j.parse(ma, fwd_json)) |fv| c.object.put(ma, "fwd", fv) catch {};
+        }
+    };
+    pump(s, to_chat);
 }

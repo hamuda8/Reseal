@@ -211,6 +211,7 @@ pub fn onUi(s: *State, msg: Msg) void {
             app.toast(s, t("Recovery key copied"));
         },
         .embed_open => |target| embedTarget(s, target),
+        .forward_to => |to| forwardTo(s, to.str()),
         else => {},
     }
 }
@@ -437,8 +438,37 @@ fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
             }
         },
         .retract_vote => app.api(s, .POST, path("/chats/{s}/messages/{s}/vote", .{ chat, msg_id }), "{\"options\":[]}", .{ .vote = .{ .chat = s.open_chat, .msg = Id.of(msg_id) } }),
-        .forward, .select, .details => {},
+        .forward => s.modal = .{ .forward = Id.of(msg_id) },
+        .select, .details => {},
     }
+}
+
+fn forwardTo(s: *State, to: []const u8) void {
+    const m_id = if (s.modal) |m| (if (m == .forward) m.forward else return) else return;
+    s.modal = null;
+    const from = s.store.chat(s.open_chat.str()) orelse return;
+    const target = s.store.chat(to) orelse return;
+    const tl = s.store.existingTimeline(from.id()) orelse return;
+    const m = tl.find(m_id.str()) orelse return;
+    if (!from.encrypted() and !target.encrypted()) {
+        // Both readable by the server: it copies the message itself.
+        const body = path("{{\"fwd\":{{\"messageId\":\"{s}\",\"chatId\":\"{s}\"}},\"clientId\":\"fwd-{s}-{d}\"}}", .{ m.id(), from.id(), m.id(), sys.now() });
+        app.api(s, .POST, path("/chats/{s}/messages", .{to}), body, .ignore);
+    } else {
+        var media_items = m.media();
+        // Encrypted files cannot go into a chat the server can read (they would need a new upload).
+        if (!target.encrypted()) media_items = &.{};
+        const existing = j.obj(m.content, "fwd");
+        const sender = m.senderId();
+        const fwd = if (existing) |e| (j.stringify(tmp(), e) catch "{}") else path("{{\"fromUserId\":{s},\"fromName\":{s},\"fromChatId\":{s},\"date\":{s}}}", .{
+            if (sender.len > 0) (j.quote(tmp(), sender) catch "null") else "null",
+            if (sender.len > 0) (j.quote(tmp(), s.store.displayName(sender)) catch "null") else "null",
+            if (from.is("channel")) (j.quote(tmp(), from.id()) catch "null") else "null",
+            j.quote(tmp(), m.o.s("createdAt") orelse "") catch "null",
+        });
+        send.forward(s, to, m.text(), media_items, fwd);
+    }
+    app.toast(s, t("Forwarded"));
 }
 
 fn react(s: *State, msg_id: []const u8, emoji_index: u8) void {
@@ -994,6 +1024,7 @@ fn modal(cx: Cx) void {
         .fingerprint => vset.fingerprint(cx),
         .safety => |uid| vset.safety(cx, uid.str()),
         .reactions => vchat.reactionsSheet(cx),
+        .forward => vchat.forwardSheet(cx),
         .join => {},
     }
 }

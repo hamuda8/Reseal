@@ -142,7 +142,7 @@
     app = await start('/app.wasm', mount, { onPost, link: location.pathname + location.search + location.hash });
     send(env('env'));
     setInterval(() => send(env('clock')), 20000);
-    const visible = () => send({ t: 'visible', visible: document.visibilityState === 'visible' && document.hasFocus() });
+    const visible = () => send({ t: 'visible', visible: document.visibilityState === 'visible' });
     document.addEventListener('visibilitychange', visible);
     addEventListener('focus', visible);
     addEventListener('blur', visible);

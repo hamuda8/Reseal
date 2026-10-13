@@ -280,7 +280,7 @@ fn previewOf(cx: Cx, c: *const data.Chat) struct { prefix: ?[]const u8 = null, b
     const typing_now = text.typingText(s, c);
     if (typing_now.len > 0) return .{ .body = typing_now, .color = cx.c.accent };
     if (!s.open_chat.eql(c.id())) if (j.str(c.me(), "draft.text")) |d| if (d.len > 0) return .{ .prefix = std.fmt.allocPrint(a, "{s}: ", .{t("Draft")}) catch "", .body = fmt.plain(a, d, 80), .color = cx.c.text_2, .draft = true };
-    const m = c.last orelse return .{ .body = if (c.is("saved")) (c.o.s("about") orelse t("Save messages, files and notes here")) else "", .color = cx.c.text_2 };
+    const m = c.last orelse return .{ .body = if (c.is("saved")) (if (c.o.s("about")) |ab| (if (ab.len > 0) ab else t("Save messages, files and notes here")) else t("Save messages, files and notes here")) else "", .color = cx.c.text_2 };
     var prefix: ?[]const u8 = null;
     if (!m.isService() and m.senderId().len > 0) {
         if (s.store.isMe(m.authorId()) and !c.is("saved") and !c.is("channel")) {
