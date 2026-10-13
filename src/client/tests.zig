@@ -30,6 +30,7 @@ fn bootAsBob(a: std.mem.Allocator) !void {
     // Tests run as the phone apps do: a Wufour token in secure storage.
     zui.storage.set("token", "tok_bob", .{ .secure = true });
     zui.storage.remove(std.fmt.allocPrint(a, "identity:{s}", .{j.str(v, "bobId").?}) catch "", .{ .secure = true });
+    zui.storage.remove(std.fmt.allocPrint(a, "identity-public:{s}", .{j.str(v, "bobId").?}) catch "", .{});
     D.start(1280, 800);
     try testing.expect(D.respond("/api/config", 200, "{\"version\":\"test\"}"));
     const me = try std.fmt.allocPrint(a, "{{\"user\":{{\"id\":\"{s}\",\"displayName\":\"Bob Haddad\",\"color\":3,\"hasKeys\":true,\"keyMode\":\"standard\",\"keys\":{{\"enc\":\"{s}\",\"sig\":\"{s}\"}}}}}}", .{ j.str(v, "bobId").?, j.str(bob, "encPublic").?, j.str(bob, "sigPublic").? });
@@ -39,6 +40,20 @@ fn bootAsBob(a: std.mem.Allocator) !void {
     const esc = try crypto.escrowBackup(a, sys.random(), id);
     const restore = try std.fmt.allocPrint(a, "{{\"enc\":\"{s}\",\"sig\":\"{s}\",\"version\":1,\"provisioned\":false,\"escrow\":{s},\"escrowKey\":\"{s}\"}}", .{ j.str(bob, "encPublic").?, j.str(bob, "sigPublic").?, esc.box, esc.key });
     try testing.expect(D.respond("/api/keys/restore", 200, restore));
+}
+
+/// Delivers zui.keys answers (they arrive after the update, on zero-delay timers).
+fn keyAnswers() void {
+    var i: usize = 0;
+    while (i < host.timers.items.len) {
+        if (host.timers.items[i].ms != 0) {
+            i += 1;
+            continue;
+        }
+        const tm = host.timers.orderedRemove(i);
+        D.R.timerDone(tm.id);
+        i = 0;
+    }
 }
 
 test "boot: keys restored from the automatic backup, chats load" {
@@ -72,6 +87,7 @@ test "a crypto.js message decrypts in the chat list and the chat" {
     try testing.expect(D.respond(try std.fmt.allocPrint(a, "/chats/{s}/keys", .{chat_id}), 200, keys));
     const users = try std.fmt.allocPrint(a, "{{\"users\":[{{\"id\":\"{s}\",\"displayName\":\"Alice Carter\",\"keys\":{{\"enc\":\"{s}\",\"sig\":\"{s}\"}}}}]}}", .{ j.str(v, "aliceId").?, j.str(alice, "encPublic").?, j.str(alice, "sigPublic").? });
     try testing.expect(D.respond("/api/users/lookup", 200, users));
+    keyAnswers();
     try testing.expect(D.findText("Hello Bob 👋 — مرحبا") != 0);
 
     // Open the chat: the message list loads and shows the same message.
@@ -83,6 +99,8 @@ test "a crypto.js message decrypts in the chat list and the chat" {
     // Reply: encrypted with the chat key, posted, and readable with crypto's own code.
     try D.typeInto("Message", "Hi Alice");
     D.R.dispatch(.send_text);
+    // It leaves once zui.keys has signed it.
+    keyAnswers();
     var body: []const u8 = "";
     for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, "/messages") and std.mem.eql(u8, f.method, "POST")) {
         body = f.body;

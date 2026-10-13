@@ -452,24 +452,33 @@ fn ecdhKey(secret: [32]u8, public: []const u8, salt: []const u8, info: []const u
 
 pub const Wrap = struct { userId: []const u8, eph: []const u8, iv: []const u8, ct: []const u8, sig: []const u8 };
 
-fn wrapInfo(a: Allocator, chat_id: []const u8, epoch: i64, user_id: []const u8) ![]u8 {
+pub fn wrapInfo(a: Allocator, chat_id: []const u8, epoch: i64, user_id: []const u8) ![]u8 {
     return std.fmt.allocPrint(a, "reseal/chatkey/v1|{s}|{d}|{s}", .{ chat_id, epoch, user_id });
 }
 
-fn wrapSigned(a: Allocator, chat_id: []const u8, epoch: i64, user_id: []const u8, w: Wrap) ![]u8 {
+pub fn wrapSigned(a: Allocator, chat_id: []const u8, epoch: i64, user_id: []const u8, w: Wrap) ![]u8 {
     return std.fmt.allocPrint(a, "reseal/wrap/v1|{s}|{d}|{s}|{s}|{s}|{s}", .{ chat_id, epoch, user_id, w.eph, w.iv, w.ct });
 }
 
 /// Wraps a raw chat key for one member, signed by the wrapper.
 pub fn wrapChatKey(a: Allocator, rng: std.Random, raw: [32]u8, chat_id: []const u8, epoch: i64, user_id: []const u8, recipient_enc_b64: []const u8, signer: [32]u8) Error!Wrap {
+    const u = try wrapChatKeyUnsigned(a, rng, raw, chat_id, epoch, user_id, recipient_enc_b64);
+    var w = u.wrap;
+    w.sig = try sign(a, signer, u.signed);
+    return w;
+}
+
+/// A wrap without its signature, and the text to sign (by a key the app cannot read, zui.keys).
+pub const UnsignedWrap = struct { wrap: Wrap, signed: []u8 };
+
+pub fn wrapChatKeyUnsigned(a: Allocator, rng: std.Random, raw: [32]u8, chat_id: []const u8, epoch: i64, user_id: []const u8, recipient_enc_b64: []const u8) Error!UnsignedWrap {
     const eph = randomScalar(rng);
     const eph_pub = try publicOf(eph);
     const info = try wrapInfo(a, chat_id, epoch, user_id);
     const key = try ecdhKey(eph, try fromB64(a, recipient_enc_b64), &eph_pub, info);
     const iv = random(rng, 12);
-    var w: Wrap = .{ .userId = user_id, .eph = try toB64(a, &eph_pub), .iv = try toB64(a, &iv), .ct = try toB64(a, try seal(a, key, iv, info, &raw)), .sig = "" };
-    w.sig = try sign(a, signer, try wrapSigned(a, chat_id, epoch, user_id, w));
-    return w;
+    const w: Wrap = .{ .userId = user_id, .eph = try toB64(a, &eph_pub), .iv = try toB64(a, &iv), .ct = try toB64(a, try seal(a, key, iv, info, &raw)), .sig = "" };
+    return .{ .wrap = w, .signed = try wrapSigned(a, chat_id, epoch, user_id, w) };
 }
 
 /// Unwraps a chat key addressed to me; a wrap whose signature does not check out is refused.
@@ -505,13 +514,22 @@ pub fn messageKey(a: Allocator, chat_key: [32]u8, chat_id: []const u8, epoch: i6
 
 /// Encrypts and signs a payload (JSON text).
 pub fn encryptMessage(a: Allocator, rng: std.Random, chat_key: [32]u8, payload_json: []const u8, chat_id: []const u8, epoch: i64, sender_id: []const u8, signer: [32]u8) Error!Envelope {
+    const u = try encryptMessageUnsigned(a, rng, chat_key, payload_json, chat_id, epoch, sender_id);
+    var env = u.env;
+    env.sig = try sign(a, signer, u.signed);
+    return env;
+}
+
+/// An envelope without its signature, and the text to sign.
+pub const UnsignedEnvelope = struct { env: Envelope, signed: []u8 };
+
+pub fn encryptMessageUnsigned(a: Allocator, rng: std.Random, chat_key: [32]u8, payload_json: []const u8, chat_id: []const u8, epoch: i64, sender_id: []const u8) Error!UnsignedEnvelope {
     const salt = random(rng, 16);
     const key = try messageKey(a, chat_key, chat_id, epoch, sender_id, &salt);
     const iv = random(rng, 12);
     const ct = try seal(a, key, iv, try msgAad(a, chat_id, epoch, sender_id), try pad(a, payload_json));
-    var env: Envelope = .{ .e = epoch, .s = try toB64(a, &salt), .iv = try toB64(a, &iv), .ct = try toB64(a, ct) };
-    env.sig = try sign(a, signer, try msgSigned(a, chat_id, sender_id, env));
-    return env;
+    const env: Envelope = .{ .e = epoch, .s = try toB64(a, &salt), .iv = try toB64(a, &iv), .ct = try toB64(a, ct) };
+    return .{ .env = env, .signed = try msgSigned(a, chat_id, sender_id, env) };
 }
 
 pub fn envelopeJson(a: Allocator, env: Envelope) Allocator.Error![]u8 {

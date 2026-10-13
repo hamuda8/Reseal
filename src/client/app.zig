@@ -201,6 +201,8 @@ pub const Msg = union(enum) {
     typing_check,
     read_flush: Id,
     fulfill_due,
+    /// An answer from zui.keys (a signature, an unwrapped chat key).
+    key: zui.keys.Result,
     toast_hide: u32,
     embed_init_timeout,
     send_typing_done,
@@ -645,6 +647,7 @@ fn handle(s: *State, msg: Msg) void {
         .typing_check => sync.expireTyping(s),
         .read_flush => |chat| sync.flushRead(s, chat),
         .fulfill_due => keys.fulfillDue(s),
+        .key => |r| keys.onKey(s, r),
         .toast_hide => |id| if (id == s.toast.id) s.toast.text.clear(),
         .embed_init_timeout => embedInitDone(s, null),
         .send_typing_done => {},

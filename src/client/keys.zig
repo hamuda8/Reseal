@@ -1,10 +1,12 @@
 //! The key manager: this device's identity, chat keys, rotation, sharing keys with members who
 //! need them, and decrypting messages. Port of Reseal-js data/e2ee.js.
 //!
-//! The identity's private keys live in zui.storage with .secure (Android Keystore, iOS
-//! Keychain; localStorage on the web, where the web app kept them in IndexedDB) as the same
-//! bundle JSON the backups carry. Chat keys stay in memory and are fetched again (wrapped for
-//! this account) from the server after a restart.
+//! The identity's private keys live in zui.keys (the web: non-extractable WebCrypto keys in
+//! IndexedDB, as the web app kept them; the phones: their keystores), imported once from the
+//! bundle the backups carry and never read again. Only the public keys stay in zui.storage. So
+//! signing and unwrapping are asynchronous: a body that needs signatures carries placeholders
+//! ("zui-sig-<n>") and leaves once they are in (`apiSigned`, `wsSendSigned`). Chat keys stay in
+//! memory and are fetched again (wrapped for this account) from the server after a restart.
 
 const std = @import("std");
 const zui = @import("zui");
@@ -24,8 +26,20 @@ const tmp = app.tmp;
 
 pub const Request = struct { chat: Id, user: Id, epoch: i64 };
 
+/// This device's identity: its public keys (the private ones are in zui.keys).
+pub const Mine = struct { enc_public: [65]u8, sig_public: [65]u8 };
+
+/// A request body waiting for its signatures.
+const Job = struct { body: []u8, then: union(enum) { api: struct { method: zui.Method, path: []u8, op: app.Op }, ws: []u8 } };
+
 pub const Keys = struct {
-    identity: ?crypto.Identity = null,
+    identity: ?Mine = null,
+    /// Signatures that arrived (request id -> base64), until their bodies leave.
+    sigs: std.AutoHashMapUnmanaged(u32, []u8) = .empty,
+    jobs: std.ArrayList(Job) = .empty,
+    /// Unwrap requests in flight: request id -> chat and epoch; and per chat, how many.
+    unwraps: std.AutoHashMapUnmanaged(u32, struct { chat: Id, epoch: i64 }) = .empty,
+    unwrapping: std.StringHashMapUnmanaged(u32) = .empty,
     /// "chatId:epoch" -> raw AES key.
     chat_keys: std.StringHashMapUnmanaged([32]u8) = .empty,
     loading: std.StringHashMapUnmanaged(void) = .empty,
@@ -71,10 +85,33 @@ fn storageKey(s: *const State) []const u8 {
     return std.fmt.allocPrint(tmp(), "identity:{s}", .{myId(s)}) catch "identity";
 }
 
+fn publicKey(s: *const State) []const u8 {
+    return std.fmt.allocPrint(tmp(), "identity-public:{s}", .{myId(s)}) catch "identity-public";
+}
+
+/// The name of a private key in zui.keys ("enc" or "sig").
+fn keyName(s: *const State, comptime which: []const u8) []const u8 {
+    return std.fmt.allocPrint(tmp(), "reseal:{s}:" ++ which, .{myId(s)}) catch "reseal:" ++ which;
+}
+
+fn onKeyMsg(r: zui.keys.Result) app.Msg {
+    return .{ .key = r };
+}
+
+/// The private keys go into zui.keys (never to be read again); the public ones are kept.
 fn storeIdentity(s: *State, id: crypto.Identity) void {
-    s.keys.identity = id;
-    const bundle = crypto.bundleJson(tmp(), id) catch return;
-    zui.storage.set(storageKey(s), bundle, .{ .secure = true });
+    const a = tmp();
+    var enc = crypto.pkcs8Encode(id.enc_secret, id.enc_public);
+    var sig = crypto.pkcs8Encode(id.sig_secret, id.sig_public);
+    defer std.crypto.secureZero(u8, &enc);
+    defer std.crypto.secureZero(u8, &sig);
+    _ = app.fx.key(.{ .op = .import, .name = keyName(s, "enc"), .kind = .ecdh, .data = &enc }, onKeyMsg);
+    _ = app.fx.key(.{ .op = .import, .name = keyName(s, "sig"), .kind = .ecdsa, .data = &sig }, onKeyMsg);
+    s.keys.identity = .{ .enc_public = id.enc_public, .sig_public = id.sig_public };
+    const b = identityB64(s.keys.identity.?);
+    zui.storage.set(publicKey(s), std.fmt.allocPrint(a, "{s} {s}", .{ b.enc, b.sig }) catch return, .{});
+    // The bundle earlier versions kept in secure storage.
+    zui.storage.remove(storageKey(s), .{ .secure = true });
 }
 
 /// The account's keys changed: remember them on the profile, forget chat keys made for old ones.
@@ -105,7 +142,12 @@ fn clearChatKeys(s: *State) void {
 
 /// Sign out: forget this device's keys.
 pub fn forgetDevice(s: *State) void {
-    if (myId(s).len > 0) zui.storage.remove(storageKey(s), .{ .secure = true });
+    if (myId(s).len > 0) {
+        zui.storage.remove(storageKey(s), .{ .secure = true });
+        zui.storage.remove(publicKey(s), .{});
+        _ = app.fx.key(.{ .op = .delete, .name = keyName(s, "enc") }, onKeyMsg);
+        _ = app.fx.key(.{ .op = .delete, .name = keyName(s, "sig") }, onKeyMsg);
+    }
     s.keys.identity = null;
     clearChatKeys(s);
 }
@@ -120,12 +162,28 @@ pub fn hasIdentity(s: *const State) bool {
 pub fn ensureKeys(s: *State) void {
     const me = s.store.me orelse return;
     const enc = me.s("keys.enc");
+    if (zui.storage.get(tmp(), publicKey(s), .{})) |stored| {
+        const space = std.mem.indexOfScalar(u8, stored, ' ') orelse stored.len;
+        const enc_b64 = stored[0..space];
+        const sig_b64 = if (space < stored.len) stored[space + 1 ..] else "";
+        if (enc != null and std.mem.eql(u8, enc.?, enc_b64) and std.mem.eql(u8, me.s("keys.sig") orelse "", sig_b64)) {
+            const e = crypto.fromB64(tmp(), enc_b64) catch "";
+            const g = crypto.fromB64(tmp(), sig_b64) catch "";
+            if (e.len == 65 and g.len == 65) {
+                s.keys.identity = .{ .enc_public = e[0..65].*, .sig_public = g[0..65].* };
+                return app.keysReady(s);
+            }
+        }
+        // Keys were reset elsewhere.
+        zui.storage.remove(publicKey(s), .{});
+    }
+    // Earlier versions kept the private keys as a bundle in secure storage: move them.
     if (zui.storage.get(tmp(), storageKey(s), .{ .secure = true })) |stored| {
         if (crypto.identityFromBundle(tmp(), stored)) |id| {
             const pub_b64 = crypto.toB64(tmp(), &id.enc_public) catch "";
             const sig_b64 = crypto.toB64(tmp(), &id.sig_public) catch "";
             if (enc != null and std.mem.eql(u8, enc.?, pub_b64) and std.mem.eql(u8, me.s("keys.sig") orelse "", sig_b64)) {
-                s.keys.identity = id;
+                storeIdentity(s, id);
                 return app.keysReady(s);
             }
         } else |_| {}
@@ -197,7 +255,7 @@ fn boxOf(v: ?j.Value, key: []const u8) ?crypto.Box {
     };
 }
 
-fn identityB64(id: crypto.Identity) struct { enc: []const u8, sig: []const u8 } {
+fn identityB64(id: anytype) struct { enc: []const u8, sig: []const u8 } {
     return .{ .enc = crypto.toB64(tmp(), &id.enc_public) catch "", .sig = crypto.toB64(tmp(), &id.sig_public) catch "" };
 }
 
@@ -207,7 +265,10 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
     const v = j.parse(a, r.body);
     switch (op) {
         .keys_setup_auto => |x| {
-            defer gpa.destroy(x.id);
+            defer {
+                std.crypto.secureZero(u8, std.mem.asBytes(x.id));
+                gpa.destroy(x.id);
+            }
             if (!r.ok()) {
                 app.toastError(s, app.apiError(r).message);
                 if (s.phase != .ready) s.phase = .locked;
@@ -512,9 +573,10 @@ fn onChatKeys(s: *State, chat: []const u8, r: zui.Response) void {
 /// Unwraps every key of a chat addressed to me; wraps from unknown people wait for a lookup.
 fn processWraps(s: *State, chat: []const u8, body: []const u8, can_wait: bool) void {
     const a = tmp();
-    const id = s.keys.identity orelse return;
+    if (s.keys.identity == null) return;
     const v = j.parse(a, body) orelse return;
     var missing = false;
+    var started: u32 = 0;
     for (j.arr(v, "keys")) |w| {
         const epoch = j.intOr(w, "epoch", 0);
         if (keyFor(s, chat, epoch) != null) continue;
@@ -527,11 +589,17 @@ fn processWraps(s: *State, chat: []const u8, body: []const u8, can_wait: bool) v
             continue;
         };
         const wrap: crypto.Wrap = .{ .userId = myId(s), .eph = j.strOr(w, "eph", ""), .iv = j.strOr(w, "iv", ""), .ct = j.strOr(w, "ct", ""), .sig = j.strOr(w, "sig", "") };
-        const raw = crypto.unwrapChatKey(a, wrap, chat, epoch, myId(s), id.enc_secret, sig) catch {
-            zui.log("Could not unwrap key {s}#{d}", .{ chat, epoch });
-            continue;
-        };
-        remember(s, chat, epoch, raw);
+        if (unwrap(s, wrap, chat, epoch, sig)) started += 1 else zui.log("Could not unwrap key {s}#{d}", .{ chat, epoch });
+    }
+    if (started > 0) {
+        // The keys arrive as messages: the chat stays "loading" until the last one.
+        const gop = s.keys.unwrapping.getOrPut(gpa, gpa.dupe(u8, chat) catch return) catch return;
+        if (gop.found_existing) gpa.free(gop.key_ptr.*) else gop.value_ptr.* = 0;
+        gop.key_ptr.* = gop.key_ptr.*;
+        gop.value_ptr.* += started;
+        if (!s.keys.loading.contains(chat)) s.keys.loading.put(gpa, gpa.dupe(u8, chat) catch return, {}) catch {};
+        _ = app.fx.key(.{ .op = .delete, .name = "reseal:unwrap" }, onKeyMsg);
+        if (!missing) return;
     }
     if (missing) {
         const k = gpa.dupe(u8, chat) catch return;
@@ -543,6 +611,11 @@ fn processWraps(s: *State, chat: []const u8, body: []const u8, can_wait: bool) v
         gop.value_ptr.* = gpa.dupe(u8, body) catch "";
         return;
     }
+    keysLoaded(s, chat);
+}
+
+/// A chat's keys are in: messages decrypt, waiting requests are answered, the outbox moves.
+fn keysLoaded(s: *State, chat: []const u8) void {
     if (s.store.chat(chat)) |c| c.keys_fetched = true;
     retryChat(s, chat);
     // Key requests that waited for this chat's keys.
@@ -580,7 +653,7 @@ fn endRotation(s: *State, chat: []const u8) void {
 
 fn onKeyMembers(s: *State, chat: []const u8, epoch: i64, r: zui.Response, v: ?j.Value) void {
     const a = tmp();
-    const id = s.keys.identity orelse return endRotation(s, chat);
+    if (s.keys.identity == null) return endRotation(s, chat);
     if (!r.ok()) {
         endRotation(s, chat);
         return send.keyProblem(s, chat, app.apiError(r).message);
@@ -596,12 +669,12 @@ fn onKeyMembers(s: *State, chat: []const u8, epoch: i64, r: zui.Response, v: ?j.
             const u = std.fmt.allocPrint(a, "{{\"id\":\"{s}\",\"keys\":{{\"enc\":\"{s}\",\"sig\":\"{s}\",\"version\":{d}}}}}", .{ uid, enc, j.strOr(m, "sig", ""), j.intOr(m, "version", 1) }) catch continue;
             if (j.parse(a, u)) |uv| _ = s.store.putUser(uv) catch null;
         }
-        const w = crypto.wrapChatKey(a, sys.random(), raw, chat, epoch, uid, enc, id.sig_secret) catch continue;
+        const w = wrapSigned(s, raw, chat, epoch, uid, enc) orelse continue;
         wraps.print(a, "{s}{s}", .{ if (n == 0) "" else ",", wrapJson(a, w) }) catch {};
         n += 1;
     }
     wraps.appendSlice(a, "]}") catch {};
-    app.api(s, .POST, std.fmt.allocPrint(a, "/chats/{s}/keys", .{chat}) catch return, wraps.items, .{ .keys_post_rotate = .{ .chat = Id.of(chat), .epoch = epoch, .raw = raw } });
+    apiSigned(s, .POST, std.fmt.allocPrint(a, "/chats/{s}/keys", .{chat}) catch return, wraps.items, .{ .keys_post_rotate = .{ .chat = Id.of(chat), .epoch = epoch, .raw = raw } });
 }
 
 fn wrapJson(a: std.mem.Allocator, w: crypto.Wrap) []const u8 {
@@ -687,7 +760,7 @@ fn onFulfillLookup(s: *State, batch: u32, r: zui.Response, v: ?j.Value) void {
     var list = (s.keys.batches.fetchRemove(batch) orelse return).value;
     defer list.deinit(gpa);
     if (!r.ok()) return;
-    const id = s.keys.identity orelse return;
+    if (s.keys.identity == null) return;
     const a = tmp();
     // Group by chat and epoch.
     var done = std.StringHashMap(void).init(a);
@@ -705,12 +778,12 @@ fn onFulfillLookup(s: *State, batch: u32, r: zui.Response, v: ?j.Value) void {
                 if (j.eqlStr(k, "userId", o.user.str())) break j.str(k, "enc");
             } else null;
             const e = enc orelse continue;
-            const w = crypto.wrapChatKey(a, sys.random(), raw, q.chat.str(), q.epoch, o.user.str(), e, id.sig_secret) catch continue;
+            const w = wrapSigned(s, raw, q.chat.str(), q.epoch, o.user.str(), e) orelse continue;
             body.print(a, "{s}{s}", .{ if (n == 0) "" else ",", wrapJson(a, w) }) catch {};
             n += 1;
         }
         body.appendSlice(a, "]}") catch {};
-        if (n > 0) app.api(s, .POST, std.fmt.allocPrint(a, "/chats/{s}/keys", .{q.chat.str()}) catch continue, body.items, .keys_post_share);
+        if (n > 0) apiSigned(s, .POST, std.fmt.allocPrint(a, "/chats/{s}/keys", .{q.chat.str()}) catch continue, body.items, .keys_post_share);
     }
 }
 
@@ -838,18 +911,22 @@ pub const Encrypted = struct { env_json: []const u8 };
 
 /// The envelope for a payload in this chat, or null when the key is not ready (the caller
 /// waits: `pump` runs again when it is).
+/// Its signature is a placeholder: send the body with `apiSigned`.
 pub fn encrypt(s: *State, chat: *data.Chat, payload_json: []const u8) ?[]const u8 {
-    const id = s.keys.identity orelse return null;
+    if (s.keys.identity == null) return null;
     const epoch = chat.keyEpoch();
     const key = keyFor(s, chat.id(), epoch) orelse return null;
     const a = tmp();
-    const env = crypto.encryptMessage(a, sys.random(), key, payload_json, chat.id(), epoch, myId(s), id.sig_secret) catch return null;
+    const u = crypto.encryptMessageUnsigned(a, sys.random(), key, payload_json, chat.id(), epoch, myId(s)) catch return null;
+    var env = u.env;
+    env.sig = signLater(s, u.signed) orelse return null;
     return crypto.envelopeJson(a, env) catch null;
 }
 
-pub fn signText(s: *const State, text: []const u8) ?[]const u8 {
-    const id = s.keys.identity orelse return null;
-    return crypto.sign(tmp(), id.sig_secret, text) catch null;
+/// A placeholder for the signature of `text` (send the body with `apiSigned` or
+/// `wsSendSigned`).
+pub fn signText(s: *State, text: []const u8) ?[]const u8 {
+    return signLater(s, text);
 }
 
 pub fn verifyFrom(s: *const State, user_id: []const u8, signature: []const u8, text: []const u8) bool {
@@ -858,7 +935,139 @@ pub fn verifyFrom(s: *const State, user_id: []const u8, signature: []const u8, t
 }
 
 pub fn myPublic(s: *const State) ?struct { enc: []const u8, sig: []const u8 } {
-    const id = s.keys.identity orelse return null;
-    const b = identityB64(id);
+    const b = identityB64(s.keys.identity orelse return null);
     return .{ .enc = b.enc, .sig = b.sig };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Signing and unwrapping with keys the app cannot read (zui.keys)
+
+fn signLater(s: *State, text: []const u8) ?[]const u8 {
+    if (s.keys.identity == null) return null;
+    const id = app.fx.key(.{ .op = .sign, .name = keyName(s, "sig"), .data = text }, onKeyMsg);
+    return std.fmt.allocPrint(tmp(), "zui-sig-{d}", .{id}) catch null;
+}
+
+fn wrapSigned(s: *State, raw: [32]u8, chat: []const u8, epoch: i64, user: []const u8, enc: []const u8) ?crypto.Wrap {
+    const u = crypto.wrapChatKeyUnsigned(tmp(), sys.random(), raw, chat, epoch, user, enc) catch return null;
+    var w = u.wrap;
+    w.sig = signLater(s, u.signed) orelse return null;
+    return w;
+}
+
+/// Sends a request whose body may wait for signatures.
+pub fn apiSigned(s: *State, method: zui.Method, path: []const u8, body: []const u8, op: app.Op) void {
+    if (std.mem.indexOf(u8, body, "zui-sig-") == null) return app.api(s, method, path, body, op);
+    const b = gpa.dupe(u8, body) catch return;
+    const p = gpa.dupe(u8, path) catch return gpa.free(b);
+    s.keys.jobs.append(gpa, .{ .body = b, .then = .{ .api = .{ .method = method, .path = p, .op = op } } }) catch return;
+    fillJobs(s);
+}
+
+pub fn wsSendSigned(s: *State, typ: []const u8, d: []const u8) void {
+    if (std.mem.indexOf(u8, d, "zui-sig-") == null) return app.wsSend(s, typ, d);
+    const b = gpa.dupe(u8, d) catch return;
+    s.keys.jobs.append(gpa, .{ .body = b, .then = .{ .ws = gpa.dupe(u8, typ) catch return gpa.free(b) } }) catch return;
+    fillJobs(s);
+}
+
+/// Puts the signatures that arrived into the waiting bodies, and sends those that are complete.
+fn fillJobs(s: *State) void {
+    var i: usize = 0;
+    while (i < s.keys.jobs.items.len) {
+        const job = &s.keys.jobs.items[i];
+        var out: std.ArrayList(u8) = .empty;
+        var rest: []const u8 = job.body;
+        var waiting = false;
+        while (std.mem.indexOf(u8, rest, "zui-sig-")) |at| {
+            out.appendSlice(gpa, rest[0..at]) catch return;
+            var end = at + "zui-sig-".len;
+            while (end < rest.len and std.ascii.isDigit(rest[end])) end += 1;
+            const rid = std.fmt.parseInt(u32, rest[at + "zui-sig-".len .. end], 10) catch 0;
+            if (s.keys.sigs.get(rid)) |sig| out.appendSlice(gpa, sig) catch return else {
+                out.appendSlice(gpa, rest[at..end]) catch return;
+                waiting = true;
+            }
+            rest = rest[end..];
+        }
+        out.appendSlice(gpa, rest) catch return;
+        gpa.free(job.body);
+        job.body = out.toOwnedSlice(gpa) catch return;
+        if (waiting) {
+            i += 1;
+            continue;
+        }
+        const done = s.keys.jobs.orderedRemove(i);
+        defer gpa.free(done.body);
+        switch (done.then) {
+            .api => |x| {
+                defer gpa.free(x.path);
+                app.api(s, x.method, x.path, done.body, x.op);
+            },
+            .ws => |typ| {
+                defer gpa.free(typ);
+                app.wsSend(s, typ, done.body);
+            },
+        }
+    }
+    // Signatures no body waits for any more.
+    if (s.keys.jobs.items.len == 0) {
+        var it = s.keys.sigs.valueIterator();
+        while (it.next()) |v| gpa.free(v.*);
+        s.keys.sigs.clearRetainingCapacity();
+    }
+}
+
+/// Starts unwrapping a chat key: ECDH of my key with the wrap's ephemeral one, HKDF into a key
+/// zui keeps (crypto.zig's ecdhKey, byte for byte), then AES-GCM opens the wrap.
+fn unwrap(s: *State, w: crypto.Wrap, chat: []const u8, epoch: i64, wrapper_sig: []const u8) bool {
+    const a = tmp();
+    const text = crypto.wrapSigned(a, chat, epoch, myId(s), w) catch return false;
+    if (!crypto.verify(a, wrapper_sig, w.sig, text)) return false;
+    const info = crypto.wrapInfo(a, chat, epoch, myId(s)) catch return false;
+    const eph = crypto.fromB64(a, w.eph) catch return false;
+    const iv = crypto.fromB64(a, w.iv) catch return false;
+    const ct = crypto.fromB64(a, w.ct) catch return false;
+    _ = app.fx.key(.{ .op = .ecdh, .name = keyName(s, "enc"), .peer = eph, .salt = eph, .info = info, .into = "reseal:unwrap" }, onKeyMsg);
+    const rid = app.fx.key(.{ .op = .decrypt, .name = "reseal:unwrap", .iv = iv, .aad = info, .data = ct }, onKeyMsg);
+    s.keys.unwraps.put(gpa, rid, .{ .chat = Id.of(chat), .epoch = epoch }) catch return false;
+    return true;
+}
+
+/// An answer from zui.keys: a signature, or an unwrapped chat key.
+pub fn onKey(s: *State, r: zui.keys.Result) void {
+    if (s.keys.unwraps.fetchRemove(r.id)) |kv| {
+        const chat = kv.value.chat.str();
+        if (r.ok() and r.data.len == 32) remember(s, chat, kv.value.epoch, r.data[0..32].*) else zui.log("Could not unwrap key {s}#{d}", .{ chat, kv.value.epoch });
+        const left = s.keys.unwrapping.getPtr(chat) orelse return;
+        left.* -|= 1;
+        if (left.* > 0) return;
+        if (s.keys.unwrapping.fetchRemove(chat)) |e| gpa.free(e.key);
+        if (s.keys.loading.fetchRemove(chat)) |e| gpa.free(e.key);
+        return keysLoaded(s, chat);
+    }
+    if (r.ok() and r.data.len == 64) {
+        const sig = crypto.toB64(gpa, r.data) catch return;
+        s.keys.sigs.put(gpa, r.id, sig) catch return gpa.free(sig);
+        return fillJobs(s);
+    }
+    if (r.status != .ok) {
+        zui.log("zui.keys request {d}: {t}", .{ r.id, r.status });
+        // A body waiting for a signature that will not come is dropped.
+        var b: [24]u8 = undefined;
+        const mark = std.fmt.bufPrint(&b, "zui-sig-{d}", .{r.id}) catch return;
+        var i: usize = 0;
+        while (i < s.keys.jobs.items.len) {
+            if (std.mem.indexOf(u8, s.keys.jobs.items[i].body, mark) == null) {
+                i += 1;
+                continue;
+            }
+            const job = s.keys.jobs.orderedRemove(i);
+            gpa.free(job.body);
+            switch (job.then) {
+                .api => |x| gpa.free(x.path),
+                .ws => |x| gpa.free(x),
+            }
+        }
+    }
 }

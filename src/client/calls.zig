@@ -362,7 +362,7 @@ pub fn onPeerEvent(s: *State, e: zui.PeerEvent) void {
             } else if (j.field(v, "candidate")) |cand| {
                 d = std.fmt.allocPrint(a, "{{\"candidate\":{s}}}", .{j.stringify(a, cand) catch return}) catch return;
             } else return;
-            app.wsSend(s, "call.signal", std.fmt.allocPrint(a, "{{\"callId\":\"{s}\",\"to\":\"{s}\",\"data\":{s}}}", .{ c.id.str(), p.conn.str(), d }) catch return);
+            keys.wsSendSigned(s, "call.signal", std.fmt.allocPrint(a, "{{\"callId\":\"{s}\",\"to\":\"{s}\",\"data\":{s}}}", .{ c.id.str(), p.conn.str(), d }) catch return);
         },
         .state => {
             if (std.mem.eql(u8, e.data, "connected")) {

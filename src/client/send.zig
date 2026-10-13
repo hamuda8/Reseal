@@ -359,7 +359,7 @@ pub fn pump(s: *State, chat_id: []const u8) void {
     if (o.body_extra) |x| body.appendSlice(a, x) catch return;
     body.append(a, '}') catch return;
     s.out.posting.put(gpa, gpa.dupe(u8, chat_id) catch return, {}) catch return;
-    app.api(s, .POST, std.fmt.allocPrint(a, "/chats/{s}/messages", .{chat_id}) catch return, body.items, .{ .send_message = .{ .chat = Id.of(chat_id), .local = o.local } });
+    keys.apiSigned(s, .POST, std.fmt.allocPrint(a, "/chats/{s}/messages", .{chat_id}) catch return, body.items, .{ .send_message = .{ .chat = Id.of(chat_id), .local = o.local } });
 }
 
 fn tagsOf(a: std.mem.Allocator, text: []const u8, media_json: []const []u8) []const u8 {
@@ -488,7 +488,7 @@ pub fn edit(s: *State, chat_id: []const u8, msg_id: []const u8, text: []const u8
     } else {
         body = std.fmt.allocPrint(a, "{{\"text\":{s},\"entities\":{s}}}", .{ j.quote(a, text) catch return, ej orelse "[]" }) catch return;
     }
-    app.api(s, .PATCH, std.fmt.allocPrint(a, "/chats/{s}/messages/{s}", .{ chat_id, msg_id }) catch return, body, .{ .edit_message = .{ .chat = Id.of(chat_id), .msg = Id.of(msg_id) } });
+    keys.apiSigned(s, .PATCH, std.fmt.allocPrint(a, "/chats/{s}/messages/{s}", .{ chat_id, msg_id }) catch return, body, .{ .edit_message = .{ .chat = Id.of(chat_id), .msg = Id.of(msg_id) } });
 }
 
 /// A file the web shell read (Attach): {"t":"file","name","type","size","data":base64,
