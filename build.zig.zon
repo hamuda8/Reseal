@@ -5,12 +5,12 @@
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .zig_core = .{
-            .url = "git+https://github.com/hamuda8/zig-core#e8b8d36e9e942f01032039e18e586ce822b1ef64",
-            .hash = "zig_core-0.0.1-OzygwmQsFwA0o4LlsWmQJK2JTyE5P8-7ksZN1SxcQya7",
+            .url = "git+https://github.com/hamuda8/zig-core#0e4f67737e84821797fc9f042914c558d7896324",
+            .hash = "zig_core-0.0.1-OzygwgIDGAA8GSsaLCOuapE41xPMGepbprQP8yskWlB7",
         },
         .reseal_rtc = .{
-            .url = "git+https://github.com/hamuda8/reseal-rtc#070f57536a4de14ba68cf8477cf966a3a57220c6",
-            .hash = "reseal_rtc-0.1.0-u45kcie5BQBz2Qh8kTkdJZi_bH5Dn-wruF6l8yKW_50W",
+            .url = "git+https://github.com/hamuda8/reseal-rtc#d77b0d54b093dfccca076b588a0ecf2022df55e2",
+            .hash = "reseal_rtc-0.1.0-u45kcmHtBQDtnpf0HAoXLkWDNROktDDMrZ-C4rv03fKq",
         },
     },
     .paths = .{
