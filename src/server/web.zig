@@ -171,6 +171,31 @@ pub const Req = struct {
     /// The whole body, up to `limit` bytes (413 beyond it).
     pub fn rawBody(q: *Req, limit: usize) ![]const u8 {
         if (q.raw) |x| return x;
+        const req = q.ctx.request;
+        if (!req.head.method.requestHasBody()) {
+            // std.http reads no body for DELETE (and GET, OPTIONS); Express does, and Reseal's
+            // clients send JSON with DELETE. Read it here; left unread it would also be taken for
+            // the next request on the connection.
+            if (req.head.transfer_encoding == .none and (req.head.content_length orelse 0) == 0) {
+                q.raw = "";
+                return "";
+            }
+            req.writeExpectContinue() catch return q.r.fail(400, "The request body could not be read", "bad_request");
+            var buf: [4096]u8 = undefined;
+            const rd = req.server.reader.bodyReader(&buf, req.head.transfer_encoding, req.head.content_length);
+            const data = rd.allocRemaining(q.r.a, .limited(limit)) catch |e| switch (e) {
+                error.StreamTooLong => {
+                    q.ctx.close_connection = true;
+                    return q.r.fail(413, "That request is too large", "too_large");
+                },
+                else => {
+                    q.ctx.close_connection = true;
+                    return q.r.fail(400, "The request body could not be read", "bad_request");
+                },
+            };
+            q.raw = data;
+            return data;
+        }
         q.ctx.max_body = limit;
         const data = q.ctx.body() catch |e| switch (e) {
             error.PayloadTooLarge => return q.r.fail(413, "That request is too large", "too_large"),

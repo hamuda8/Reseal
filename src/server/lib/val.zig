@@ -277,6 +277,12 @@ pub fn from(a: Allocator, x: anytype) Allocator.Error!Val {
         ObjectId => return .{ .id = x },
         bson.DateTime => return .{ .date = x.ms },
         bson.Doc => return fromDoc(a, x) catch .null,
+        // `Val.null` / `Val.undef` in a struct literal are the union's tag, not a Val.
+        std.meta.Tag(Val) => return switch (x) {
+            .null => .null,
+            .undef => .undef,
+            else => .{ .str = @tagName(x) },
+        },
         else => {},
     }
     switch (@typeInfo(T)) {

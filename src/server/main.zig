@@ -183,6 +183,9 @@ fn handle(ctx: *http.Context) anyerror!void {
     if (q.secure()) try q.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
 
     if (ctx.wantsWebSocket()) return rt.upgrade(&q);
+    // A body on DELETE (or GET) is read now, whatever the route does with it, so it can never be
+    // mistaken for the next request on a kept-alive connection.
+    if (!ctx.method.requestHasBody() and q.hasBody()) _ = q.rawBody(2 * 1024 * 1024) catch {};
 
     dispatch(&q) catch |err| try web.sendError(&q, err);
     if (!ctx.responded) try web.cannot(&q);
