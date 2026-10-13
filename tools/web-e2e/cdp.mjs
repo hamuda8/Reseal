@@ -40,10 +40,10 @@ export async function tab(browser, out, { width = 1280, height = 800, mobile = f
     await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
   };
-  t.texts = () => t.evaluate(`[...document.querySelectorAll('div')].filter(d => d.childElementCount === 0 && d.textContent).map(d => d.textContent)`);
+  t.texts = () => t.evaluate(`[...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent).map(d => d.textContent)`);
   t.hasText = async (s) => (await t.texts())?.some(x => x.includes(s));
   t.waitText = async (s, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await t.hasText(s)) return true; await sleep(250); } return false; };
-  t.centerOfText = (label, exact = true) => t.evaluate(`(() => { const els = [...document.querySelectorAll('div')].filter(d => d.childElementCount === 0 && (${exact} ? d.textContent === ${JSON.stringify(label)} : d.textContent.includes(${JSON.stringify(label)}))); const top = (e) => { const r = e.getBoundingClientRect(); if (!r.width) return false; const h = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return h && (h === e || e.contains(h) || h.contains(e)); }; const el = els.find(top) || els.find(e => e.getBoundingClientRect().width > 0) || els[0]; if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+  t.centerOfText = (label, exact = true) => t.evaluate(`(() => { const els = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && (${exact} ? d.textContent === ${JSON.stringify(label)} : d.textContent.includes(${JSON.stringify(label)}))); const top = (e) => { const r = e.getBoundingClientRect(); if (!r.width) return false; const h = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return h && (h === e || e.contains(h) || h.contains(e)); }; const el = els.find(top) || els.find(e => e.getBoundingClientRect().width > 0) || els[0]; if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
   t.clickText = async (label, exact = true) => {
     const p = await t.centerOfText(label, exact);
     if (!p) throw new Error(`${name}: no text ${label}`);

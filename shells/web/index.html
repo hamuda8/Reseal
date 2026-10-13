@@ -133,17 +133,6 @@
       }
     });
 
-    // ---- Rotated scroll views (the chat's message list) scroll the right way with a wheel ----
-    addEventListener('wheel', (e) => {
-      for (let el = e.target; el && el !== document.body; el = el.parentElement) {
-        if (el.style && el.style.transform.includes('rotate(180deg)') && el.scrollHeight > el.clientHeight) {
-          e.preventDefault();
-          el.scrollTop -= e.deltaY;
-          return;
-        }
-      }
-    }, { passive: false, capture: true });
-
     // The widget mounts into an element so zui.js does not take the parent page's messages itself
     // (the shell checks their origin first); the app fills the window and keeps its address.
     const mount = embedded ? document.getElementById('app') : document.body;

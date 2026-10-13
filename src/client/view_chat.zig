@@ -2,10 +2,9 @@
 //! and typing, pinned bar, the message list, the composer; the menus (message actions, chat,
 //! compose, mute), the info panel (ui/info.js) and the media viewer.
 //!
-//! The message list is a scroll view turned 180° with each row turned back: it then opens at the
-//! newest message and stays there as messages arrive, which zui's scroll views cannot be told to
-//! do otherwise. Rows that sit at the end of a line ("out" bubbles) are therefore aligned to its
-//! start, and the oldest messages come last (the "load earlier" button is at the far end).
+//! The message list is a scroll view anchored at its end (zui beginScrollWith anchor_end): it
+//! opens at the newest message, stays there as messages arrive, keeps its place when older ones
+//! load above, and asks for more when scrolled to the top.
 
 const std = @import("std");
 const zui = @import("zui");
@@ -259,42 +258,35 @@ fn messages(cx: Cx, c: *const data.Chat) void {
     const ui = cx.ui;
     const s = cx.s;
     const tl = s.store.existingTimeline(c.id());
-    // The list is turned 180° (see the file comment): rows are added newest first.
-    ui.beginScroll(.{ .grow = 1, .width = .fill, .height = .fill, .rotate = 180, .padding = .{ .top = 10, .bottom = 14, .start = if (cx.phone) 10 else 22, .end = if (cx.phone) 10 else 22 }, .align_items = .center }, key(.{ "msgs", c.id() }));
+    // Oldest at the top; the view starts at the end and stays there as messages arrive, and
+    // keeps its place when older ones load above.
+    ui.beginScrollWith(.{ .grow = 1, .width = .fill, .height = .fill, .padding = .{ .top = 10, .bottom = 14, .start = if (cx.phone) 10 else 22, .end = if (cx.phone) 10 else 22 }, .align_items = .center, .justify = .end }, .{ .key = key(.{ "msgs", c.id() }), .anchor_end = true, .keep_position = true, .on_scroll = onScroll });
     ui.begin(.{ .width = .fill, .max_width = 820 }, .{});
     if (tl == null or !tl.?.loaded) {
-        flipped(cx);
         kit.spinner(cx);
-        ui.end();
     } else {
         const list = tl.?;
-        // Pending (newest), then the published ones from the newest down.
-        var pi = list.pending.items.len;
-        while (pi > 0) {
-            pi -= 1;
-            messageRow(cx, c, list.pending.items[pi], null, if (pi + 1 < list.pending.items.len) list.pending.items[pi + 1] else null);
-        }
         const items = list.items.items;
         const first_shown = if (items.len > s.show_count) items.len - s.show_count else 0;
-        var i = items.len;
-        while (i > first_shown) {
-            i -= 1;
-            const m = items[i];
-            const older = if (i > 0) items[i - 1] else null;
-            const newer = if (i + 1 < items.len) items[i + 1] else if (list.pending.items.len > 0) list.pending.items[0] else null;
-            messageRow(cx, c, m, older, newer);
-            // The "unread" line sits above the first unread message.
-            if (s.first_unread > 0 and m.seq() != null and m.seq().? == s.first_unread and !s.store.isMe(m.authorId())) unreadLine(cx);
-            // A day separator above the first message of each day.
-            if (older == null or !fmt.sameDay(older.?.at, m.at)) daySep(cx, m.at);
-        }
         if (first_shown > 0 or list.has_older) {
-            flipped(cx);
-            ui.begin(.{ .align_items = .center, .padding = .all(14) }, .{});
+            ui.begin(.{ .align_items = .center, .padding = .all(14) }, .{ .key = key(.{"older"}) });
             kit.button(cx, t("Load earlier messages"), .load_older, .{ .kind = .secondary, .small = true, .busy = list.loading });
             ui.end();
-            ui.end();
         } else intro(cx, c);
+        for (items[first_shown..], first_shown..) |m, i| {
+            const older = if (i > 0) items[i - 1] else null;
+            const newer = if (i + 1 < items.len) items[i + 1] else if (list.pending.items.len > 0) list.pending.items[0] else null;
+            // A day separator above the first message of each day.
+            if (older == null or !fmt.sameDay(older.?.at, m.at)) daySep(cx, m.at);
+            // The "unread" line sits above the first unread message.
+            if (s.first_unread > 0 and m.seq() != null and m.seq().? == s.first_unread and !s.store.isMe(m.authorId())) unreadLine(cx);
+            messageRow(cx, c, m, older, newer);
+        }
+        // Being sent (newest).
+        for (list.pending.items, 0..) |m, pi| {
+            const older = if (pi > 0) list.pending.items[pi - 1] else if (items.len > 0) items[items.len - 1] else null;
+            messageRow(cx, c, m, older, if (pi + 1 < list.pending.items.len) list.pending.items[pi + 1] else null);
+        }
     }
     ui.end();
     ui.end();
@@ -305,9 +297,13 @@ fn messages(cx: Cx, c: *const data.Chat) void {
     };
 }
 
-/// A row in the turned list, turned back.
+fn onScroll(e: zui.ScrollEvent) Msg {
+    return if (e.reached_start) .reached_top else .scrolled;
+}
+
+/// A full-width row (separators, notes).
 fn flipped(cx: Cx) void {
-    cx.ui.begin(.{ .rotate = 180, .width = .fill }, .{});
+    cx.ui.begin(.{ .width = .fill }, .{});
 }
 
 fn daySep(cx: Cx, at: i64) void {
@@ -377,7 +373,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     const a = cx.a();
     const k = if (m.local_id != 0) key(.{ "local", m.local_id }) else key(.{ "m", m.id() });
     if (m.isService()) {
-        ui.begin(.{ .rotate = 180, .width = .fill, .align_items = .center, .padding = .xy(0, 8) }, .{ .key = k });
+        ui.begin(.{ .width = .fill, .align_items = .center, .padding = .xy(0, 8) }, .{ .key = k });
         ui.text(text.serviceText(s, m), .{ .font_size = 12.5, .weight = 550, .color = col.text_3, .text_align = .center, .max_width = 520 });
         ui.end();
         return;
@@ -389,8 +385,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     const run_end = !sameRun(newer, m);
     const max_w = @min(580, (if (cx.phone) cx.w else cx.w - 400) * if (cx.phone) @as(f32, 0.84) else 0.76);
     const selected = s.selecting and m.local_id == 0 and s.isSelected(m.id());
-    // Turned list: "start" is the far side, so outgoing rows align to start.
-    ui.begin(.{ .rotate = 180, .direction = .row, .align_items = .end, .gap = 8, .width = .fill, .justify = if (out) .end else .start, .padding = .{ .top = if (run_start) 10 else 1.5, .bottom = 1.5 }, .background = if (selected) col.accent_soft else null, .radius = if (selected) 12 else 0 }, .{ .key = k });
+    ui.begin(.{ .direction = .row, .align_items = .end, .gap = 8, .width = .fill, .justify = if (out) .end else .start, .padding = .{ .top = if (run_start) 10 else 1.5, .bottom = 1.5 }, .background = if (selected) col.accent_soft else null, .radius = if (selected) 12 else 0 }, .{ .key = k });
     if (s.selecting and m.local_id == 0) {
         // The selection mark, on the far side from the bubble's tail.
         ui.begin(.{ .width = .{ .px = 22 }, .height = .{ .px = 22 }, .radius = 11, .border_width = if (selected) 0 else 1.5, .border_color = col.border_strong, .background = if (selected) col.brand else null, .align_items = .center, .justify = .center, .align_self = .center }, .{});

@@ -125,6 +125,10 @@ pub fn onUi(s: *State, msg: Msg) void {
             if (tl.has_older) if (tl.firstSeq()) |first| sync.loadMessages(s, s.open_chat.str(), .older, first);
             s.show_count += 60;
         },
+        .reached_top => if (s.store.existingTimeline(s.open_chat.str())) |tl| {
+            if (!tl.loading and (tl.has_older or tl.items.items.len > s.show_count)) onUi(s, .load_older);
+        },
+        .scrolled => {},
         .jump_latest => if (s.open_chat.isSet()) {
             sync.loadMessages(s, s.open_chat.str(), .latest, 0);
         },

@@ -150,13 +150,13 @@ try {
   if (want('admin')) {
     await a.clickText('Plain crew');
     // The chat header (its title) opens the info panel.
-    const hdr = await a.evaluate(`(() => { const r = [...document.querySelectorAll('div')].filter(d => d.childElementCount === 0 && d.textContent === 'Plain crew').map(d => d.getBoundingClientRect()).find(r => r.x > 480 && r.y < 70); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+    const hdr = await a.evaluate(`(() => { const r = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Plain crew').map(d => d.getBoundingClientRect()).find(r => r.x > 480 && r.y < 70); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
     await a.click(hdr[0], hdr[1]);
     await sleep(600);
     await a.waitText('Group info');
     await a.waitText('Carol Nasser');
     await a.shot('96-group-info');
-    const manage = await a.evaluate(`(() => { const row = [...document.querySelectorAll('div')].find(d => d.childElementCount === 0 && d.textContent === 'Carol Nasser'); const y = row.getBoundingClientRect().y; const b = [...document.querySelectorAll('div')].filter(d => d.childElementCount === 0 && d.textContent === 'Manage').map(d => d.getBoundingClientRect()).sort((p, q) => Math.abs(p.y - y) - Math.abs(q.y - y))[0]; return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
+    const manage = await a.evaluate(`(() => { const row = [...document.querySelectorAll('div')].find(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Carol Nasser'); const y = row.getBoundingClientRect().y; const b = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Manage').map(d => d.getBoundingClientRect()).sort((p, q) => Math.abs(p.y - y) - Math.abs(q.y - y))[0]; return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
     await a.click(manage[0], manage[1]);
     await sleep(500);
     await a.clickText('Make admin');

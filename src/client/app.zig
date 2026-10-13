@@ -237,6 +237,8 @@ pub const Msg = union(enum) {
     chat_action: struct { what: ChatAction, chat: Id },
     mute_for: struct { chat: Id, hours: i64 },
     load_older,
+    reached_top,
+    scrolled,
     jump_latest,
     send_text,
     attach,
