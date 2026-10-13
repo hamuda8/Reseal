@@ -1,0 +1,1064 @@
+//! The screens: what each button does (onUi), the answers of the requests screens make, and the
+//! root view (gates, the shell, overlays). The screens themselves are in view_list.zig,
+//! view_chat.zig, view_settings.zig and view_call.zig.
+
+const std = @import("std");
+const zui = @import("zui");
+const app = @import("app.zig");
+const j = @import("j.zig");
+const sys = @import("sys.zig");
+const data = @import("data.zig");
+const keys = @import("keys.zig");
+const sync = @import("sync.zig");
+const send = @import("send.zig");
+const media = @import("media.zig");
+const calls = @import("calls.zig");
+const theme = @import("theme.zig");
+const icons = @import("icons.zig");
+const fmt = @import("fmt.zig");
+const ui_kit = @import("ui.zig");
+const vlist = @import("view_list.zig");
+const vchat = @import("view_chat.zig");
+const vset = @import("view_settings.zig");
+const vcall = @import("view_call.zig");
+
+const State = app.State;
+const Msg = app.Msg;
+const Id = app.Id;
+const gpa = app.gpa;
+const t = zui.i18n.t;
+const tmp = app.tmp;
+const Cx = ui_kit.Cx;
+const Color = zui.Color;
+
+pub const quick_reactions = [_][]const u8{ "👍", "❤️", "🔥", "😂", "😮", "😢", "🙏", "👏", "🎉", "🤔", "😍", "💯" };
+
+fn path(comptime f: []const u8, args: anytype) []const u8 {
+    return std.fmt.allocPrint(tmp(), f, args) catch "";
+}
+
+fn replaceObj(slot: *?*data.Obj, v: ?j.Value) void {
+    if (slot.*) |o| o.destroy();
+    slot.* = if (v) |x| data.Obj.create(x) catch null else null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// What buttons do
+
+pub fn onUi(s: *State, msg: Msg) void {
+    switch (msg) {
+        .nav => |sec| {
+            s.section = sec;
+            s.panes.clearRetainingCapacity();
+            s.searching = false;
+            if (sec == .contacts) app.api(s, .GET, "/contacts", null, .contacts);
+            if (sec == .calls) app.api(s, .GET, "/calls", null, .calls_list);
+            if (sec == .saved and !isPhone()) if (s.store.savedChat()) |c| openChat(s, c.id());
+            if (isPhone()) closeChat(s);
+        },
+        .open_chat => |id| openChat(s, id.str()),
+        .close_chat => closeChat(s),
+        .push_pane => |p| pushPane(s, p),
+        .pop_pane => _ = s.panes.pop(),
+        .open_info => |id| {
+            s.info = id;
+            s.user_info = .{};
+            if (s.store.chat(id.str())) |c| if (!c.is("private") and !c.is("saved") and !c.is("bot")) loadMembers(s, id.str());
+        },
+        .close_info => {
+            s.info = .{};
+            s.user_info = .{};
+        },
+        .open_user => |uid| {
+            s.user_info = uid;
+            app.api(s, .GET, path("/users/{s}", .{uid.str()}), null, .{ .user_refresh = uid });
+        },
+        .menu => |m| {
+            s.modal = m;
+            s.confirm_check = false;
+            s.fields.getPtr(.passcode).clear();
+            s.fields.getPtr(.passcode_2).clear();
+            s.fields.getPtr(.passcode_3).clear();
+            if (m == .reactions) app.api(s, .GET, path("/chats/{s}/messages/{s}/reactions", .{ s.open_chat.str(), m.reactions.str() }), null, .{ .reactions = m.reactions });
+        },
+        .close_modal => {
+            s.modal = null;
+            s.recovery_shown.clear();
+            s.busy = false;
+        },
+        .confirm => confirm(s),
+        .confirm_check => s.confirm_check = !s.confirm_check,
+        .toggle_search => |on| {
+            s.searching = on;
+            if (!on) {
+                s.fields.getPtr(.search).clear();
+                replaceObj(&s.search, null);
+                replaceObj(&s.msg_search, null);
+            }
+        },
+        .filter => |f| s.filter = f,
+        .open_archive => pushPane(s, .archive),
+        .chat_action => |x| chatAction(s, x.what, x.chat.str()),
+        .mute_for => |x| {
+            s.modal = null;
+            const until: i64 = if (x.hours < 0) 32503680000000 else sys.now() + x.hours * 3_600_000;
+            setChatState(s, x.chat.str(), path("{{\"mutedUntil\":{d}}}", .{until}));
+        },
+        .load_older => if (s.open_chat.isSet()) {
+            const tl = s.store.timeline(s.open_chat.str()) catch return;
+            if (tl.has_older) if (tl.firstSeq()) |first| sync.loadMessages(s, s.open_chat.str(), .older, first);
+            s.show_count += 60;
+        },
+        .jump_latest => if (s.open_chat.isSet()) {
+            sync.loadMessages(s, s.open_chat.str(), .latest, 0);
+        },
+        .send_text => sendComposer(s),
+        .attach => {
+            if (zui.platform != .web) return app.toast(s, t("Sending files from this device is coming soon."));
+            app.post("{\"t\":\"pick\"}");
+        },
+        .cancel_reply => {
+            if (s.editing.isSet()) s.fields.getPtr(.composer).clear();
+            s.reply_to = .{};
+            s.editing = .{};
+        },
+        .message_tap => |id| s.modal = .{ .menu = .{ .kind = .message, .target = s.open_chat, .item = id } },
+        .message_action => |x| messageAction(s, x.what, x.msg.str()),
+        .react => |x| react(s, x.msg.str(), x.emoji),
+        .vote => |x| {
+            s.modal = null;
+            app.api(s, .POST, path("/chats/{s}/messages/{s}/vote", .{ s.open_chat.str(), x.msg.str() }), path("{{\"options\":[{d}]}}", .{x.option}), .{ .vote = .{ .chat = s.open_chat, .msg = x.msg } });
+        },
+        .retry_send => |local| send.retry(s, local),
+        .cancel_send => |local| send.cancel(s, local),
+        .open_media => |x| {
+            s.viewer = .{ .msg = x.msg, .index = x.index };
+            if (mediaItem(s, x.msg.str(), x.index)) |item| _ = media.file(s, item, false);
+        },
+        .close_viewer => s.viewer = null,
+        .download => |x| if (mediaItem(s, x.msg.str(), x.index)) |item| {
+            _ = media.file(s, item, true);
+        },
+        .pick_user => |uid| pickUser(s, uid),
+        .unpick_user => |uid| {
+            for (s.picked.items, 0..) |p, i| if (p.eql(uid.str())) {
+                _ = s.picked.orderedRemove(i);
+                break;
+            };
+        },
+        .picker_done => pickerDone(s),
+        .create_group => createGroup(s),
+        .toggle_encrypted => s.new_group_encrypted = !s.new_group_encrypted,
+        .join_chat => |id| app.api(s, .POST, path("/chats/{s}/join", .{id.str()}), "{}", .{ .join = id }),
+        .start_global => |uid| {
+            s.searching = false;
+            app.api(s, .POST, "/chats/private", path("{{\"userId\":\"{s}\"}}", .{uid.str()}), .open_private);
+        },
+        .open_wufour => |wid| {
+            s.searching = false;
+            app.api(s, .POST, "/chats/private", path("{{\"wufourId\":\"{s}\"}}", .{wid.str()}), .open_private);
+        },
+        .save_profile => saveProfile(s),
+        .save_saved => saveSaved(s),
+        .set_theme => |th| {
+            s.prefs.theme = th;
+            app.savePrefs(s);
+        },
+        .set_accent => |i| {
+            s.prefs.accent = i;
+            app.savePrefs(s);
+        },
+        .set_font => |d| {
+            s.prefs.font = std.math.clamp(s.prefs.font + @as(f32, @floatFromInt(d)), 13, 20);
+            app.savePrefs(s);
+        },
+        .set_lang => |l| {
+            app.setLang(s, l);
+            zui.storage.set("lang", @tagName(l), .{});
+        },
+        .toggle_pref => |p| {
+            switch (p) {
+                .notifications => s.prefs.notifications = !s.prefs.notifications,
+                .previews => {
+                    s.prefs.previews = !s.prefs.previews;
+                    app.api(s, .PATCH, "/me", if (s.prefs.previews) "{\"settings\":{\"notifyPreview\":true}}" else "{\"settings\":{\"notifyPreview\":false}}", .ignore);
+                },
+                .sounds => s.prefs.sounds = !s.prefs.sounds,
+                .send_with_enter => s.prefs.send_with_enter = !s.prefs.send_with_enter,
+                .animations => s.prefs.animations = !s.prefs.animations,
+            }
+            app.savePrefs(s);
+        },
+        .set_privacy => |x| {
+            app.api(s, .PATCH, "/me", path("{{\"privacy\":{{\"{s}\":\"{s}\"}}}}", .{ @tagName(x.key), @tagName(x.value) }), .privacy);
+        },
+        .toggle_read_receipts => {
+            const on = if (s.store.me) |me| j.field(me.v, "privacy.readReceipts") == null or j.truthy(me.v, "privacy.readReceipts") else true;
+            app.api(s, .PATCH, "/me", if (on) "{\"privacy\":{\"readReceipts\":false}}" else "{\"privacy\":{\"readReceipts\":true}}", .privacy);
+        },
+        .advanced_submit => keys.advancedSubmit(s),
+        .copy_text => |id| if (s.store.existingTimeline(s.open_chat.str())) |tl| if (tl.find(id.str())) |m| {
+            app.fx.copy(m.text());
+            app.toast(s, t("Copied"));
+        },
+        .copy_recovery => {
+            app.fx.copy(s.recovery_shown.get());
+            app.toast(s, t("Recovery key copied"));
+        },
+        .embed_open => |target| embedTarget(s, target),
+        else => {},
+    }
+}
+
+fn isPhone() bool {
+    return app.env.width <= theme.phone_max;
+}
+
+pub fn openChat(s: *State, id: []const u8) void {
+    if (s.open_chat.isSet() and !s.open_chat.eql(id)) sync.cancelTyping(s);
+    if (!s.open_chat.eql(id)) {
+        s.reply_to = .{};
+        s.editing = .{};
+        s.fields.getPtr(.composer).clear();
+        s.show_count = 60;
+    }
+    s.open_chat = Id.of(id);
+    s.searching = false;
+    s.info = .{};
+    s.user_info = .{};
+    s.modal = null;
+    const c = s.store.chat(id) orelse {
+        sync.ensureChat(s, id);
+        return;
+    };
+    s.first_unread = if (c.unread() > 0) c.meInt("lastReadSeq") + 1 else 0;
+    if (c.is("saved") and s.section != .saved) s.section = .saved else if (!c.is("saved") and s.section == .saved) s.section = .chats;
+    sync.openTimeline(s, id);
+    sync.markOpenChatRead(s);
+    sync.cancelNotification(id);
+    if (c.is("group") or c.is("support")) loadMembers(s, id);
+    // Refresh the key in the background after someone left.
+    if (c.encrypted() and c.o.b("rotationNeeded") and (std.mem.eql(u8, c.role(), "owner") or std.mem.eql(u8, c.role(), "admin"))) keys.rotate(s, id);
+}
+
+fn closeChat(s: *State) void {
+    sync.cancelTyping(s);
+    s.open_chat = .{};
+    s.info = .{};
+    s.user_info = .{};
+}
+
+fn pushPane(s: *State, p: app.Pane) void {
+    s.panes.append(gpa, p) catch {};
+    switch (p) {
+        .profile => if (s.store.me) |me| {
+            s.fields.getPtr(.profile_name).set(me.s("displayName") orelse "");
+            s.fields.getPtr(.profile_bio).set(me.s("bio") orelse "");
+            s.fields.getPtr(.profile_username).set(me.s("username") orelse "");
+        },
+        .blocked => app.api(s, .GET, "/blocks", null, .blocked),
+        .picker => {
+            s.picked.clearRetainingCapacity();
+            s.fields.getPtr(.picker).clear();
+            replaceObj(&s.picker_results, null);
+            app.api(s, .GET, "/contacts", null, .contacts);
+        },
+        .group_details => {
+            s.fields.getPtr(.group_name).clear();
+            s.fields.getPtr(.group_about).clear();
+            s.new_group_encrypted = p.group_details == .group;
+        },
+        .saved_edit => |id| {
+            const c = s.store.chat(id.str());
+            s.fields.getPtr(.saved_title).set(if (c) |cc| cc.o.s("title") orelse "" else "");
+            s.fields.getPtr(.saved_about).set(if (c) |cc| cc.o.s("about") orelse "" else "");
+        },
+        else => {},
+    }
+}
+
+fn setChatState(s: *State, chat: []const u8, body: []const u8) void {
+    // Optimistic (chats.js setState): applied now, the server's answer replaces it.
+    if (s.store.chat(chat)) |c| if (j.parse(tmp(), body)) |v| {
+        var it = v.object.iterator();
+        while (it.next()) |e| {
+            if (std.mem.eql(u8, e.key_ptr.*, "pinned")) {
+                c.setMe("pinnedAt", if (e.value_ptr.* == .bool and e.value_ptr.bool) data.string(isoNow()) else .null);
+            } else c.setMe(e.key_ptr.*, e.value_ptr.*);
+        }
+    };
+    app.api(s, .POST, path("/chats/{s}/state", .{chat}), body, .{ .state_set = Id.of(chat) });
+}
+
+fn isoNow() []const u8 {
+    const c = sys.civilFromMs(sys.now());
+    return path("{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}.000Z", .{ @as(u32, @intCast(c.year)), c.month, c.day, c.hour, c.minute, c.second });
+}
+
+fn chatAction(s: *State, what: app.ChatAction, chat: []const u8) void {
+    s.modal = null;
+    const c = s.store.chat(chat) orelse return;
+    switch (what) {
+        .pin => setChatState(s, chat, "{\"pinned\":true}"),
+        .unpin => setChatState(s, chat, "{\"pinned\":false}"),
+        .archive => {
+            setChatState(s, chat, "{\"archived\":true}");
+            app.toast(s, t("Chat archived"));
+        },
+        .unarchive => setChatState(s, chat, "{\"archived\":false}"),
+        .mute => s.modal = .{ .menu = .{ .kind = .mute, .target = Id.of(chat) } },
+        .unmute => setChatState(s, chat, "{\"mutedUntil\":null}"),
+        .mark_read => {
+            const seq = if (c.last) |m| m.seq() orelse c.seq() else c.seq();
+            sync.markRead(s, c, seq);
+            sync.flushRead(s, Id.of(chat));
+        },
+        .mark_unread => setChatState(s, chat, "{\"markedUnread\":true}"),
+        .delete => s.modal = .{ .confirm = .{ .kind = if (c.is("saved") and !c.o.b("primary")) .delete_saved else if (c.is("saved")) .clear_history else .delete_chat, .target = Id.of(chat) } },
+        .leave => s.modal = .{ .confirm = .{ .kind = .leave_chat, .target = Id.of(chat) } },
+        .clear => s.modal = .{ .confirm = .{ .kind = .clear_history, .target = Id.of(chat) } },
+        .block => s.modal = .{ .confirm = .{ .kind = .block, .target = Id.of(chat) } },
+        .unblock => if (c.peerId()) |pid| {
+            app.api(s, .DELETE, path("/blocks/{s}", .{pid}), null, .unblock);
+            if (s.store.user(pid)) |u| u.set("blocked", data.boolean(false)) catch {};
+        },
+        .add_contact => if (c.peerId()) |pid| {
+            app.api(s, .POST, "/contacts", path("{{\"userId\":\"{s}\"}}", .{pid}), .contact_add);
+        },
+        .info => onUi(s, .{ .open_info = Id.of(chat) }),
+        .call_voice => calls.act(s, .{ .start = .{ .chat = Id.of(chat), .video = false } }),
+        .call_video => calls.act(s, .{ .start = .{ .chat = Id.of(chat), .video = true } }),
+        .saved_edit => pushPane(s, .{ .saved_edit = Id.of(chat) }),
+        .search => {
+            s.fields.getPtr(.chat_search).clear();
+            replaceObj(&s.msg_search, null);
+            s.modal = .{ .menu = .{ .kind = .chat_header, .target = Id.of(chat), .item = Id.of("search") } };
+        },
+        .show_safety => if (c.peerId()) |pid| {
+            s.modal = .{ .safety = Id.of(pid) };
+        },
+    }
+}
+
+fn confirm(s: *State) void {
+    const m = s.modal orelse return;
+    if (m != .confirm) return;
+    const x = m.confirm;
+    const chat = x.target.str();
+    s.modal = null;
+    switch (x.kind) {
+        .logout => app.logout(s),
+        .start_fresh => keys.setupAutomatic(s, true),
+        .delete_chat => {
+            const c = s.store.chat(chat) orelse return;
+            const pair = c.is("private") or c.is("bot") or (c.isTeamChat() and !s.store.isTeamStaff(c));
+            if (pair and !s.confirm_check) {
+                app.api(s, .POST, path("/chats/{s}/leave", .{chat}), "{}", .{ .leave = x.target });
+            } else app.api(s, .DELETE, path("/chats/{s}", .{chat}), null, .{ .delete_chat = x.target });
+        },
+        .delete_saved => app.api(s, .DELETE, path("/chats/{s}", .{chat}), null, .{ .delete_chat = x.target }),
+        .leave_chat => app.api(s, .POST, path("/chats/{s}/leave", .{chat}), "{}", .{ .leave = x.target }),
+        .clear_history => app.api(s, .POST, path("/chats/{s}/clear", .{chat}), if (s.confirm_check or (s.store.chat(chat) != null and s.store.chat(chat).?.is("saved"))) "{\"forEveryone\":true}" else "{\"forEveryone\":false}", .{ .clear = x.target }),
+        .delete_messages => {
+            app.api(s, .POST, path("/chats/{s}/messages/delete", .{chat}), path("{{\"ids\":[\"{s}\"],\"forEveryone\":{}}}", .{ x.item.str(), s.confirm_check }), .{ .delete_messages = x.target });
+            if (s.store.existingTimeline(chat)) |tl| tl.remove(x.item.str());
+        },
+        .block => if (s.store.chat(chat)) |c| if (c.peerId()) |pid| {
+            app.api(s, .POST, "/blocks", path("{{\"userId\":\"{s}\"}}", .{pid}), .block);
+            if (s.store.user(pid)) |u| u.set("blocked", data.boolean(true)) catch {};
+        },
+        .unblock => app.api(s, .DELETE, path("/blocks/{s}", .{chat}), null, .unblock),
+        .remove_contact => app.api(s, .DELETE, path("/contacts/{s}", .{chat}), null, .contact_remove),
+    }
+}
+
+fn mediaItem(s: *State, msg: []const u8, index: u8) ?j.Value {
+    const tl = s.store.existingTimeline(s.open_chat.str()) orelse return null;
+    const m = tl.find(msg) orelse return null;
+    const items = m.media();
+    if (index >= items.len) return null;
+    return items[index];
+}
+
+fn sendComposer(s: *State) void {
+    if (!s.open_chat.isSet()) return;
+    const text = std.mem.trim(u8, s.fields.get(.composer).get(), " \t\r\n");
+    if (text.len == 0) return;
+    const chat = s.open_chat.str();
+    if (s.editing.isSet()) {
+        send.edit(s, chat, s.editing.str(), text);
+        s.editing = .{};
+    } else {
+        send.sendText(s, chat, text, s.reply_to);
+        s.first_unread = 0;
+    }
+    s.reply_to = .{};
+    sync.cancelTyping(s);
+    // The composer is cleared after the edit request read it.
+    s.fields.getPtr(.composer).clear();
+}
+
+fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
+    s.modal = null;
+    const chat = s.open_chat.str();
+    const tl = s.store.existingTimeline(chat) orelse return;
+    const m = tl.find(msg_id) orelse return;
+    switch (what) {
+        .reply => {
+            s.reply_to = Id.of(msg_id);
+            s.editing = .{};
+            app.fx.focus(zui.key("composer"));
+        },
+        .edit => {
+            s.editing = Id.of(msg_id);
+            s.reply_to = .{};
+            s.fields.getPtr(.composer).set(m.text());
+            app.fx.focus(zui.key("composer"));
+        },
+        .copy => {
+            app.fx.copy(m.text());
+            app.toast(s, t("Copied"));
+        },
+        .pin, .unpin => app.api(s, .POST, path("/chats/{s}/messages/{s}/pin", .{ chat, msg_id }), if (what == .unpin) "{\"unpin\":true}" else "{\"silent\":true}", .pin),
+        .delete, .delete_everyone => s.modal = .{ .confirm = .{ .kind = .delete_messages, .target = s.open_chat, .item = Id.of(msg_id) } },
+        .save => {
+            // Save to Saved Messages: a forward into the Saved chat, encrypted there.
+            const saved = s.store.savedChat() orelse return;
+            if (m.text().len > 0) {
+                send.sendText(s, saved.id(), m.text(), .{});
+                app.toast(s, t("Saved to Saved Messages"));
+            }
+        },
+        .retract_vote => app.api(s, .POST, path("/chats/{s}/messages/{s}/vote", .{ chat, msg_id }), "{\"options\":[]}", .{ .vote = .{ .chat = s.open_chat, .msg = Id.of(msg_id) } }),
+        .forward, .select, .details => {},
+    }
+}
+
+fn react(s: *State, msg_id: []const u8, emoji_index: u8) void {
+    s.modal = null;
+    if (emoji_index >= quick_reactions.len) return;
+    const emoji = quick_reactions[emoji_index];
+    const chat = s.open_chat.str();
+    const tl = s.store.existingTimeline(chat) orelse return;
+    const m = tl.find(msg_id) orelse return;
+    var on = true;
+    for (j.arr(m.o.v, "reactions")) |r| if (j.eqlStr(r, "emoji", emoji) and j.truthy(r, "me")) {
+        on = false;
+    };
+    app.api(s, .POST, path("/chats/{s}/messages/{s}/react", .{ chat, msg_id }), path("{{\"emoji\":{s},\"on\":{}}}", .{ j.quote(tmp(), emoji) catch "\"\"", on }), .{ .react = .{ .chat = s.open_chat, .msg = Id.of(msg_id) } });
+}
+
+fn pickUser(s: *State, uid: Id) void {
+    const p = if (s.panes.items.len > 0) s.panes.items[s.panes.items.len - 1] else return;
+    if (p != .picker) return;
+    switch (p.picker) {
+        .new_message => {
+            _ = s.panes.pop();
+            app.api(s, .POST, "/chats/private", path("{{\"userId\":\"{s}\"}}", .{uid.str()}), .open_private);
+        },
+        .add_contact => {
+            _ = s.panes.pop();
+            app.api(s, .POST, "/contacts", path("{{\"userId\":\"{s}\"}}", .{uid.str()}), .contact_add);
+        },
+        .block => {
+            _ = s.panes.pop();
+            app.api(s, .POST, "/blocks", path("{{\"userId\":\"{s}\"}}", .{uid.str()}), .block);
+        },
+        .new_group, .add_members => {
+            for (s.picked.items) |x| if (x.eql(uid.str())) return;
+            s.picked.append(gpa, uid) catch {};
+        },
+    }
+}
+
+fn pickerDone(s: *State) void {
+    const p = if (s.panes.items.len > 0) s.panes.items[s.panes.items.len - 1] else return;
+    if (p != .picker) return;
+    switch (p.picker) {
+        .new_group => pushPane(s, .{ .group_details = .group }),
+        .add_members => {
+            _ = s.panes.pop();
+            if (s.picked.items.len == 0 or !s.info.isSet()) return;
+            var ids: std.ArrayList(u8) = .empty;
+            for (s.picked.items, 0..) |x, i| ids.print(tmp(), "{s}\"{s}\"", .{ if (i == 0) "" else ",", x.str() }) catch {};
+            app.api(s, .POST, path("/chats/{s}/members", .{s.info.str()}), path("{{\"userIds\":[{s}]}}", .{ids.items}), .{ .members = s.info });
+        },
+        else => {},
+    }
+}
+
+fn createGroup(s: *State) void {
+    const name = s.fields.get(.group_name).trimmed();
+    if (name.len == 0) return app.toastError(s, t("Group name"));
+    const p = s.panes.items[s.panes.items.len - 1];
+    const typ = if (p == .group_details and p.group_details == .channel) "channel" else "group";
+    var ids: std.ArrayList(u8) = .empty;
+    if (std.mem.eql(u8, typ, "group")) for (s.picked.items, 0..) |x, i| ids.print(tmp(), "{s}\"{s}\"", .{ if (i == 0) "" else ",", x.str() }) catch {};
+    const about = s.fields.get(.group_about).trimmed();
+    const body = path("{{\"type\":\"{s}\",\"title\":{s},\"members\":[{s}]{s}{s}{s}}}", .{
+        typ,                                                                             j.quote(tmp(), name) catch return, ids.items,
+        if (about.len > 0) path(",\"about\":{s}", .{j.quote(tmp(), about) catch "\"\""}) else "", if (std.mem.eql(u8, typ, "group")) (if (s.new_group_encrypted) ",\"encrypted\":true" else ",\"encrypted\":false") else "",
+        "",
+    });
+    s.busy = true;
+    app.api(s, .POST, "/chats", body, .create_group);
+}
+
+fn saveSaved(s: *State) void {
+    const p = if (s.panes.items.len > 0) s.panes.items[s.panes.items.len - 1] else return;
+    if (p != .saved_edit) return;
+    const id = p.saved_edit;
+    const c = if (id.isSet()) s.store.chat(id.str()) else null;
+    const primary = if (c) |cc| cc.o.b("primary") else false;
+    const title = s.fields.get(.saved_title).trimmed();
+    if (!primary and title.len == 0) return app.toastError(s, t("Name"));
+    const about = j.quote(tmp(), s.fields.get(.saved_about).trimmed()) catch return;
+    const body = if (primary) path("{{\"about\":{s}}}", .{about}) else path("{{\"title\":{s},\"about\":{s}}}", .{ j.quote(tmp(), title) catch return, about });
+    if (id.isSet()) {
+        app.api(s, .PATCH, path("/chats/{s}", .{id.str()}), body, .{ .saved_save = id });
+    } else app.api(s, .POST, "/chats/saved", body, .{ .saved_save = .{} });
+}
+
+fn saveProfile(s: *State) void {
+    const name = s.fields.get(.profile_name).trimmed();
+    if (name.len == 0) return app.toastError(s, t("Name"));
+    const username = s.fields.get(.profile_username).trimmed();
+    const body = path("{{\"displayName\":{s},\"bio\":{s}{s}}}", .{
+        j.quote(tmp(), name) catch return,
+        j.quote(tmp(), s.fields.get(.profile_bio).trimmed()) catch return,
+        if (username.len > 0) path(",\"username\":{s}", .{j.quote(tmp(), username) catch "\"\""}) else "",
+    });
+    s.busy = true;
+    app.api(s, .PATCH, "/me", body, .profile_save);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Searching
+
+pub fn runSearch(s: *State) void {
+    const q = s.fields.get(.search).trimmed();
+    s.searching = true;
+    s.search_seq += 1;
+    if (q.len == 0) {
+        replaceObj(&s.search, null);
+        replaceObj(&s.msg_search, null);
+        return;
+    }
+    const enc = j.urlEncode(tmp(), q) catch return;
+    app.api(s, .GET, path("/search?q={s}", .{enc}), null, .{ .search = s.search_seq });
+    if (q.len >= 2) app.api(s, .GET, path("/search/messages?q={s}", .{enc}), null, .{ .msg_search = s.search_seq });
+}
+
+pub fn runPickerSearch(s: *State) void {
+    const q = s.fields.get(.picker).trimmed();
+    s.search_seq += 1;
+    if (q.len < 2) return replaceObj(&s.picker_results, null);
+    app.api(s, .GET, path("/search?q={s}", .{j.urlEncode(tmp(), q) catch return}), null, .{ .picker_search = s.search_seq });
+}
+
+pub fn runChatSearch(s: *State) void {
+    const q = s.fields.get(.chat_search).trimmed();
+    s.search_seq += 1;
+    if (q.len < 2 or !s.open_chat.isSet()) return replaceObj(&s.msg_search, null);
+    const c = s.store.chat(s.open_chat.str()) orelse return;
+    // Encrypted chats are searched on this device (the loaded history); others on the server.
+    if (!c.encrypted()) app.api(s, .GET, path("/search/messages?q={s}&chatId={s}", .{ j.urlEncode(tmp(), q) catch return, c.id() }), null, .{ .msg_search = s.search_seq });
+}
+
+pub fn loadMembers(s: *State, chat: []const u8) void {
+    s.members_chat = Id.of(chat);
+    app.api(s, .GET, path("/chats/{s}/members?limit=200", .{chat}), null, .{ .members = Id.of(chat) });
+}
+
+// ---------------------------------------------------------------------------------------------
+// The widget's targets (embed.js openTarget)
+
+pub fn embedOpen(s: *State, target: ?j.Value) void {
+    const tg = target orelse return;
+    if (j.str(tg, "chatId")) |id| return openChat(s, id);
+    if (j.truthy(tg, "bot")) return embedTarget(s, .bot);
+    if (j.truthy(tg, "support")) return embedTarget(s, .support);
+    if (j.field(tg, "team")) |team| {
+        const body = path("{{\"team\":{s},\"externalChatId\":{s},\"metadata\":{s}}}", .{
+            j.stringify(tmp(), team) catch return,
+            j.stringify(tmp(), j.field(tg, "externalChatId") orelse .null) catch "null",
+            j.stringify(tmp(), j.field(tg, "metadata") orelse .null) catch "null",
+        });
+        app.api(s, .POST, "/embed/team", body, .embed_team);
+        return;
+    }
+    if (j.str(tg, "withUser")) |u| {
+        app.api(s, .GET, path("/embed/resolve?user={s}", .{j.urlEncode(tmp(), u) catch return}), null, .open_wufour);
+        return;
+    }
+    if (j.str(tg, "externalChatId")) |x| app.api(s, .GET, path("/embed/resolve?chat={s}", .{j.urlEncode(tmp(), x) catch return}), null, .open_wufour);
+}
+
+fn embedTarget(s: *State, target: app.EmbedTarget) void {
+    app.api(s, .POST, if (target == .bot) "/embed/bot" else "/embed/support", "{}", .{ .embed_target = target });
+}
+
+pub fn embedAfterChats(s: *State) void {
+    const opts = if (s.embed.options) |o| o.v else null;
+    if (j.obj(opts, "open")) |o| return embedOpen(s, o);
+    const app_v = if (s.embed.app) |a| a.v else null;
+    const def = j.strOr(app_v, "widget.defaultView", "");
+    if (std.mem.eql(u8, def, "bot") and j.field(app_v, "widget.bot") != null) embedTarget(s, .bot);
+    if (std.mem.eql(u8, def, "support")) embedTarget(s, .support);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Answers to what the screens asked
+
+pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) void {
+    const v = j.parse(tmp(), r.body);
+    if (!r.ok()) {
+        s.busy = false;
+        switch (op) {
+            .search, .msg_search, .picker_search, .members, .reactions => {},
+            else => app.toastError(s, app.apiError(r).message),
+        }
+        return;
+    }
+    switch (op) {
+        .search => |seq| if (seq == s.search_seq) {
+            if (v) |x| for (j.arr(x, "users")) |u| {
+                _ = s.store.putUser(u) catch null;
+            };
+            replaceObj(&s.search, v);
+        },
+        .msg_search => |seq| if (seq == s.search_seq) replaceObj(&s.msg_search, v),
+        .picker_search => |seq| if (seq == s.search_seq) {
+            if (v) |x| for (j.arr(x, "users")) |u| {
+                _ = s.store.putUser(u) catch null;
+            };
+            replaceObj(&s.picker_results, v);
+        },
+        .open_private, .embed_team => {
+            const raw = j.obj(v, "chat") orelse return;
+            const c = s.store.putChat(raw) catch return;
+            if (c.last) |m| keys.hydrate(s, c.id(), m);
+            s.panes.clearRetainingCapacity();
+            openChat(s, c.id());
+        },
+        .open_wufour => {
+            // /embed/resolve: {userId} or {chatId}
+            if (j.str(v, "chatId")) |id| return openChat(s, id);
+            if (j.str(v, "userId")) |uid| app.api(s, .POST, "/chats/private", path("{{\"userId\":\"{s}\"}}", .{uid}), .open_private);
+        },
+        .embed_target => {
+            const raw = j.obj(v, "chat") orelse return;
+            const c = s.store.putChat(raw) catch return;
+            openChat(s, c.id());
+        },
+        .create_group => {
+            s.busy = false;
+            const raw = j.obj(v, "chat") orelse return;
+            const c = s.store.putChat(raw) catch return;
+            s.panes.clearRetainingCapacity();
+            s.picked.clearRetainingCapacity();
+            if (j.arr(v, "skipped").len > 0) app.toast(s, t("Some people could not be added because of their privacy settings."));
+            openChat(s, c.id());
+        },
+        .contacts => {
+            if (v) |x| for (j.arr(x, "contacts")) |u| {
+                _ = s.store.putUser(u) catch null;
+            };
+            replaceObj(&s.contacts, v);
+        },
+        .contact_add => {
+            app.toast(s, t("Added to contacts"));
+            app.api(s, .GET, "/contacts", null, .contacts);
+        },
+        .contact_remove => app.api(s, .GET, "/contacts", null, .contacts),
+        .calls_list => {
+            replaceObj(&s.calls_list, v);
+            if (v) |x| for (j.arr(x, "calls")) |cl| sync.ensureChat(s, j.strOr(cl, "chatId", ""));
+        },
+        .blocked => replaceObj(&s.blocked, v),
+        .block, .unblock => app.api(s, .GET, "/blocks", null, .blocked),
+        .members => |chat| {
+            if (v) |x| for (j.arr(x, "members")) |m| if (j.obj(m, "user")) |u| {
+                _ = s.store.putUser(u) catch null;
+            };
+            if (s.members_chat.eql(chat.str())) replaceObj(&s.members, v);
+        },
+        .reactions => replaceObj(&s.reactions_detail, v),
+        .profile_save => {
+            s.busy = false;
+            if (j.obj(v, "user")) |u| app.setMe(s, u);
+            _ = s.panes.pop();
+        },
+        .privacy => if (j.obj(v, "user")) |u| app.setMe(s, u),
+        .leave, .delete_chat => |chat| {
+            s.store.removeChat(chat.str());
+            if (s.open_chat.eql(chat.str())) closeChat(s);
+        },
+        .clear => {},
+        .join => |chat| {
+            if (j.truthy(v, "requested")) return app.toast(s, t("Join request sent. An admin will review it."));
+            if (j.obj(v, "chat")) |raw| {
+                _ = s.store.putChat(raw) catch null;
+                openChat(s, chat.str());
+            }
+        },
+        .react => |x| if (s.store.existingTimeline(x.chat.str())) |tl| if (tl.find(x.msg.str())) |m| {
+            m.o.set("reactions", j.field(v, "reactions") orelse .null) catch {};
+        },
+        .vote => |x| if (s.store.existingTimeline(x.chat.str())) |tl| if (tl.find(x.msg.str())) |m| {
+            m.o.set("poll", j.field(v, "poll") orelse .null) catch {};
+        },
+        .saved_save => |id| {
+            _ = s.panes.pop();
+            if (j.obj(v, "chat")) |raw| {
+                const c = s.store.putChat(raw) catch return;
+                if (!id.isSet()) openChat(s, c.id());
+            }
+        },
+        else => {},
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Root view
+
+pub fn colorsFor(s: *const State, env_dark: bool) theme.Colors {
+    const dark = switch (s.prefs.theme) {
+        .auto => env_dark,
+        .light => false,
+        .dark => true,
+    };
+    var accent = theme.accents[@min(s.prefs.accent, theme.accents.len - 1)];
+    if (s.mode == .embed) if (s.embed.app) |a| {
+        if (a.s("theme.primary")) |p| if (Color.parseHex(p)) |col| {
+            accent = .{ col, col.mix(0.7, Color.white) };
+        } else |_| {};
+    };
+    return theme.colors(dark, accent[0], accent[1]);
+}
+
+pub fn root(s: *const State, ui: *ui_kit.Ui) void {
+    const env = ui.env;
+    const c = colorsFor(s, env.dark);
+    const cx: Cx = .{ .ui = ui, .s = s, .c = c, .phone = env.width <= theme.phone_max, .w = env.width, .h = env.height, .fs = s.prefs.font };
+    ui.setBackground(if (cx.phone or s.phase != .ready) c.surface else c.canvas);
+    ui.begin(.{ .width = .fill, .height = .fill }, .{});
+    switch (s.phase) {
+        .loading => splash(cx),
+        .cannot_reach => notice(cx, icons.wifiOff, t("Cannot reach Reseal"), s.boot_error.get(), true),
+        .signed_out => notice(cx, icons.user, t("Sign in to chat"), if (s.boot_error.get().len > 0) s.boot_error.get() else t("Sign in on this website to start chatting."), false),
+        .sign_in => signInGate(cx),
+        .login => loginForm(cx),
+        .locked => unlockGate(cx),
+        .ready => vlist.shell(cx),
+    }
+    if (s.phase == .ready) {
+        vcall.overlay(cx);
+        if (s.viewer != null) vchat.viewer(cx);
+    }
+    if (s.modal != null) modal(cx);
+    if (s.toast.text.get().len > 0) toastView(cx);
+    ui.end();
+}
+
+pub fn logo(cx: Cx, size: f32) void {
+    cx.ui.image(std.fmt.allocPrint(cx.a(), "{s}/icon.svg", .{app.server}) catch "/icon.svg", .{ .width = .{ .px = size }, .height = .{ .px = size } }, zui.key("logo"));
+}
+
+fn splash(cx: Cx) void {
+    cx.ui.begin(.{ .width = .fill, .height = .fill, .align_items = .center, .justify = .center }, .{});
+    logo(cx, 72);
+    cx.ui.end();
+}
+
+fn notice(cx: Cx, ic: zui.Icon, title: []const u8, text: []const u8, retry: bool) void {
+    const ui = cx.ui;
+    ui.begin(.{ .width = .fill, .height = .fill, .align_items = .center, .justify = .center, .padding = .xy(24, 28), .background = cx.c.canvas }, .{});
+    ui.begin(.{ .max_width = 360, .align_items = .center, .gap = 12 }, .{});
+    lockArt(cx, ic);
+    ui.text(title, .{ .font_size = 26, .weight = 800, .color = cx.c.text, .text_align = .center });
+    ui.text(text, .{ .font_size = 15, .color = cx.c.text_2, .text_align = .center, .line_height = 1.6 });
+    if (retry) ui_kit.button(cx, t("Try again"), .boot, .{ .large = true, .block = true });
+    ui.end();
+    ui.end();
+}
+
+fn lockArt(cx: Cx, ic: zui.Icon) void {
+    cx.ui.begin(.{ .width = .{ .px = 76 }, .height = .{ .px = 76 }, .radius = 26, .background = cx.c.brand, .align_items = .center, .justify = .center, .align_self = .center }, .{});
+    cx.ui.icon(ic, 36, Color.white, .{}, 0);
+    cx.ui.end();
+}
+
+fn point(cx: Cx, ic: zui.Icon, title: []const u8, text: []const u8) void {
+    const ui = cx.ui;
+    ui.begin(.{ .direction = .row, .gap = 12, .align_items = .start }, .{});
+    ui.begin(.{ .width = .{ .px = 36 }, .height = .{ .px = 36 }, .radius = 12, .background = cx.c.accent_soft, .align_items = .center, .justify = .center }, .{});
+    ui.icon(ic, 19, cx.c.accent, .{}, 0);
+    ui.end();
+    ui.begin(.{ .grow = 1, .width = .fill, .gap = 2 }, .{});
+    ui.text(title, .{ .font_size = 14, .weight = 650, .color = cx.c.text });
+    ui.text(text, .{ .font_size = 14, .color = cx.c.text_2, .line_height = 1.5 });
+    ui.end();
+    ui.end();
+}
+
+/// The art half of the sign-in screen (wide screens): floating bubbles on the brand colours.
+fn gateArt(cx: Cx) void {
+    const ui = cx.ui;
+    ui.begin(.{ .grow = 1.1, .width = .fill, .height = .fill, .background = Color.hex("#1a1640"), .align_items = .center, .justify = .center, .padding = .all(40), .clip = true }, .{});
+    ui.begin(.{ .position = .absolute, .inset = .{ .top = -120, .start = -120 }, .width = .{ .px = 520 }, .height = .{ .px = 520 }, .radius = 260, .background = Color.hex("#6c5cff99") }, .{});
+    ui.end();
+    ui.begin(.{ .position = .absolute, .inset = .{ .bottom = -160, .end = -120 }, .width = .{ .px = 480 }, .height = .{ .px = 480 }, .radius = 240, .background = Color.hex("#4f8cff80") }, .{});
+    ui.end();
+    ui.begin(.{ .width = .fill, .max_width = 420, .gap = 14 }, .{});
+    const bubble = struct {
+        fn f(c2: Cx, text: []const u8, small: []const u8, ic: zui.Icon, out: bool) void {
+            c2.ui.begin(.{ .align_self = if (out) .end else .start, .max_width = 330, .padding = .xy(16, 12), .radius = 20, .background = if (out) Color.hex("#ffffffeb") else Color.hex("#ffffff29"), .gap = 4 }, .{});
+            c2.ui.text(text, .{ .font_size = 15, .color = if (out) Color.hex("#2b2470") else Color.white });
+            c2.ui.begin(.{ .direction = .row, .gap = 5, .align_items = .center, .opacity = 0.7 }, .{});
+            c2.ui.icon(ic, 13, if (out) Color.hex("#2b2470") else Color.white, .{}, 0);
+            c2.ui.text(small, .{ .font_size = 11.5, .color = if (out) Color.hex("#2b2470") else Color.white });
+            c2.ui.end();
+            c2.ui.end();
+        }
+    }.f;
+    bubble(cx, t("Are we still on for tonight? 🌙"), t("end-to-end encrypted"), icons.lock, false);
+    bubble(cx, t("Yes! I booked the table 🎉"), "9:41", icons.checks, true);
+    bubble(cx, t("✨ Ask our AI assistant anything"), t("AI built in"), icons.sparkles, false);
+    ui.end();
+    ui.begin(.{ .position = .absolute, .inset = .{ .start = 40, .end = 40, .bottom = 36 }, .gap = 8 }, .{});
+    ui.text(t("Talk freely."), .{ .font_size = 34, .weight = 800, .color = Color.white });
+    ui.text(t("Messages, calls and AI in one calm, private place."), .{ .font_size = 15, .color = Color.hex("#ffffffcc"), .max_width = 420 });
+    ui.end();
+    ui.end();
+}
+
+fn gateFrame(cx: Cx, comptime body: fn (Cx) void) void {
+    const ui = cx.ui;
+    ui.begin(.{ .direction = .row, .width = .fill, .height = .fill, .background = cx.c.canvas }, .{});
+    if (!cx.phone) gateArt(cx);
+    ui.beginScroll(.{ .grow = 1, .width = .fill, .height = .fill, .background = cx.c.surface }, zui.key("gate"));
+    ui.begin(.{ .width = .fill, .min_height = cx.h, .align_items = .center, .justify = .center, .padding = .xy(28, 40) }, .{});
+    ui.begin(.{ .width = .fill, .max_width = 400, .gap = 0 }, .{});
+    body(cx);
+    ui.end();
+    ui.end();
+    ui.end();
+    ui.end();
+}
+
+fn signInGate(cx: Cx) void {
+    gateFrame(cx, struct {
+        fn f(c2: Cx) void {
+            const ui = c2.ui;
+            ui.begin(.{ .padding = .{ .bottom = 22 } }, .{});
+            logo(c2, 64);
+            ui.end();
+            ui.text(t("Welcome to Reseal"), .{ .font_size = 32, .weight = 800, .color = c2.c.text });
+            ui.begin(.{ .padding = .{ .top = 10, .bottom = 26 } }, .{});
+            ui.text(t("Sign in with your Wufour account and you're in. Your chats are encrypted on your devices automatically."), .{ .font_size = 15, .color = c2.c.text_2, .line_height = 1.6 });
+            ui.end();
+            ui.begin(.{ .gap = 14, .padding = .{ .bottom = 28 } }, .{});
+            point(c2, icons.lock, t("Private by default"), t("Messages are encrypted on your devices before they leave."));
+            point(c2, icons.video, t("Calls that just work"), t("Voice, video and group calls."));
+            point(c2, icons.sparkles, t("AI when you want it"), t("Chat with assistants, or build your own."));
+            ui.end();
+            ui_kit.button(c2, t("Continue with Wufour"), .sign_in_wufour, .{ .large = true, .block = true });
+            ui.begin(.{ .padding = .{ .top = 18 } }, .{});
+            ui.text(t("Reseal never sees your password. Signing in happens on Wufour."), .{ .font_size = 12.5, .color = c2.c.text_3, .line_height = 1.5 });
+            ui.end();
+        }
+    }.f);
+}
+
+/// Phones: Wufour's email and password, in the app.
+fn loginForm(cx: Cx) void {
+    gateFrame(cx, struct {
+        fn f(c2: Cx) void {
+            const ui = c2.ui;
+            const s = c2.s;
+            ui.begin(.{ .padding = .{ .bottom = 22 } }, .{});
+            logo(c2, 64);
+            ui.end();
+            ui.text(t("Welcome to Reseal"), .{ .font_size = 32, .weight = 800, .color = c2.c.text });
+            ui.begin(.{ .padding = .{ .top = 10, .bottom = 26 } }, .{});
+            ui.text(t("Sign in with your Wufour account. Your chats are encrypted on your devices automatically."), .{ .font_size = 15, .color = c2.c.text_2, .line_height = 1.6 });
+            ui.end();
+            ui_kit.field(c2, .login_email, .{ .label = t("Email"), .placeholder = "name@example.com" });
+            ui_kit.field(c2, .login_password, .{ .label = t("Password"), .placeholder = t("Password"), .err = if (s.login_error.get().len > 0) s.login_error.get() else null });
+            ui_kit.button(c2, t("Sign in"), .login, .{ .large = true, .block = true, .busy = s.busy });
+            ui.begin(.{ .padding = .{ .top = 18 } }, .{});
+            ui.text(t("Signing in happens on Wufour. Reseal never stores your password."), .{ .font_size = 12.5, .color = c2.c.text_3, .line_height = 1.5 });
+            ui.end();
+        }
+    }.f);
+}
+
+/// Advanced protection on a new device: the passcode or the recovery key.
+fn unlockGate(cx: Cx) void {
+    const ui = cx.ui;
+    const s = cx.s;
+    const c = cx.c;
+    ui.begin(.{ .width = .fill, .height = .fill, .align_items = .center, .justify = .center, .padding = .all(24), .background = c.canvas }, .{});
+    ui.begin(.{ .width = .fill, .max_width = 420, .padding = .xy(32, 36), .radius = 28, .background = c.surface, .align_items = .center, .gap = 0 }, .{});
+    lockArt(cx, icons.shieldCheck);
+    ui.begin(.{ .padding = .{ .top = 20, .bottom = 10 } }, .{});
+    ui.text(t("Unlock your chats"), .{ .font_size = 32, .weight = 800, .color = c.text, .text_align = .center });
+    ui.end();
+    ui.begin(.{ .padding = .{ .bottom = 26 } }, .{});
+    ui.text(t("You turned on advanced protection, so only your passcode can unlock your messages on a new device."), .{ .font_size = 15, .color = c.text_2, .text_align = .center, .line_height = 1.6 });
+    ui.end();
+    ui_kit.field(cx, .passcode, .{
+        .label = if (s.unlock_recovery) t("Recovery key") else t("Passcode"),
+        .placeholder = if (s.unlock_recovery) "XXXX-XXXX-XXXX-…" else t("Your passcode"),
+        .mono = s.unlock_recovery,
+        .err = if (s.unlock_error.get().len > 0) s.unlock_error.get() else null,
+    });
+    ui_kit.button(cx, t("Unlock"), .unlock, .{ .large = true, .block = true, .icon = icons.unlock, .busy = s.busy });
+    ui.begin(.{ .padding = .{ .top = 14 } }, .{ .on_press = .toggle_recovery });
+    ui.text(if (s.unlock_recovery) t("Use my passcode instead") else t("Use my recovery key instead"), .{ .font_size = 14, .weight = 650, .color = c.accent });
+    ui.end();
+    ui.begin(.{ .padding = .{ .top = 14 } }, .{ .on_press = .start_fresh });
+    ui.text(t("Forgot both? Start fresh"), .{ .font_size = 14, .weight = 500, .color = c.text_3 });
+    ui.end();
+    ui.end();
+    ui.end();
+}
+
+fn toastView(cx: Cx) void {
+    const ui = cx.ui;
+    ui.begin(.{ .position = .absolute, .inset = .{ .start = 16, .end = 16, .bottom = if (cx.phone) 96 else 112 }, .align_items = .center }, .{});
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .padding = .xy(18, 12), .min_height = 50, .radius = 16, .background = cx.c.toast, .max_width = 560 }, .{ .on_press = .{ .toast_hide = cx.s.toast.id } });
+    ui.icon(if (cx.s.toast.err) icons.alertCircle else icons.info, 20, if (cx.s.toast.err) Color.hex("#ff8a9b") else Color.hex("#a9a0ff"), .{}, 0);
+    ui.text(cx.s.toast.text.get(), .{ .font_size = 14.5, .weight = 500, .color = Color.white });
+    ui.end();
+    ui.end();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Modals: menus (as sheets), confirmations, passcode forms, recovery key
+
+pub fn sheet(cx: Cx, title: ?[]const u8) void {
+    const ui = cx.ui;
+    // The backdrop is a sibling of the sheet: nested pressable views would take each other's taps.
+    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .align_items = .center, .justify = if (cx.phone) .end else .center, .padding = if (cx.phone) .{} else .all(20) }, .{});
+    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .background = cx.c.overlay }, .{ .on_press = .close_modal });
+    ui.end();
+    ui.begin(.{ .width = .fill, .max_width = 440, .max_height = cx.h * 0.88, .background = cx.c.surface, .radius = 24, .padding = .{ .bottom = if (cx.phone) 18 else 8 } }, .{});
+    if (title) |tt| {
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .{ .top = 18, .bottom = 6, .start = 24, .end = 14 }, .min_height = 62 }, .{});
+        ui.text(tt, .{ .font_size = 20, .weight = 750, .color = cx.c.text, .grow = 1, .width = .fill });
+        ui_kit.iconButton(cx, icons.close, .close_modal, .{});
+        ui.end();
+    }
+    ui.beginScroll(.{ .padding = .{ .start = 12, .end = 12, .bottom = 6 } }, zui.key("sheet"));
+}
+
+pub fn endSheet(cx: Cx) void {
+    cx.ui.end();
+    cx.ui.end();
+    cx.ui.end();
+}
+
+pub fn menuItem(cx: Cx, ic: zui.Icon, label: []const u8, msg: Msg, danger: bool) void {
+    const ui = cx.ui;
+    const c = cx.c;
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 44, .padding = .xy(12, 6), .radius = 12, .pressed_background = c.hover }, .{ .on_press = msg });
+    ui.icon(ic, 19, if (danger) c.danger else c.text_2, .{}, 0);
+    ui.text(label, .{ .font_size = 14.5, .weight = 550, .color = if (danger) c.danger else c.text, .grow = 1, .width = .fill });
+    ui.end();
+}
+
+fn modal(cx: Cx) void {
+    const m = cx.s.modal.?;
+    switch (m) {
+        .menu => |x| vchat.menu(cx, x.kind, x.target, x.item),
+        .confirm => |x| confirmView(cx, x.kind, x.target),
+        .recovery_key => vset.recoveryKey(cx),
+        .enable_advanced, .disable_advanced, .change_passcode, .new_recovery => vset.passcodeForm(cx, m),
+        .fingerprint => vset.fingerprint(cx),
+        .safety => |uid| vset.safety(cx, uid.str()),
+        .reactions => vchat.reactionsSheet(cx),
+        .join => {},
+    }
+}
+
+fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id) void {
+    const s = cx.s;
+    const a = cx.a();
+    const c = s.store.chat(target.str());
+    const name = if (c) |cc| s.store.title(cc) else "";
+    var title: []const u8 = "";
+    var text: []const u8 = "";
+    var action: []const u8 = t("Delete");
+    var check: ?[]const u8 = null;
+    switch (kind) {
+        .logout => {
+            title = t("Log out?");
+            text = t("Your encryption keys will be removed from this device. You will need your passcode to read your messages when you sign in again.");
+            action = t("Log out");
+        },
+        .start_fresh => {
+            title = t("Start fresh?");
+            text = t("New keys are created and backed up automatically. People in your chats share them with you again when they come online. Older notes in Saved can no longer be opened.");
+            action = t("Start fresh");
+        },
+        .delete_chat => {
+            const pair = if (c) |cc| cc.is("private") or cc.is("bot") else false;
+            title = if (pair) t("Delete chat?") else if (c != null and c.?.is("channel")) t("Delete channel?") else t("Delete group?");
+            text = if (pair) fmt.tv(a, "Delete the chat with {name}?", .{ .name = name }) else t("This will delete it for all members. This cannot be undone.");
+            if (c != null and c.?.is("private")) check = fmt.tv(a, "Also delete for {name}", .{ .name = name });
+        },
+        .delete_saved => {
+            title = fmt.tv(a, "Delete {name}?", .{ .name = name });
+            text = t("This saved chat and everything in it will be deleted. This cannot be undone.");
+        },
+        .leave_chat => {
+            title = if (c != null and c.?.is("channel")) t("Leave channel?") else t("Leave group?");
+            text = fmt.tv(a, "Are you sure you want to leave {name}?", .{ .name = name });
+            action = t("Leave");
+        },
+        .clear_history => {
+            title = t("Clear history?");
+            text = t("All messages here will be deleted.");
+            action = t("Clear");
+            if (c != null and c.?.is("private")) check = fmt.tv(a, "Also delete for {name}", .{ .name = name });
+        },
+        .delete_messages => {
+            title = t("Delete message?");
+            text = t("This cannot be undone.");
+            if (c != null and !c.?.is("saved")) check = t("Delete for everyone");
+        },
+        .block => {
+            title = fmt.tv(a, "Block {name}?", .{ .name = name });
+            text = t("They will not be able to message or call you.");
+            action = t("Block");
+        },
+        .unblock => {
+            title = t("Unblock");
+            action = t("Unblock");
+        },
+        .remove_contact => {
+            title = t("Remove contact");
+            action = t("Remove");
+        },
+    }
+    const ui = cx.ui;
+    sheet(cx, title);
+    ui.begin(.{ .padding = .xy(12, 6), .gap = 12 }, .{});
+    if (text.len > 0) ui.text(text, .{ .font_size = 15, .color = cx.c.text_2, .line_height = 1.6 });
+    if (check) |label| {
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 44 }, .{ .on_press = .confirm_check });
+        ui.begin(.{ .width = .{ .px = 22 }, .height = .{ .px = 22 }, .radius = 8, .border_width = if (s.confirm_check) 0 else 1.5, .border_color = cx.c.border_strong, .background = if (s.confirm_check) cx.c.brand else null, .align_items = .center, .justify = .center }, .{});
+        if (s.confirm_check) ui.icon(icons.check, 14, Color.white, .{}, 0);
+        ui.end();
+        ui.text(label, .{ .font_size = 15, .color = cx.c.text });
+        ui.end();
+    }
+    ui.begin(.{ .direction = .row, .justify = .end, .gap = 8, .padding = .{ .top = 8, .bottom = 8 } }, .{});
+    ui_kit.button(cx, t("Cancel"), .close_modal, .{ .kind = .ghost });
+    ui_kit.button(cx, action, .confirm, .{ .kind = .danger });
+    ui.end();
+    ui.end();
+    endSheet(cx);
+}

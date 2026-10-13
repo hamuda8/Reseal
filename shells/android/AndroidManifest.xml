@@ -6,12 +6,15 @@
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- The device position (see the app for what it is used for). -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- New-message notifications; an incoming call rings full screen over the lock screen. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Incoming calls on the system call screen (self-managed ConnectionService). -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
 
     <application
         android:label="Reseal"
+        android:icon="@mipmap/ic_launcher"
         android:hasCode="true"
         android:extractNativeLibs="false"
         android:usesCleartextTraffic="true">
@@ -20,6 +23,7 @@
 
         <activity
             android:name="com.wufour.zui.ZuiActivity"
+            android:launchMode="singleTop"
             android:exported="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar"
             android:windowSoftInputMode="adjustResize"
@@ -29,5 +33,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The phone's own call screen for Reseal calls (zui: fx.ringCall / startCall). -->
+        <service android:name="com.wufour.zui.ZuiCallService" android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter><action android:name="android.telecom.ConnectionService" /></intent-filter>
+        </service>
+        <receiver android:name="com.wufour.zui.ZuiCallReceiver" android:exported="false" />
+
+        <!-- Home-screen widget: who has unread messages (names only, never message text). -->
+        <receiver android:name="com.wufour.zui.ZuiWidget" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/zui_widget_info" />
+        </receiver>
     </application>
 </manifest>
