@@ -292,7 +292,7 @@ pub fn onAck(s: *State, req: SocketReq, ok: bool, result: ?j.Value, err: []const
                 .start => {
                     c.id = Id.of(j.strOr(result, "callId", ""));
                     if (j.truthy(result, "busy")) {
-                        app.toast(s, fmt.tv(tmp(), "{name} is on another call.", .{ .name = title(s) }));
+                        app.toast(s, fmt.tf("{name} is on another call.", .{ .name = title(s) }));
                         return end(s, t("Line busy"));
                     }
                     c.status = .ringing;
@@ -370,7 +370,9 @@ pub fn onPeerEvent(s: *State, e: zui.PeerEvent) void {
                 if (c.status != .active) {
                     app.fx.callConnected(c.id.str());
                     c.status = .active;
-                    if (c.started_at == 0) c.started_at = sys.now();
+                    // The web's clock comes every 20 s until the call asks for it every second:
+                    // start counting at the first fresh one.
+                    if (c.started_at == 0 and zui.platform != .web) c.started_at = sys.now();
                 }
             } else if (std.mem.eql(u8, e.data, "failed") or std.mem.eql(u8, e.data, "disconnected")) {
                 p.connected = false;
@@ -516,7 +518,7 @@ pub fn statusText(s: *const State) []const u8 {
         .ringing => if (c.outgoing) t("Ringing…") else t("Connecting…"),
         .connecting => t("Connecting…"),
         .ended, .unavailable => c.reason.get(),
-        .active => if (c.group) fmt.tn(tmp(), @intCast(c.peers.items.len + 1), "{n} participant", "{n} participants") else if (c.started_at > 0) fmt.duration(tmp(), @as(f64, @floatFromInt(sys.now() - c.started_at)) / 1000) else t("Connecting…"),
+        .active => if (c.group) fmt.tn(tmp(), @intCast(c.peers.items.len + 1), "{n} participant", "{n} participants") else if (c.started_at > 0) fmt.duration(tmp(), @as(f64, @floatFromInt(sys.now() - c.started_at)) / 1000) else fmt.duration(tmp(), 0),
         .idle => "",
     };
 }
@@ -659,4 +661,9 @@ pub fn onSystem(s: *State, kind: zui.CallEvent.Kind, id: Id) void {
             if (inc.call.eql(id.str())) act(s, .decline);
         },
     }
+}
+
+/// A fresh clock arrived (web): the call's timer starts with it.
+pub fn onClock(s: *State) void {
+    if (s.call.status == .active and s.call.started_at == 0) s.call.started_at = sys.now();
 }

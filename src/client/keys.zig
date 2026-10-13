@@ -718,7 +718,9 @@ fn onFulfillLookup(s: *State, batch: u32, r: zui.Response, v: ?j.Value) void {
 // Decrypting messages (messages.js hydrate)
 
 fn cacheKey(m: *const data.Message) []const u8 {
-    return std.fmt.allocPrint(tmp(), "{s}:{s}", .{ m.id(), m.o.s("editedAt") orelse "" }) catch "";
+    // The ciphertext names the message (summaries in the chat list may come without an id).
+    const ct = j.str(m.enc(), "ct") orelse return "";
+    return std.fmt.allocPrint(tmp(), "{s}:{s}", .{ ct[0..@min(ct.len, 48)], j.str(m.enc(), "sig") orelse "" }) catch "";
 }
 
 /// Decrypts a message if it needs it. Never fails: problems are recorded on the message.

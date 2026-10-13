@@ -134,7 +134,7 @@ pub fn button(cx: Cx, label: []const u8, msg: Msg, o: ButtonOpts) void {
     ui.end();
 }
 
-pub const IconButtonOpts = struct { size: f32 = 40, soft: bool = false, active: bool = false, color: ?Color = null, background: ?Color = null, flip: bool = false, icon_size: f32 = 22 };
+pub const IconButtonOpts = struct { size: f32 = 40, soft: bool = false, active: bool = false, color: ?Color = null, background: ?Color = null, icon_size: f32 = 22, rtl: ?Icon = null };
 
 pub fn iconButton(cx: Cx, ic: Icon, msg: ?Msg, o: IconButtonOpts) void {
     const ui = cx.ui;
@@ -143,7 +143,7 @@ pub fn iconButton(cx: Cx, ic: Icon, msg: ?Msg, o: IconButtonOpts) void {
     const fg = o.color orelse if (o.active) c.accent else if (o.soft) c.text else c.text_2;
     ui.begin(.{ .width = .{ .px = o.size }, .height = .{ .px = o.size }, .radius = if (o.size >= 48) 16 else if (o.size <= 32) 10 else 13, .background = bg, .align_items = .center, .justify = .center, .pressed_background = c.active }, .{ .on_press = msg });
     // Arrows point the other way in right-to-left languages.
-    ui.icon(ic, o.icon_size, fg, .{ .rotate = if (o.flip and cx.s.lang == .ar) 180 else 0 }, 0);
+    ui.icon(if (cx.s.lang == .ar) o.rtl orelse ic else ic, o.icon_size, fg, .{}, 0);
     ui.end();
 }
 
@@ -166,19 +166,25 @@ pub fn row(cx: Cx, title: []const u8, o: RowOpts) void {
     const ui = cx.ui;
     const c = cx.c;
     const fg = if (o.danger) c.danger else c.text;
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 14, .min_height = 52, .padding = .xy(12, 8), .radius = theme.radius, .pressed_background = c.active }, .{ .on_press = o.on, .key = o.k });
+    // Title and its value/switch on one line, the explanation below at full width (zui measures a
+    // row's children against the whole width, so wrapped text beside a value would be cut).
+    ui.begin(.{ .gap = 2, .min_height = 52, .padding = .xy(12, 8), .radius = theme.radius, .pressed_background = c.active, .justify = .center }, .{ .on_press = o.on, .key = o.k });
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 14 }, .{});
     if (o.icon) |ic| {
         ui.begin(.{ .padding = .xy(3, 0) }, .{});
         ui.icon(ic, 22, if (o.danger) c.danger else c.text_2, .{}, 0);
         ui.end();
     }
-    ui.begin(.{ .grow = 1, .width = .fill, .gap = 1 }, .{});
-    ui.text(title, .{ .font_size = 15, .weight = 550, .color = fg, .max_lines = 1 });
-    if (o.subtitle) |sub| ui.text(sub, .{ .font_size = 13.5, .color = c.text_2, .max_lines = 2 });
-    ui.end();
+    ui.text(title, .{ .font_size = 15, .weight = 550, .color = fg, .max_lines = 1, .grow = 1, .width = .fill });
     if (o.value) |v| ui.text(v, .{ .font_size = 14, .color = c.text_2, .max_lines = 1 });
     if (o.switch_on) |on| switchView(cx, on);
-    if (o.chevron) ui.icon(icons.chevronRight, 18, c.text_3, .{ .rotate = if (cx.s.lang == .ar) 180 else 0 }, 0);
+    if (o.chevron) ui.icon(if (cx.s.lang == .ar) icons.chevronRight_rtl else icons.chevronRight, 18, c.text_3, .{}, 0);
+    ui.end();
+    if (o.subtitle) |sub| {
+        ui.begin(.{ .padding = .{ .start = if (o.icon != null) 42 else 0, .end = if (o.switch_on != null) 58 else 0 } }, .{});
+        ui.text(sub, .{ .font_size = 13.5, .color = c.text_2, .line_height = 1.45 });
+        ui.end();
+    }
     ui.end();
 }
 

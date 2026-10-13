@@ -87,7 +87,7 @@ fn header(cx: Cx, c: *const data.Chat) void {
     const s = cx.s;
     const col = cx.c;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .height = .{ .px = theme.header_h }, .padding = .{ .start = if (cx.phone) 6 else 16, .end = 12 }, .background = col.surface }, .{});
-    if (cx.phone) kit.iconButton(cx, icons.back, .close_chat, .{ .flip = true });
+    if (cx.phone) kit.iconButton(cx, icons.back, .close_chat, .{ .rtl = icons.back_rtl });
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .grow = 1, .width = .fill, .padding = .xy(8, 5), .radius = 14, .pressed_background = col.hover }, .{ .on_press = .{ .open_info = Id.of(c.id()) } });
     vlist.chatAvatar(cx, c, 42);
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
@@ -109,7 +109,8 @@ fn header(cx: Cx, c: *const data.Chat) void {
             if (feature(s, "video")) kit.iconButton(cx, icons.video, .{ .call = .{ .start = .{ .chat = Id.of(c.id()), .video = true } } }, .{ .background = soft });
         } else kit.iconButton(cx, icons.phone, .{ .call = .{ .start = .{ .chat = Id.of(c.id()), .video = false } } }, .{ .background = soft });
     }
-    kit.iconButton(cx, icons.search, .{ .chat_action = .{ .what = .search, .chat = Id.of(c.id()) } }, .{ .background = soft });
+    // Phones: search is in the menu (the title needs the room).
+    if (!cx.phone) kit.iconButton(cx, icons.search, .{ .chat_action = .{ .what = .search, .chat = Id.of(c.id()) } }, .{ .background = soft });
     kit.iconButton(cx, icons.more, .{ .menu = .{ .menu = .{ .kind = .chat_header, .target = Id.of(c.id()) } } }, .{ .background = soft });
     ui.end();
     ui.end();
@@ -149,7 +150,7 @@ fn status(cx: Cx, c: *const data.Chat) Status {
         var tx = fmt.tn(a, c.o.i("memberCount") orelse 0, "{n} member", "{n} members");
         if (s.members) |m| if (s.members_chat.eql(c.id())) {
             const online = j.intOr(m.v, "online", 0);
-            if (online > 1) tx = std.fmt.allocPrint(a, "{s}, {s}", .{ tx, fmt.tv(a, "{n} online", .{ .n = online }) }) catch tx;
+            if (online > 1) tx = std.fmt.allocPrint(a, "{s}, {s}", .{ tx, fmt.tf("{n} online", .{ .n = online }) }) catch tx;
         };
         return .{ .text = tx };
     }
@@ -183,7 +184,7 @@ fn topBars(cx: Cx, c: *const data.Chat) void {
         ui.begin(.{ .width = .{ .px = 3 }, .height = .{ .px = 34 }, .radius = 2, .background = col.accent }, .{});
         ui.end();
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(if (pinned.len > 1) fmt.tv(cx.a(), "Pinned message #{n}", .{ .n = @as(i64, @intCast(pinned.len)) }) else t("Pinned message"), .{ .font_size = 12.5, .weight = 700, .color = col.accent });
+        ui.text(if (pinned.len > 1) fmt.tf("Pinned message #{n}", .{ .n = @as(i64, @intCast(pinned.len)) }) else t("Pinned message"), .{ .font_size = 12.5, .weight = 700, .color = col.accent });
         ui.text(line, .{ .font_size = 14, .color = col.text, .max_lines = 1 });
         ui.end();
         ui.end();
@@ -576,7 +577,7 @@ fn composer(cx: Cx, c: *const data.Chat) void {
         ui.end();
         ui.end();
         ui.begin(.{ .width = .{ .px = 50 }, .height = .{ .px = 50 }, .radius = 17, .background = col.brand, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = .send_text });
-        ui.icon(if (s.editing.isSet()) icons.check else icons.send, 22, col.on_accent, .{ .rotate = if (s.lang == .ar) 180 else 0 }, 0);
+        ui.icon(if (s.editing.isSet()) icons.check else if (s.lang == .ar) icons.send_rtl else icons.send, 22, col.on_accent, .{}, 0);
         ui.end();
         ui.end();
     }
@@ -609,7 +610,7 @@ fn replyBar(cx: Cx, c: *const data.Chat) void {
     var title: []const u8 = if (editing) t("Edit message") else t("Reply");
     var line: []const u8 = "";
     if (s.store.existingTimeline(c.id())) |tl| if (tl.find(id)) |m| {
-        if (!editing) title = fmt.tv(cx.a(), "Reply to {name}", .{ .name = s.store.displayName(m.senderId()) });
+        if (!editing) title = fmt.tf("Reply to {name}", .{ .name = s.store.displayName(m.senderId()) });
         line = text.summary(s, m, true);
     };
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .padding = .{ .top = 9, .bottom = 2, .start = 14, .end = 8 } }, .{});
@@ -666,6 +667,7 @@ fn chatMenu(cx: Cx, target: Id) void {
         }
     }.f;
     views.menuItem(cx, icons.info, t("Info"), act(.info, id), false);
+    views.menuItem(cx, icons.search, t("Search in chat"), act(.search, id), false);
     if (!c.archived()) views.menuItem(cx, if (c.pinnedAt() != 0) icons.unpin else icons.pin, if (c.pinnedAt() != 0) t("Unpin") else t("Pin"), act(if (c.pinnedAt() != 0) .unpin else .pin, id), false);
     if (!c.is("saved")) {
         views.menuItem(cx, if (muted) icons.bell else icons.bellOff, if (muted) t("Unmute") else t("Mute…"), act(if (muted) .unmute else .mute, id), false);
@@ -787,7 +789,7 @@ fn messageMenu(cx: Cx, chat_id: Id, item: Id) void {
         for (j.arr(p, "options"), 0..) |o, i| {
             if (i >= 10) break;
             const label = if (o == .string) o.string else j.strOr(o, "text", "");
-            views.menuItem(cx, icons.poll, fmt.tv(cx.a(), "Vote: {option}", .{ .option = label }), .{ .vote = .{ .msg = id, .option = @intCast(i) } }, false);
+            views.menuItem(cx, icons.poll, fmt.tf("Vote: {option}", .{ .option = label }), .{ .vote = .{ .msg = id, .option = @intCast(i) } }, false);
         }
         if (j.field(m.o.v, "poll.myVote") != null) views.menuItem(cx, icons.refresh, t("Retract vote"), act(.retract_vote, id), false);
     };

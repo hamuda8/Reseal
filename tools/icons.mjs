@@ -58,6 +58,50 @@ function convert(markup) {
   return { fill: false, paths };
 }
 
+/** The same path drawn mirrored left to right (x -> 24 - x), for arrows in right-to-left languages. */
+function mirror(d) {
+  let i = 0;
+  const out = [];
+  const ws = () => { while (i < d.length && /[\s,]/.test(d[i])) i++; };
+  const num = () => {
+    ws();
+    const m = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?/i.exec(d.slice(i));
+    if (!m) return null;
+    i += m[0].length;
+    return Number(m[0]);
+  };
+  const flag = () => { ws(); const c = d[i++]; return c === '1' ? 1 : 0; };
+  let cmd = null;
+  while (true) {
+    ws();
+    if (i >= d.length) break;
+    if (/[a-zA-Z]/.test(d[i])) cmd = d[i++];
+    else if (!cmd) break;
+    const abs = cmd === cmd.toUpperCase();
+    const X = (x) => (abs ? 24 - x : -x);
+    const c = cmd.toUpperCase();
+    const args = [];
+    const take = (n) => { for (let k = 0; k < n; k++) { const v = num(); if (v === null) return false; args.push(v); } return true; };
+    if (c === 'Z') { out.push(cmd); cmd = null; continue; }
+    if (c === 'A') {
+      const rx = num(); if (rx === null) break;
+      const ry = num(), rot = num(), large = flag(), sweep = flag(), x = num(), y = num();
+      out.push(cmd, rx, ry, -rot, large, 1 - sweep, X(x), y);
+    } else if (c === 'H') { if (!take(1)) break; out.push(cmd, X(args[0])); }
+    else if (c === 'V') { if (!take(1)) break; out.push(cmd, args[0]); }
+    else {
+      const n = { M: 2, L: 2, T: 2, Q: 4, S: 4, C: 6 }[c];
+      if (!take(n)) break;
+      out.push(cmd, ...args.map((v, k) => (k % 2 === 0 ? X(v) : v)));
+    }
+    if (c === 'M') cmd = abs ? 'L' : 'l';
+  }
+  return out.map((v) => (typeof v === 'number' ? num3(v) : v)).join(' ');
+}
+const num3 = (x) => Number(x.toFixed(3)).toString();
+// Arrows the web app flips in right-to-left languages (.icon.flip, the send button).
+const MIRRORED = ['back', 'forwardArrow', 'chevronRight', 'send'];
+
 const KEYWORDS = new Set(['align', 'and', 'anyframe', 'anytype', 'asm', 'break', 'callconv', 'catch', 'comptime', 'const', 'continue', 'defer', 'else', 'enum', 'errdefer', 'error', 'export', 'extern', 'fn', 'for', 'if', 'inline', 'noalias', 'noinline', 'nosuspend', 'opaque', 'or', 'orelse', 'packed', 'pub', 'resume', 'return', 'linksection', 'struct', 'suspend', 'switch', 'test', 'threadlocal', 'try', 'union', 'unreachable', 'var', 'volatile', 'while']);
 const ident = (name) => (KEYWORDS.has(name) ? `@"${name}"` : name);
 
@@ -73,6 +117,11 @@ for (const name of names) {
   const { fill, paths } = convert(I[name]);
   const list = paths.map(p => JSON.stringify(p)).join(', ');
   out += `pub const ${ident(name)}: Icon = .{ .paths = &.{ ${list} }${fill ? ', .fill = true' : `, .stroke = ${STROKE}`} };\n`;
+}
+for (const name of MIRRORED) {
+  const { fill, paths } = convert(I[name]);
+  const list = paths.map(p => JSON.stringify(mirror(p))).join(', ');
+  out += `pub const ${name}_rtl: Icon = .{ .paths = &.{ ${list} }${fill ? ', .fill = true' : `, .stroke = ${STROKE}`} };\n`;
 }
 const dest = path.join(here, '../src/client/icons.zig');
 fs.writeFileSync(dest, out);

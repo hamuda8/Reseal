@@ -86,33 +86,33 @@ pub fn serviceText(s: *const State, m: *const data.Message) []const u8 {
             return std.mem.eql(u8, x, y);
         }
     }.f;
-    if (eq(action, "group_created")) return fmt.tv(a, "{actor} created the group “{title}”", .{ .actor = actor, .title = title });
+    if (eq(action, "group_created")) return fmt.tf("{actor} created the group “{title}”", .{ .actor = actor, .title = title });
     if (eq(action, "channel_created")) return t("Channel created");
-    if (eq(action, "members_added")) return fmt.tv(a, "{actor} added {targets}", .{ .actor = actor, .targets = targets.items });
-    if (eq(action, "member_removed")) return fmt.tv(a, "{actor} removed {targets}", .{ .actor = actor, .targets = targets.items });
-    if (eq(action, "joined")) return if (j.eqlStr(sv, "via", "invite")) fmt.tv(a, "{actor} joined the group via invite link", .{ .actor = actor }) else fmt.tv(a, "{actor} joined the group", .{ .actor = actor });
-    if (eq(action, "left")) return fmt.tv(a, "{actor} left the group", .{ .actor = actor });
-    if (eq(action, "title_changed")) return fmt.tv(a, "{actor} changed the group name to “{title}”", .{ .actor = actor, .title = title });
-    if (eq(action, "avatar_changed")) return fmt.tv(a, "{actor} updated the group photo", .{ .actor = actor });
-    if (eq(action, "avatar_removed")) return fmt.tv(a, "{actor} removed the group photo", .{ .actor = actor });
-    if (eq(action, "pinned")) return fmt.tv(a, "{actor} pinned a message", .{ .actor = actor });
+    if (eq(action, "members_added")) return fmt.tf("{actor} added {targets}", .{ .actor = actor, .targets = targets.items });
+    if (eq(action, "member_removed")) return fmt.tf("{actor} removed {targets}", .{ .actor = actor, .targets = targets.items });
+    if (eq(action, "joined")) return if (j.eqlStr(sv, "via", "invite")) fmt.tf("{actor} joined the group via invite link", .{ .actor = actor }) else fmt.tf("{actor} joined the group", .{ .actor = actor });
+    if (eq(action, "left")) return fmt.tf("{actor} left the group", .{ .actor = actor });
+    if (eq(action, "title_changed")) return fmt.tf("{actor} changed the group name to “{title}”", .{ .actor = actor, .title = title });
+    if (eq(action, "avatar_changed")) return fmt.tf("{actor} updated the group photo", .{ .actor = actor });
+    if (eq(action, "avatar_removed")) return fmt.tf("{actor} removed the group photo", .{ .actor = actor });
+    if (eq(action, "pinned")) return fmt.tf("{actor} pinned a message", .{ .actor = actor });
     if (eq(action, "ttl_changed")) {
         const ttl = j.intOr(sv, "ttl", 0);
-        if (ttl > 0) return fmt.tv(a, "{actor} set messages to disappear after {time}", .{ .actor = actor, .time = fmt.longDuration(a, ttl) });
-        return fmt.tv(a, "{actor} turned off disappearing messages", .{ .actor = actor });
+        if (ttl > 0) return fmt.tf("{actor} set messages to disappear after {time}", .{ .actor = actor, .time = fmt.longDuration(a, ttl) });
+        return fmt.tf("{actor} turned off disappearing messages", .{ .actor = actor });
     }
-    if (eq(action, "ownership_transferred")) return fmt.tv(a, "{actor} made {targets} the owner", .{ .actor = actor, .targets = targets.items });
-    if (eq(action, "group_call_started")) return if (j.truthy(sv, "video")) fmt.tv(a, "{actor} started a video chat", .{ .actor = actor }) else fmt.tv(a, "{actor} started a voice chat", .{ .actor = actor });
-    if (eq(action, "group_call_ended")) return fmt.tv(a, "Voice chat ended ({duration})", .{ .duration = fmt.duration(a, j.float(sv, "duration") orelse 0) });
-    if (eq(action, "keys_changed")) return fmt.tv(a, "{actor}'s security key changed", .{ .actor = actor });
+    if (eq(action, "ownership_transferred")) return fmt.tf("{actor} made {targets} the owner", .{ .actor = actor, .targets = targets.items });
+    if (eq(action, "group_call_started")) return if (j.truthy(sv, "video")) fmt.tf("{actor} started a video chat", .{ .actor = actor }) else fmt.tf("{actor} started a voice chat", .{ .actor = actor });
+    if (eq(action, "group_call_ended")) return fmt.tf("Voice chat ended ({duration})", .{ .duration = fmt.duration(a, j.float(sv, "duration") orelse 0) });
+    if (eq(action, "keys_changed")) return fmt.tf("{actor}'s security key changed", .{ .actor = actor });
     if (eq(action, "call")) {
         const outgoing = s.store.isMe(j.strOr(sv, "actorId", ""));
         const kind = if (j.truthy(sv, "video")) t("video call") else t("call");
         const result = j.strOr(sv, "result", "");
-        if (eq(result, "missed")) return if (outgoing) fmt.tv(a, "Cancelled {kind}", .{ .kind = kind }) else fmt.tv(a, "Missed {kind}", .{ .kind = kind });
-        if (eq(result, "declined")) return fmt.tv(a, "Declined {kind}", .{ .kind = kind });
+        if (eq(result, "missed")) return if (outgoing) fmt.tf("Cancelled {kind}", .{ .kind = kind }) else fmt.tf("Missed {kind}", .{ .kind = kind });
+        if (eq(result, "declined")) return fmt.tf("Declined {kind}", .{ .kind = kind });
         if (eq(result, "busy")) return t("Busy");
-        const head = if (outgoing) fmt.tv(a, "Outgoing {kind}", .{ .kind = kind }) else fmt.tv(a, "Incoming {kind}", .{ .kind = kind });
+        const head = if (outgoing) fmt.tf("Outgoing {kind}", .{ .kind = kind }) else fmt.tf("Incoming {kind}", .{ .kind = kind });
         return std.fmt.allocPrint(a, "{s} ({s})", .{ head, fmt.duration(a, j.float(sv, "duration") orelse 0) }) catch head;
     }
     return t("Something happened");
@@ -144,7 +144,7 @@ pub fn typingText(s: *const State, c: *const data.Chat) []const u8 {
     if (!s.store.showsSenderNames(c)) return std.fmt.allocPrint(a, "{s}…", .{verb(action)}) catch "";
     const first = fmt.firstName(s.store.displayName(who[0].user.str()));
     if (n == 1) return std.fmt.allocPrint(a, "{s} {s}…", .{ first, verb(action) }) catch "";
-    if (n == 2) return fmt.tv(a, "{a} and {b} are typing…", .{ .a = first, .b = fmt.firstName(s.store.displayName(who[1].user.str())) });
+    if (n == 2) return fmt.tf("{a} and {b} are typing…", .{ .a = first, .b = fmt.firstName(s.store.displayName(who[1].user.str())) });
     return fmt.tn(a, @intCast(n), "{n} person is typing…", "{n} people are typing…");
 }
 
@@ -170,9 +170,9 @@ pub fn presenceText(presence: ?j.Value) []const u8 {
         const ago = now - at;
         if (ago < 60_000) return t("last seen just now");
         if (ago < 3_600_000) return fmt.tn(a, @divTrunc(ago, 60_000), "last seen {n} minute ago", "last seen {n} minutes ago");
-        if (fmt.sameDay(at, now)) return fmt.tv(a, "last seen at {time}", .{ .time = fmt.time(a, at) });
-        if (fmt.sameDay(at, now - 86_400_000)) return fmt.tv(a, "last seen yesterday at {time}", .{ .time = fmt.time(a, at) });
-        return fmt.tv(a, "last seen {date}", .{ .date = fmt.shortDate(a, at) });
+        if (fmt.sameDay(at, now)) return fmt.tf("last seen at {time}", .{ .time = fmt.time(a, at) });
+        if (fmt.sameDay(at, now - 86_400_000)) return fmt.tf("last seen yesterday at {time}", .{ .time = fmt.time(a, at) });
+        return fmt.tf("last seen {date}", .{ .date = fmt.shortDate(a, at) });
     }
     return "";
 }
@@ -187,5 +187,5 @@ pub fn deviceName(ua: []const u8) []const u8 {
     const browser = if (has(ua, "Edg/")) "Edge" else if (has(ua, "OPR/")) "Opera" else if (has(ua, "Chrome/")) "Chrome" else if (has(ua, "Firefox/")) "Firefox" else if (has(ua, "Safari/")) "Safari" else t("a browser");
     const os = if (has(ua, "Windows")) "Windows" else if (has(ua, "Android")) "Android" else if (has(ua, "iPhone") or has(ua, "iPad")) "iOS" else if (has(ua, "Mac OS")) "macOS" else if (has(ua, "Linux")) "Linux" else "";
     if (os.len == 0) return browser;
-    return fmt.tv(tmp(), "{browser} on {os}", .{ .browser = browser, .os = os });
+    return fmt.tf("{browser} on {os}", .{ .browser = browser, .os = os });
 }

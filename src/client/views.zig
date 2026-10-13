@@ -995,7 +995,6 @@ fn modal(cx: Cx) void {
 
 fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id) void {
     const s = cx.s;
-    const a = cx.a();
     const c = s.store.chat(target.str());
     const name = if (c) |cc| s.store.title(cc) else "";
     var title: []const u8 = "";
@@ -1016,23 +1015,23 @@ fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id) void {
         .delete_chat => {
             const pair = if (c) |cc| cc.is("private") or cc.is("bot") else false;
             title = if (pair) t("Delete chat?") else if (c != null and c.?.is("channel")) t("Delete channel?") else t("Delete group?");
-            text = if (pair) fmt.tv(a, "Delete the chat with {name}?", .{ .name = name }) else t("This will delete it for all members. This cannot be undone.");
-            if (c != null and c.?.is("private")) check = fmt.tv(a, "Also delete for {name}", .{ .name = name });
+            text = if (pair) fmt.tf("Delete the chat with {name}?", .{ .name = name }) else t("This will delete it for all members. This cannot be undone.");
+            if (c != null and c.?.is("private")) check = fmt.tf("Also delete for {name}", .{ .name = name });
         },
         .delete_saved => {
-            title = fmt.tv(a, "Delete {name}?", .{ .name = name });
+            title = fmt.tf("Delete {name}?", .{ .name = name });
             text = t("This saved chat and everything in it will be deleted. This cannot be undone.");
         },
         .leave_chat => {
             title = if (c != null and c.?.is("channel")) t("Leave channel?") else t("Leave group?");
-            text = fmt.tv(a, "Are you sure you want to leave {name}?", .{ .name = name });
+            text = fmt.tf("Are you sure you want to leave {name}?", .{ .name = name });
             action = t("Leave");
         },
         .clear_history => {
             title = t("Clear history?");
             text = t("All messages here will be deleted.");
             action = t("Clear");
-            if (c != null and c.?.is("private")) check = fmt.tv(a, "Also delete for {name}", .{ .name = name });
+            if (c != null and c.?.is("private")) check = fmt.tf("Also delete for {name}", .{ .name = name });
         },
         .delete_messages => {
             title = t("Delete message?");
@@ -1040,7 +1039,7 @@ fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id) void {
             if (c != null and !c.?.is("saved")) check = t("Delete for everyone");
         },
         .block => {
-            title = fmt.tv(a, "Block {name}?", .{ .name = name });
+            title = fmt.tf("Block {name}?", .{ .name = name });
             text = t("They will not be able to message or call you.");
             action = t("Block");
         },

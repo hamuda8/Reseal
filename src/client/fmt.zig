@@ -59,7 +59,10 @@ pub fn fill(a: Allocator, template: []const u8, name: []const u8, value: []const
 }
 
 /// t(template) with several {name} fields.
-pub fn tv(a: Allocator, template: []const u8, args: anytype) []const u8 {
+/// Translates `template` and fills `{name}` fields (numbers in the language's digits). The
+/// result lives until the next update (strings shown are copied by the view).
+pub fn tf(template: []const u8, args: anytype) []const u8 {
+    const a = @import("app.zig").tmp();
     var s = t(template);
     inline for (comptime std.meta.fieldNames(@TypeOf(args))) |name| {
         const value = @field(args, name);

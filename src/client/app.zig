@@ -353,6 +353,7 @@ pub const State = struct {
     pending_open: Id = .{},
     pending_username: Id = .{},
     call_ticking: bool = false,
+    fast_clock: bool = false,
 };
 
 pub fn init() State {
@@ -472,7 +473,15 @@ pub fn update(s: *State, msg: Msg, e: zui.Env, f: zui.Fx(Msg)) void {
     // Batched work collected while handling: user lookups, the home-screen widget.
     keys.flushLookups(s);
     @import("view_chat.zig").wantMedia(s);
-    if (s.call.status == .active and !s.call_ticking) {
+    // The call screen's clock: once a second while a call is on. The web's clock comes from the
+    // shell, which then sends it every second.
+    const calling = s.call.status == .active;
+    if (zui.platform == .web) {
+        if (calling != s.fast_clock) {
+            s.fast_clock = calling;
+            post(if (calling) "{\"t\":\"fastclock\",\"on\":true}" else "{\"t\":\"fastclock\",\"on\":false}");
+        }
+    } else if (calling and !s.call_ticking) {
         s.call_ticking = true;
         fx.after(1000, .frame);
     }
@@ -873,6 +882,7 @@ fn onHost(s: *State, json: []const u8) void {
             if (j.str(v, "seed")) |seed| sys.addEntropy(crypto.fromB64(tmp(), seed) catch seed);
             if (j.int(v, "now")) |now| sys.setClock(now, @intCast(j.intOr(v, "tz", 0)));
             if (j.field(v, "visible")) |vis| if (vis == .bool) setVisible(s, vis.bool);
+            calls.onClock(s);
             return;
         }
         if (std.mem.eql(u8, typ, "visible")) {

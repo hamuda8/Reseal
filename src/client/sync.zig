@@ -370,7 +370,7 @@ pub fn onEvent(s: *State, typ: []const u8, d: j.Value) void {
         app.api(s, .GET, std.fmt.allocPrint(tmp(), "/users/{s}", .{uid}) catch return, null, .{ .user_refresh = Id.of(uid) });
         return;
     }
-    if (eq(typ, "security.restore")) return app.toast(s, fmt.tv(tmp(), "Reseal was opened on a new device: {device}", .{ .device = text.deviceName(j.strOr(d, "device", "")) }));
+    if (eq(typ, "security.restore")) return app.toast(s, fmt.tf("Reseal was opened on a new device: {device}", .{ .device = text.deviceName(j.strOr(d, "device", "")) }));
     if (std.mem.startsWith(u8, typ, "call.")) return calls.onEvent(s, typ, d);
 }
 

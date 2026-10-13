@@ -40,6 +40,7 @@
     let app = null;
     let allowed = [];
     let hostOrigin = null;
+    let fast = 0;
     const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
     const send = (obj) => app && setTimeout(() => app.send(JSON.stringify(obj)), 0);
     const env = (t) => ({ t, seed: b64(crypto.getRandomValues(new Uint8Array(32))), now: Date.now(), tz: -new Date().getTimezoneOffset(), visible: document.visibilityState === 'visible' });
@@ -108,6 +109,7 @@
         case 'save': return save(msg.name, msg.url);
         case 'push': return pushSetup(msg.key);
         case 'origins': allowed = Array.isArray(msg.origins) ? msg.origins : []; return;
+        case 'fastclock': clearInterval(fast); fast = msg.on ? setInterval(() => send(env('clock')), 1000) : 0; return;
       }
       // Anything else is for the page that embeds the widget.
       if (inFrame) window.parent.postMessage(msg, hostOrigin || '*');

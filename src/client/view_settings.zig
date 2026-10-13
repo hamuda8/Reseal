@@ -490,7 +490,7 @@ pub fn safety(cx: Cx, user_id: []const u8) void {
     const mine = keys.myPublic(s);
     if (u != null and mine != null and u.?.s("keys.enc") != null) {
         const sn = crypto.safetyNumber(cx.a(), mine.?.enc, mine.?.sig, u.?.s("keys.enc").?, u.?.s("keys.sig") orelse "") catch return;
-        ui.text(fmt.tv(cx.a(), "Compare these numbers with {name}, in person or on a call. If they match, your chat is end-to-end encrypted with the right keys.", .{ .name = s.store.userName(u.?) }), .{ .font_size = 15, .color = cx.c.text_2, .line_height = 1.6 });
+        ui.text(fmt.tf("Compare these numbers with {name}, in person or on a call. If they match, your chat is end-to-end encrypted with the right keys.", .{ .name = s.store.userName(u.?) }), .{ .font_size = 15, .color = cx.c.text_2, .line_height = 1.6 });
         var digits: std.ArrayList(u8) = .empty;
         for (sn.groups) |g| digits.appendSlice(cx.a(), &g) catch {};
         grid(cx, digits.items, 5, 4);

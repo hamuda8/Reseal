@@ -139,3 +139,7 @@ pub const emojiAdd: Icon = .{ .paths = &.{ "M20.5 12A8.5 8.5 0 1112 3.5", "M8.3 
 pub const layers: Icon = .{ .paths = &.{ "M12 3.5l9 4.5-9 4.5L3 8zM3 12.5l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5" }, .stroke = 1.8 };
 pub const send2: Icon = .{ .paths = &.{ "M3.4 20.4l17.4-7.5c.8-.3.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.2-1.4.9V9c0 .5.4.9.9 1L16 12 2.9 14c-.5.1-.9.5-.9 1v4.5c0 .7.7 1.2 1.4.9z" }, .fill = true };
 pub const doubleCheckSmall: Icon = .{ .paths = &.{ "M1.5 12.6l4 4L14 8M10.5 15.6l1 1L20 8" }, .stroke = 1.8 };
+pub const back_rtl: Icon = .{ .paths = &.{ "M 5 12 H 19 M 12.5 18.5 L 19 12 l -6.5 -6.5" }, .stroke = 1.8 };
+pub const forwardArrow_rtl: Icon = .{ .paths = &.{ "M 19 12 h -14 M 11.5 5.5 L 5 12 l 6.5 6.5" }, .stroke = 1.8 };
+pub const chevronRight_rtl: Icon = .{ .paths = &.{ "M 14.5 6 l -6 6 l 6 6" }, .stroke = 1.8 };
+pub const send_rtl: Icon = .{ .paths = &.{ "M 19.8 11.3 L 3.8 4.2 c -0.5 -0.2 -1 0.3 -0.8 0.8 l 7.1 16 c 0.2 0.5 1 0.5 1.1 -0.1 l 1.6 -6.2 a 0.7 0.7 0 0 1 0.5 -0.5 L 19.7 12.6 c 0.6 -0.1 0.6 -0.9 0.1 -1.3 z M 13.4 13.4 L 3.4 4.6" }, .stroke = 1.8 };

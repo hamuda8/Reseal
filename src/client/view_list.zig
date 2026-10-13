@@ -188,7 +188,7 @@ pub fn paneHeader(cx: Cx, title: []const u8, back: bool, large: bool) void {
         return;
     }
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .height = .{ .px = theme.header_h }, .padding = .xy(14, 0) }, .{});
-    if (back) kit.iconButton(cx, icons.back, .pop_pane, .{ .flip = true });
+    if (back) kit.iconButton(cx, icons.back, .pop_pane, .{ .rtl = icons.back_rtl });
     ui.text(title, .{ .font_size = 20, .weight = 750, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
 }
 
@@ -505,7 +505,7 @@ fn entry(cx: Cx, title: []const u8, sub: []const u8, ic: zui.Icon, msg: Msg) voi
     ui.text(title, .{ .font_size = 15, .weight = 700, .color = cx.c.text });
     ui.text(sub, .{ .font_size = 13.5, .color = cx.c.text_2 });
     ui.end();
-    ui.icon(icons.chevronRight, 20, cx.c.text_3, .{ .rotate = if (cx.s.lang == .ar) 180 else 0 }, 0);
+    ui.icon(if (cx.s.lang == .ar) icons.chevronRight_rtl else icons.chevronRight, 20, cx.c.text_3, .{}, 0);
     ui.end();
 }
 
@@ -522,7 +522,7 @@ fn chatsPane(cx: Cx) void {
         ui.end();
     }
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .{ .start = 14, .end = 14, .bottom = 10, .top = if (s.searching) 14 else 0 } }, .{});
-    if (s.searching) kit.iconButton(cx, icons.back, .{ .toggle_search = false }, .{ .flip = true });
+    if (s.searching) kit.iconButton(cx, icons.back, .{ .toggle_search = false }, .{ .rtl = icons.back_rtl });
     kit.searchBox(cx, .search, t("Search people and chats"));
     ui.end();
     if (s.searching) {
