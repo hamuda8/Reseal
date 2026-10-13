@@ -24,28 +24,24 @@ fn mediaLabel(kind: []const u8) []const u8 {
     return t("Media");
 }
 
-fn mediaEmoji(kind: []const u8) []const u8 {
-    const map = .{ .{ "photo", "🖼" }, .{ "video", "📹" }, .{ "file", "📎" }, .{ "voice", "🎤" }, .{ "round", "📹" }, .{ "audio", "🎵" }, .{ "gif", "🎞" } };
-    inline for (map) |kv| if (std.mem.eql(u8, kind, kv[0])) return kv[1];
-    return "";
-}
-
-/// One line describing a message (chat list, notifications, reply quotes).
-pub fn summary(s: *const State, m: *const data.Message, with_emoji: bool) []const u8 {
+/// One line describing a message (chat list, notifications, reply quotes). Words only: the app's
+/// chrome has no emoji (Reseal-js prefixed kinds with them); an emoji sticker shows its emoji, which
+/// is the message itself.
+pub fn summary(s: *const State, m: *const data.Message, with_kind: bool) []const u8 {
     const a = tmp();
     if (m.deleted()) return t("Deleted message");
     if (m.isService()) return serviceText(s, m);
     switch (m.decrypt) {
         .pending => return t("Decrypting…"),
-        .nokey => return std.fmt.allocPrint(a, "🔒 {s}", .{t("Waiting for encryption key")}) catch "",
-        .failed => return std.fmt.allocPrint(a, "⚠️ {s}", .{t("Message could not be decrypted")}) catch "",
+        .nokey => return t("Waiting for encryption key"),
+        .failed => return t("Message could not be decrypted"),
         .ok => {},
     }
     const c = m.content orelse return "";
     if (j.obj(c, "sticker")) |st| return std.fmt.allocPrint(a, "{s} {s}", .{ j.strOr(st, "emoji", ""), t("Sticker") }) catch "";
-    if (j.obj(c, "poll")) |p| return std.fmt.allocPrint(a, "📊 {s}", .{j.str(p, "question") orelse t("Poll")}) catch "";
-    if (j.obj(c, "location")) |l| return std.fmt.allocPrint(a, "📍 {s}", .{j.str(l, "title") orelse t("Location")}) catch "";
-    if (j.obj(c, "contact")) |ct| return std.fmt.allocPrint(a, "👤 {s}", .{j.strOr(ct, "name", "")}) catch "";
+    if (j.obj(c, "poll")) |p| return std.fmt.allocPrint(a, "{s}: {s}", .{ t("Poll"), j.strOr(p, "question", "") }) catch "";
+    if (j.obj(c, "location")) |l| return std.fmt.allocPrint(a, "{s}: {s}", .{ t("Location"), j.strOr(l, "title", "") }) catch "";
+    if (j.obj(c, "contact")) |ct| return std.fmt.allocPrint(a, "{s}: {s}", .{ t("Contact"), j.strOr(ct, "name", "") }) catch "";
     const media = j.arr(c, "media");
     const txt = j.strOr(c, "text", "");
     if (media.len > 0) {
@@ -61,9 +57,9 @@ pub fn summary(s: *const State, m: *const data.Message, with_emoji: bool) []cons
             j.str(media[0], "name").?
         else
             mediaLabel(kind);
-        const emoji = mediaEmoji(kind);
-        const prefix = if (with_emoji and emoji.len > 0) std.fmt.allocPrint(a, "{s} ", .{emoji}) catch "" else "";
-        return std.fmt.allocPrint(a, "{s}{s}", .{ prefix, if (txt.len > 0) fmt.plain(a, txt, 100) else label }) catch "";
+        if (txt.len == 0) return label;
+        if (with_kind and !(media.len > 1 and same)) return std.fmt.allocPrint(a, "{s}: {s}", .{ mediaLabel(kind), fmt.plain(a, txt, 100) }) catch "";
+        return fmt.plain(a, txt, 100);
     }
     return fmt.plain(a, txt, 140);
 }

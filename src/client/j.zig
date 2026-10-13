@@ -62,6 +62,10 @@ pub fn float(v: ?Value, key: []const u8) ?f64 {
     };
 }
 
+pub fn floatOr(v: ?Value, key: []const u8, d: f64) f64 {
+    return float(v, key) orelse d;
+}
+
 /// JS truthiness for the usual fields (true, non-zero, non-empty string, any object).
 pub fn truthy(v: ?Value, key: []const u8) bool {
     const x = path(v, key) orelse return false;

@@ -19,6 +19,9 @@ const fmt = @import("fmt.zig");
 const text = @import("text.zig");
 const kit = @import("ui.zig");
 const views = @import("views.zig");
+const vcompose = @import("view_compose.zig");
+const markdown = @import("markdown.zig");
+const rich = @import("rich.zig");
 const vlist = @import("view_list.zig");
 const media = @import("media.zig");
 const calls = @import("calls.zig");
@@ -30,7 +33,7 @@ const Color = zui.Color;
 const t = zui.i18n.t;
 const key = kit.key;
 
-fn can(c: *const data.Chat, action: []const u8) bool {
+pub fn can(c: *const data.Chat, action: []const u8) bool {
     const me = c.me() orelse return false;
     if (!j.eqlStr(me, "status", "active")) return false;
     if (c.is("private") or c.is("saved") or c.is("bot")) return !std.mem.eql(u8, action, "addMembers") and !std.mem.eql(u8, action, "changeInfo");
@@ -46,7 +49,7 @@ fn can(c: *const data.Chat, action: []const u8) bool {
     return std.mem.eql(u8, action, "sendMessages") or std.mem.eql(u8, action, "sendMedia") or std.mem.eql(u8, action, "addMembers");
 }
 
-fn isAdmin(c: *const data.Chat) bool {
+pub fn isAdmin(c: *const data.Chat) bool {
     return std.mem.eql(u8, c.role(), "owner") or std.mem.eql(u8, c.role(), "admin");
 }
 
@@ -54,7 +57,7 @@ fn canCall(c: *const data.Chat) bool {
     return c.is("private") or c.is("group") or (c.is("channel") and isAdmin(c));
 }
 
-fn feature(s: *const app.State, name: []const u8) bool {
+pub fn feature(s: *const app.State, name: []const u8) bool {
     if (s.mode != .embed) return true;
     const a = s.embed.app orelse return true;
     const f = j.field(a.v, "features") orelse return true;
@@ -374,16 +377,19 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
         if (j.str(m.o.v, "replyTo.id")) |rid| replyQuote(cx, c, rid, out);
         if (media_items.len > 0) mediaBlock(cx, m, media_items, max_w, out);
         if (j.obj(m.content, "poll")) |p| pollBlock(cx, m, p, fg);
-        if (j.obj(m.content, "location")) |loc| {
-            ui.text(std.fmt.allocPrint(a, "📍 {s}", .{j.str(loc, "title") orelse t("Location")}) catch "", .{ .font_size = cx.fs + 0.5, .color = fg });
-        }
-        if (j.obj(m.content, "contact")) |ct| ui.text(std.fmt.allocPrint(a, "👤 {s}", .{j.strOr(ct, "name", "")}) catch "", .{ .font_size = cx.fs + 0.5, .color = fg });
+        if (j.obj(m.content, "location")) |loc| card(cx, icons.location, j.str(loc, "title") orelse t("Location"), j.str(loc, "address") orelse std.fmt.allocPrint(a, "{d:.5}, {d:.5}", .{ j.floatOr(loc, "lat", 0), j.floatOr(loc, "lng", 0) }) catch "", fg);
+        if (j.obj(m.content, "contact")) |ct| card(cx, icons.user, j.strOr(ct, "name", ""), j.str(ct, "phone") orelse "", fg);
         if (j.obj(m.content, "sticker")) |st| ui.text(j.strOr(st, "emoji", ""), .{ .font_size = 96, .line_height = 1.1 });
         const txt = m.text();
         if (txt.len > 0) {
             const big_emoji = isEmojiOnly(txt);
-            ui.text(txt, .{ .font_size = if (big_emoji) 42 else cx.fs + 0.5, .color = fg, .line_height = if (big_emoji) 1.15 else 1.45 });
+            if (big_emoji) {
+                ui.text(txt, .{ .font_size = 42, .color = fg, .line_height = 1.15 });
+            } else {
+                rich.text(cx, txt, markdown.fromJson(a, j.field(m.content, "entities")), fg, s.isRevealed(m.id()));
+            }
         }
+        if (j.obj(m.content, "preview")) |pv| if (j.str(pv, "title") != null or j.str(pv, "description") != null) linkCard(cx, pv, fg);
         if (m.verified != null and !m.verified.?) {
             ui.begin(.{ .direction = .row, .gap = 4, .align_items = .center }, .{});
             ui.icon(icons.alert, 14, col.warning, .{}, 0);
@@ -399,6 +405,34 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
         ui.text(m.err orelse t("Not sent"), .{ .font_size = 13, .color = if (out) Color.white else col.danger });
         ui.end();
     }
+    ui.end();
+    ui.end();
+}
+
+/// A location or contact: an icon tile beside a title and a line.
+fn card(cx: Cx, ic: zui.Icon, title: []const u8, sub: []const u8, fg: Color) void {
+    const ui = cx.ui;
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_width = 220, .padding = .xy(0, 3) }, .{});
+    ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 14, .background = fg.withAlpha(0.1), .align_items = .center, .justify = .center }, .{});
+    ui.icon(ic, 24, fg, .{}, 0);
+    ui.end();
+    ui.begin(.{ .grow = 1, .width = .fill, .gap = 1 }, .{});
+    ui.text(title, .{ .font_size = 14.5, .weight = 650, .color = fg, .max_lines = 2 });
+    if (sub.len > 0) ui.text(sub, .{ .font_size = 13, .color = fg, .opacity = 0.75, .max_lines = 1 });
+    ui.end();
+    ui.end();
+}
+
+/// A link preview inside a bubble (opened from the message menu).
+fn linkCard(cx: Cx, p: j.Value, fg: Color) void {
+    const ui = cx.ui;
+    ui.begin(.{ .direction = .row, .gap = 8, .padding = .{ .top = 4 } }, .{});
+    ui.begin(.{ .width = .{ .px = 3 }, .radius = 2, .background = fg.withAlpha(0.55) }, .{});
+    ui.end();
+    ui.begin(.{ .grow = 1, .width = .fill, .gap = 2, .padding = .{ .start = 4 } }, .{});
+    if (j.str(p, "siteName")) |x| ui.text(x, .{ .font_size = 12.5, .weight = 700, .color = fg, .opacity = 0.8, .max_lines = 1 });
+    if (j.str(p, "title")) |x| ui.text(x, .{ .font_size = 14, .weight = 650, .color = fg, .max_lines = 2 });
+    if (j.str(p, "description")) |x| ui.text(x, .{ .font_size = 13, .color = fg, .opacity = 0.85, .max_lines = 3 });
     ui.end();
     ui.end();
 }
@@ -491,22 +525,66 @@ fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out:
     }
 }
 
+/// A poll or quiz (pollView): results once voted (or closed, or for the author of a public poll);
+/// votes are cast from the message menu (zui has no pressables inside the pressable bubble yet).
 fn pollBlock(cx: Cx, m: *const data.Message, p: j.Value, fg: Color) void {
     const ui = cx.ui;
+    const col = cx.c;
     const state = j.obj(m.o.v, "poll");
+    const quiz = j.truthy(state, "quiz");
+    const anonymous = if (j.field(state, "anonymous")) |x| !(x == .bool and !x.bool) else true;
+    const closed = j.truthy(state, "closed");
+    const my_vote = j.arr(state, "myVote");
+    const total = j.intOr(state, "total", 0);
+    const show = my_vote.len > 0 or closed or (cx.s.store.isMe(m.authorId()) and total > 0 and !anonymous);
+    const correct: i64 = j.intOr(p, "correct", j.intOr(state, "correct", -1));
     ui.begin(.{ .gap = 6, .min_width = 260, .padding = .xy(0, 3) }, .{});
     ui.text(j.strOr(p, "question", ""), .{ .font_size = 15, .weight = 700, .color = fg });
-    const total = j.intOr(state, "total", 0);
-    ui.text(fmt.tn(cx.a(), total, "{n} vote", "{n} votes"), .{ .font_size = 12.5, .color = fg, .opacity = 0.7 });
+    const kind = if (closed) t("Final results") else if (quiz) (if (anonymous) t("Anonymous quiz") else t("Quiz")) else if (anonymous) t("Anonymous poll") else t("Public poll");
+    ui.text(kind, .{ .font_size = 12.5, .color = fg, .opacity = 0.7 });
     const counts = j.arr(state, "counts");
     for (j.arr(p, "options"), 0..) |o, i| {
         const label = if (o == .string) o.string else j.strOr(o, "text", "");
-        const n: i64 = if (i < counts.len and counts[i] == .integer) counts[i].integer else -1;
-        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .padding = .xy(10, 9), .radius = 12, .background = fg.withAlpha(0.08) }, .{});
+        const n: i64 = if (i < counts.len and counts[i] == .integer) counts[i].integer else 0;
+        const mine = for (my_vote) |x| {
+            if (x == .integer and x.integer == @as(i64, @intCast(i))) break true;
+        } else false;
+        const right = quiz and show and correct == @as(i64, @intCast(i));
+        const wrong = quiz and show and mine and !right;
+        const pct: i64 = if (total > 0) @divTrunc(n * 100 + @divTrunc(total, 2), total) else 0;
+        ui.begin(.{ .gap = 5, .padding = .xy(10, 8), .radius = 12, .background = fg.withAlpha(0.07) }, .{});
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
+        if (show) {
+            ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{pct}) catch "", .{ .font_size = 13, .weight = 750, .color = fg, .min_width = 36 });
+        } else {
+            ui.begin(.{ .width = .{ .px = 18 }, .height = .{ .px = 18 }, .radius = if (j.truthy(state, "multiple")) 5 else 9, .border_width = 1.5, .border_color = fg.withAlpha(0.45) }, .{});
+            ui.end();
+        }
         ui.text(label, .{ .font_size = 14.5, .color = fg, .grow = 1, .width = .fill });
-        if (n >= 0 and total > 0) ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{@divTrunc(n * 100, total)}) catch "", .{ .font_size = 13, .weight = 750, .color = fg });
+        if (right) ui.icon(icons.check, 17, col.success, .{}, 0) else if (wrong) ui.icon(icons.close, 17, col.danger, .{}, 0) else if (mine) ui.icon(icons.check, 17, fg, .{}, 0);
+        ui.end();
+        if (show) {
+            // The bar: a filled part and the rest, in proportion.
+            ui.begin(.{ .direction = .row, .height = .{ .px = 4 }, .radius = 2, .background = fg.withAlpha(0.12), .clip = true }, .{});
+            if (pct > 0) {
+                ui.begin(.{ .grow = @floatFromInt(pct), .height = .{ .px = 4 }, .background = if (right) col.success else if (wrong) col.danger else fg.withAlpha(0.7) }, .{});
+                ui.end();
+            }
+            if (pct < 100) {
+                ui.begin(.{ .grow = @floatFromInt(100 - pct), .height = .{ .px = 4 } }, .{});
+                ui.end();
+            }
+            ui.end();
+        }
         ui.end();
     }
+    ui.text(if (total > 0) fmt.tn(cx.a(), total, "{n} vote", "{n} votes") else t("No votes yet"), .{ .font_size = 12.5, .color = fg, .opacity = 0.7 });
+    if (quiz and show) if (j.str(p, "explanation")) |ex| if (ex.len > 0) {
+        ui.begin(.{ .direction = .row, .gap = 6, .align_items = .start }, .{});
+        ui.icon(icons.info, 15, fg, .{}, 0);
+        ui.text(ex, .{ .font_size = 13, .color = fg, .opacity = 0.85, .grow = 1, .width = .fill });
+        ui.end();
+    };
     ui.end();
 }
 
@@ -516,6 +594,7 @@ fn metaRow(cx: Cx, c: *const data.Chat, m: *const data.Message, out: bool, overl
     const col = cx.c;
     const color = if (overlay) Color.white else if (out) col.bubble_meta_out else col.bubble_meta_in;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 3, .align_self = .end, .padding = if (overlay) .{ .top = 2, .bottom = 2, .start = 8, .end = 8 } else .{}, .radius = 9, .background = if (overlay) Color.hex("#0a0c1473") else null, .position = if (overlay) .absolute else .flow, .inset = if (overlay) .{ .bottom = 8, .end = 8 } else .{} }, .{});
+    if (j.intOr(m.o.v, "ttl", 0) > 0) ui.icon(icons.timer, 13, color, .{}, 0);
     if (j.str(m.o.v, "editedAt") != null) ui.text(t("edited"), .{ .font_size = 11.5, .color = color });
     ui.text(fmt.time(cx.a(), if (m.at > 0) m.at else sys.now()), .{ .font_size = 11.5, .color = color });
     if (s.store.isMe(m.authorId()) and !c.is("channel") and !c.is("saved")) {
@@ -577,8 +656,13 @@ fn composer(cx: Cx, c: *const data.Chat) void {
         kit.iconButton(cx, icons.attach, .attach, .{ .size = if (cx.phone) 46 else 50, .soft = true });
         ui.begin(.{ .grow = 1, .width = .fill, .background = col.surface_2, .radius = 18 }, .{});
         if (s.reply_to.isSet() or s.editing.isSet()) replyBar(cx, c);
-        ui.begin(.{ .direction = .row, .align_items = .center, .min_height = 50, .padding = .{ .start = 14, .end = 14, .top = 3, .bottom = 3 } }, .{});
+        vcompose.bars(cx, c);
+        ui.begin(.{ .direction = .row, .align_items = .center, .min_height = 50, .padding = .{ .start = 14, .end = 4, .top = 3, .bottom = 3 } }, .{});
         ui.input(.{ .key = zui.key("composer"), .value = s.fields.get(.composer).get(), .placeholder = t("Message"), .on_change = app.onField(.composer), .on_submit = .{ .submit = .composer }, .style = .{ .grow = 1, .width = .fill, .font_size = cx.fs + 0.5, .color = col.text } });
+        kit.iconButton(cx, icons.smile, .{ .compose = .{ .open = .emoji } }, .{ .size = 40 });
+        // Send options (silent, scheduled, when online, disappearing): Reseal-js opens them with a
+        // right click or long press on Send; zui has neither yet, so a button beside it.
+        if (!s.editing.isSet() and s.fields.get(.composer).trimmed().len > 0) kit.iconButton(cx, icons.scheduleSend, .{ .compose = .{ .open = .options } }, .{ .size = 40 });
         ui.end();
         ui.end();
         ui.begin(.{ .width = .{ .px = 50 }, .height = .{ .px = 50 }, .radius = 17, .background = col.brand, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = .send_text });
@@ -796,8 +880,12 @@ fn messageMenu(cx: Cx, chat_id: Id, item: Id) void {
             const label = if (o == .string) o.string else j.strOr(o, "text", "");
             views.menuItem(cx, icons.poll, fmt.tf("Vote: {option}", .{ .option = label }), .{ .vote = .{ .msg = id, .option = @intCast(i) } }, false);
         }
-        if (j.field(m.o.v, "poll.myVote") != null) views.menuItem(cx, icons.refresh, t("Retract vote"), act(.retract_vote, id), false);
+        if (j.arr(m.o.v, "poll.myVote").len > 0 and !j.truthy(m.o.v, "poll.quiz")) views.menuItem(cx, icons.refresh, t("Retract vote"), act(.retract_vote, id), false);
+        if (s.store.isMe(m.authorId())) views.menuItem(cx, icons.lock, t("Stop poll"), act(.close_poll, id), false);
     };
+    if (j.obj(m.content, "location") != null) views.menuItem(cx, icons.location, t("Open in Maps"), act(.open_map, id), false);
+    if (j.str(m.content, "preview.url") != null) views.menuItem(cx, icons.external, t("Open link"), act(.open_link, id), false);
+    if (rich.hasSpoiler(markdown.fromJson(cx.a(), j.field(m.content, "entities")))) views.menuItem(cx, icons.eye, if (s.isRevealed(m.id())) t("Hide spoiler") else t("Show spoiler"), act(.reveal, id), false);
     const pinned = for (j.arr(c.o.v, "pinned")) |x| {
         if (x == .string and std.mem.eql(u8, x.string, m.id())) break true;
     } else false;

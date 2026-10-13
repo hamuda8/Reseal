@@ -21,6 +21,9 @@ const vlist = @import("view_list.zig");
 const vchat = @import("view_chat.zig");
 const vset = @import("view_settings.zig");
 const vcall = @import("view_call.zig");
+const vcompose = @import("view_compose.zig");
+const compose = @import("compose.zig");
+const markdown = @import("markdown.zig");
 
 const State = app.State;
 const Msg = app.Msg;
@@ -117,11 +120,10 @@ pub fn onUi(s: *State, msg: Msg) void {
         .jump_latest => if (s.open_chat.isSet()) {
             sync.loadMessages(s, s.open_chat.str(), .latest, 0);
         },
-        .send_text => sendComposer(s),
-        .attach => {
-            if (zui.platform != .web) return app.toast(s, t("Sending files from this device is coming soon."));
-            app.post("{\"t\":\"pick\"}");
-        },
+        .send_text => compose.sendNow(s, .{}),
+        .attach => s.modal = .{ .compose = .attach },
+        .compose => |a| compose.act(s, a),
+        .located => |l| compose.onLocation(s, l),
         .cancel_reply => {
             if (s.editing.isSet()) s.fields.getPtr(.composer).clear();
             s.reply_to = .{};
@@ -190,6 +192,7 @@ pub fn onUi(s: *State, msg: Msg) void {
                 },
                 .sounds => s.prefs.sounds = !s.prefs.sounds,
                 .send_with_enter => s.prefs.send_with_enter = !s.prefs.send_with_enter,
+                .link_previews => s.prefs.link_previews = !s.prefs.link_previews,
                 .animations => s.prefs.animations = !s.prefs.animations,
             }
             app.savePrefs(s);
@@ -392,23 +395,6 @@ fn mediaItem(s: *State, msg: []const u8, index: u8) ?j.Value {
     return items[index];
 }
 
-fn sendComposer(s: *State) void {
-    if (!s.open_chat.isSet()) return;
-    const text = std.mem.trim(u8, s.fields.get(.composer).get(), " \t\r\n");
-    if (text.len == 0) return;
-    const chat = s.open_chat.str();
-    if (s.editing.isSet()) {
-        send.edit(s, chat, s.editing.str(), text);
-        s.editing = .{};
-    } else {
-        send.sendText(s, chat, text, s.reply_to);
-        s.first_unread = 0;
-    }
-    s.reply_to = .{};
-    sync.cancelTyping(s);
-    // The composer is cleared after the edit request read it.
-    s.fields.getPtr(.composer).clear();
-}
 
 fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
     s.modal = null;
@@ -424,7 +410,8 @@ fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
         .edit => {
             s.editing = Id.of(msg_id);
             s.reply_to = .{};
-            s.fields.getPtr(.composer).set(m.text());
+            const a = app.tmp();
+            s.fields.getPtr(.composer).set(markdown.toMarkdown(a, m.text(), markdown.fromJson(a, j.field(m.content, "entities"))) catch m.text());
             app.fx.focus(zui.key("composer"));
         },
         .copy => {
@@ -443,6 +430,21 @@ fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
         },
         .retract_vote => app.api(s, .POST, path("/chats/{s}/messages/{s}/vote", .{ chat, msg_id }), "{\"options\":[]}", .{ .vote = .{ .chat = s.open_chat, .msg = Id.of(msg_id) } }),
         .forward => s.modal = .{ .forward = Id.of(msg_id) },
+        .close_poll => app.api(s, .POST, path("/chats/{s}/messages/{s}/close-poll", .{ chat, msg_id }), "{}", .{ .vote = .{ .chat = s.open_chat, .msg = Id.of(msg_id) } }),
+        .open_map => if (j.obj(m.content, "location")) |loc| {
+            const base = if (s.store.config) |cfg| cfg.s("mapsUrl") orelse "http://localhost:5005" else "http://localhost:5005";
+            const a = app.tmp();
+            const title = j.str(loc, "title") orelse t("Location");
+            app.fx.openUrl(std.fmt.allocPrint(a, "{s}/?q={s}&lat={d}&lng={d}", .{ std.mem.trimEnd(u8, base, "/"), j.urlEncode(a, title) catch "", j.floatOr(loc, "lat", 0), j.floatOr(loc, "lng", 0) }) catch return, true);
+        },
+        .open_link => if (j.str(m.content, "preview.url")) |u| app.fx.openUrl(u, true),
+        .reveal => {
+            for (s.revealed.items, 0..) |x, i| if (x.eql(msg_id)) {
+                _ = s.revealed.orderedRemove(i);
+                return;
+            };
+            s.revealed.append(app.gpa, Id.of(msg_id)) catch {};
+        },
         .select, .details => {},
     }
 }
@@ -1046,6 +1048,7 @@ fn modal(cx: Cx) void {
         .reactions => vchat.reactionsSheet(cx),
         .forward => vchat.forwardSheet(cx),
         .join => vchat.joinSheet(cx),
+        .compose => |which| vcompose.sheet(cx, which),
     }
 }
 

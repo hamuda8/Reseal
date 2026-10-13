@@ -200,6 +200,8 @@ fn contentFromPlain(a: Allocator, raw: Value) !Value {
         var poll: j.ObjectMap = .empty;
         if (j.field(p, "question")) |q| try poll.put(a, "question", q);
         if (j.field(p, "options")) |q| try poll.put(a, "options", q);
+        if (j.field(p, "correct")) |q| try poll.put(a, "correct", q);
+        if (j.field(p, "explanation")) |q| try poll.put(a, "explanation", q);
         try c.put(a, "poll", .{ .object = poll });
     }
     if (j.obj(raw, "fwd")) |f| try c.put(a, "fwd", f);
@@ -216,6 +218,8 @@ pub fn contentFromPayload(a: Allocator, p: Value) !Value {
         var poll: j.ObjectMap = .empty;
         if (j.field(x, "q")) |q| try poll.put(a, "question", try j.clone(a, q));
         if (j.field(x, "o")) |q| try poll.put(a, "options", try j.clone(a, q));
+        if (j.field(x, "correct")) |q| try poll.put(a, "correct", try j.clone(a, q));
+        if (j.field(x, "expl")) |q| try poll.put(a, "explanation", try j.clone(a, q));
         try c.put(a, "poll", .{ .object = poll });
     }
     inline for (.{ .{ "loc", "location" }, .{ "contact", "contact" }, .{ "sticker", "sticker" }, .{ "fwd", "fwd" }, .{ "preview", "preview" }, .{ "story", "story" } }) |kv| {

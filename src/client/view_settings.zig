@@ -228,6 +228,7 @@ fn appearance(cx: Cx) void {
     ui.end();
     kit.sectionTitle(cx, t("Chats"));
     kit.row(cx, t("Send with Enter"), .{ .switch_on = s.prefs.send_with_enter, .on = .{ .toggle_pref = .send_with_enter } });
+    kit.row(cx, t("Link previews"), .{ .switch_on = s.prefs.link_previews, .on = .{ .toggle_pref = .link_previews } });
     ui.end();
     ui.end();
 }

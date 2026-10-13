@@ -148,3 +148,62 @@ test "new group: pick people, name it, create" {
     try testing.expect(std.mem.indexOf(u8, body, "\"members\":[\"u3\"]") != null);
     try testing.expect(std.mem.indexOf(u8, body, "\"title\":\"Launch crew\"") != null);
 }
+
+fn lastPost(suffix: []const u8) []const u8 {
+    var body: []const u8 = "";
+    for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, suffix) and std.mem.eql(u8, f.method, "POST")) {
+        body = f.body;
+    };
+    return body;
+}
+
+test "composer: formatting, a quiz, a scheduled message, emoji" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[],\"floor\":0}"));
+
+    // **bold** and a quote line: text without the marks, entities in UTF-16 units.
+    try D.typeInto("Message", "**Hi** all\n> quoted");
+    D.R.dispatch(.send_text);
+    var a2 = std.heap.ArenaAllocator.init(testing.allocator);
+    defer a2.deinit();
+    const sent = j.parse(a2.allocator(), lastPost("/chats/g1/messages")).?;
+    try testing.expectEqualStrings("Hi all\nquoted", j.str(sent, "text").?);
+    try testing.expectEqualStrings("bold", j.str(j.arr(sent, "entities")[0], "t").?);
+    try testing.expectEqual(@as(i64, 2), j.int(j.arr(sent, "entities")[0], "l").?);
+    try testing.expect(D.respond("/chats/g1/messages", 200, "{\"message\":{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"65f1a2b3c4d5e6f708192a02\",\"kind\":\"message\",\"text\":\"Hi all\",\"createdAt\":\"2026-10-12T15:00:00Z\"}}"));
+
+    // A quiz from the attach sheet.
+    D.R.dispatch(.attach);
+    try D.press("Poll");
+    try D.typeInto("Ask a question", "Capital of Jordan?");
+    try D.typeInto("Option 1", "Irbid");
+    try D.typeInto("Option 2", "Amman");
+    try D.press("Quiz mode");
+    D.R.dispatch(.{ .compose = .{ .poll_correct = 1 } });
+    try D.press("Send");
+    const quiz = j.parse(a2.allocator(), lastPost("/chats/g1/messages")).?;
+    try testing.expectEqualStrings("Capital of Jordan?", j.str(quiz, "poll.question").?);
+    try testing.expect(j.truthy(quiz, "poll.quiz"));
+    try testing.expectEqual(@as(i64, 1), j.int(quiz, "poll.correct").?);
+    try testing.expect(D.respond("/chats/g1/messages", 200, "{\"message\":{\"id\":\"m2\",\"chatId\":\"g1\",\"seq\":2,\"senderId\":\"65f1a2b3c4d5e6f708192a02\",\"kind\":\"message\",\"text\":\"\",\"createdAt\":\"2026-10-12T15:00:00Z\"}}"));
+
+    // Scheduled for in an hour, from the send options.
+    try D.typeInto("Message", "later");
+    D.R.dispatch(.{ .compose = .{ .open = .options } });
+    try D.press("Schedule message");
+    try D.press("In 1 hour");
+    const later = j.parse(a2.allocator(), lastPost("/chats/g1/messages")).?;
+    try testing.expectEqualStrings("later", j.str(later, "text").?);
+    try testing.expectEqual(sys.now() + 3_600_000, j.int(later, "scheduledAt").?);
+
+    // Emoji go into the composer (the picker's tabs are words).
+    D.R.dispatch(.{ .compose = .{ .open = .emoji } });
+    try testing.expect(D.findText("Smileys & people") != 0);
+    D.R.dispatch(.{ .compose = .{ .emoji = .{ .cat = 0, .i = 0 } } });
+    try testing.expect(state().fields.get(.composer).get().len > 0);
+}

@@ -21,6 +21,7 @@ const calls = @import("calls.zig");
 const views = @import("views.zig");
 const crypto = @import("crypto.zig");
 const fmt = @import("fmt.zig");
+pub const compose = @import("compose.zig");
 
 pub const panic = zui.panic;
 pub const boot: Msg = .boot;
@@ -94,6 +95,22 @@ pub const Field = enum {
     chat_search,
     saved_title,
     saved_about,
+    poll_question,
+    poll_explanation,
+    poll_o0,
+    poll_o1,
+    poll_o2,
+    poll_o3,
+    poll_o4,
+    poll_o5,
+    poll_o6,
+    poll_o7,
+    poll_o8,
+    poll_o9,
+    poll_o10,
+    poll_o11,
+    schedule_at,
+    emoji_search,
 };
 
 pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
@@ -142,6 +159,7 @@ pub const Modal = union(enum) {
     reactions: Id,
     join: Id,
     forward: Id,
+    compose: compose.Sheet,
 };
 
 pub const Msg = union(enum) {
@@ -193,6 +211,8 @@ pub const Msg = union(enum) {
     jump_latest,
     send_text,
     attach,
+    compose: compose.Act,
+    located: zui.Location,
     cancel_reply,
     message_tap: Id,
     message_action: struct { what: MessageAction, msg: Id },
@@ -240,10 +260,10 @@ pub const Msg = union(enum) {
 
 pub const Filter = union(enum) { all, unread, people, groups, channels, ai, folder: Id };
 pub const ChatAction = enum { pin, unpin, archive, unarchive, mute, unmute, mark_read, mark_unread, delete, leave, clear, block, unblock, add_contact, info, call_voice, call_video, saved_edit, search, show_safety };
-pub const MessageAction = enum { reply, edit, copy, pin, unpin, delete, delete_everyone, save, select, details, forward, retract_vote };
+pub const MessageAction = enum { reply, edit, copy, pin, unpin, delete, delete_everyone, save, select, details, forward, retract_vote, close_poll, open_map, open_link, reveal };
 pub const Theme = enum { auto, light, dark };
 pub const Lang = enum { en, ar };
-pub const Pref = enum { notifications, previews, sounds, send_with_enter, animations };
+pub const Pref = enum { notifications, previews, sounds, send_with_enter, animations, link_previews };
 pub const PrivacyKey = enum { lastSeen, avatar, calls, groups, forwards };
 pub const PrivacyValue = enum { everyone, contacts, nobody };
 pub const EmbedTarget = enum { bot, support };
@@ -279,6 +299,7 @@ pub const Prefs = struct {
     previews: bool = true,
     sounds: bool = true,
     send_with_enter: bool = true,
+    link_previews: bool = true,
     animations: bool = true,
 };
 
@@ -353,6 +374,11 @@ pub const State = struct {
     read_pending: std.ArrayList(struct { chat: Id, seq: i64 }) = .empty,
     embed: Embed = .{},
     widget_sig: u64 = 0,
+    /// Bumped when a scheduled message was accepted (the scheduled list reloads).
+    scheduled_count: u32 = 0,
+    compose: compose.Compose = .{},
+    /// Messages whose spoilers were shown.
+    revealed: std.ArrayList(Id) = .empty,
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
     pending_open: Id = .{},
     pending_username: Id = .{},
@@ -362,6 +388,11 @@ pub const State = struct {
     invite: ?*data.Obj = null,
     call_ticking: bool = false,
     fast_clock: bool = false,
+
+    pub fn isRevealed(s: *const State, id: []const u8) bool {
+        for (s.revealed.items) |x| if (x.eql(id)) return true;
+        return false;
+    }
 };
 
 pub fn init() State {
@@ -442,6 +473,9 @@ pub const Op = union(enum) {
     embed_target: EmbedTarget,
     embed_team,
     saved_save: Id,
+    link_preview: u32,
+    scheduled_list,
+    scheduled_changed,
     ignore,
 };
 
@@ -565,7 +599,10 @@ fn onTyped(s: *State, field: Field, text: []const u8) void {
     switch (field) {
         .search => views.runSearch(s),
         .picker => views.runPickerSearch(s),
-        .composer => sync.typing(s),
+        .composer => {
+            sync.typing(s);
+            compose.typed(s);
+        },
         .chat_search => views.runChatSearch(s),
         else => {},
     }
@@ -773,6 +810,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (sync.onAnswer(s, op, r)) return;
             if (send.onAnswer(s, op, r)) return;
             if (media.onAnswer(s, op, r)) return;
+            if (compose.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }
@@ -1067,4 +1105,7 @@ test {
     _ = data;
     _ = fmt;
     _ = @import("tests.zig");
+    _ = @import("markdown.zig");
+    _ = @import("rich.zig");
+    _ = @import("compose.zig");
 }

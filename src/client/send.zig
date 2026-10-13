@@ -11,6 +11,7 @@ const data = @import("data.zig");
 const keys = @import("keys.zig");
 const media = @import("media.zig");
 const crypto = @import("crypto.zig");
+const markdown = @import("markdown.zig");
 
 const State = app.State;
 const Id = app.Id;
@@ -31,6 +32,43 @@ pub const Out = struct {
     failed: bool = false,
     /// Forwarded: {"fromUserId","fromName","date"} (owned).
     fwd_json: ?[]u8 = null,
+    /// More of the message, as JSON fields (",\"k\":v..."), owned: for the encrypted payload, for
+    /// the body of a readable chat, and for the body in both cases.
+    payload_extra: ?[]u8 = null,
+    plain_extra: ?[]u8 = null,
+    enc_body_extra: ?[]u8 = null,
+    body_extra: ?[]u8 = null,
+    /// Scheduled (or sent when the other person is online): it leaves the list once accepted.
+    later: bool = false,
+};
+
+pub const Poll = struct {
+    question: []const u8,
+    options: []const []const u8,
+    multiple: bool = false,
+    quiz: bool = false,
+    anonymous: bool = true,
+    correct: ?usize = null,
+    explanation: []const u8 = "",
+};
+
+/// What the composer sends (messages.js send's draft).
+pub const Draft = struct {
+    text: []const u8 = "",
+    entities: []const markdown.Entity = &.{},
+    reply_to: Id = .{},
+    mentions: []const []const u8 = &.{},
+    poll: ?Poll = null,
+    location: ?struct { lat: f64, lng: f64, accuracy: f64 = 0, title: []const u8 = "" } = null,
+    sticker: ?[]const u8 = null,
+    /// A link preview ({url,title,description,siteName,image}) as JSON.
+    preview_json: ?[]const u8 = null,
+    silent: bool = false,
+    /// Milliseconds since 1970, or 0.
+    scheduled_at: i64 = 0,
+    when_online: bool = false,
+    /// Seconds, or 0.
+    ttl: i64 = 0,
 };
 
 pub const Outbox = struct {
@@ -49,6 +87,7 @@ fn removeOut(s: *State, local: u32) void {
         var x = s.out.items.orderedRemove(i);
         for (x.media_json.items) |m| gpa.free(m);
         if (x.fwd_json) |f| gpa.free(f);
+        inline for (.{ "payload_extra", "plain_extra", "enc_body_extra", "body_extra" }) |name| if (@field(x, name)) |f| gpa.free(f);
         x.media_json.deinit(gpa);
         x.uploads.deinit(gpa);
         return;
@@ -63,6 +102,20 @@ fn newClientId() Id {
 
 /// Shows the message at once and queues it. `text` may be empty when files go with it.
 pub fn queue(s: *State, chat_id: []const u8, text: []const u8, reply_to: Id) ?u32 {
+    return queueDraft(s, chat_id, .{ .text = text, .reply_to = reply_to });
+}
+
+fn jsonArrayOfStrings(a: std.mem.Allocator, items: []const []const u8) []const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    out.append(a, '[') catch return "[]";
+    for (items, 0..) |it, i| out.print(a, "{s}{s}", .{ if (i == 0) "" else ",", j.quote(a, it) catch "\"\"" }) catch {};
+    out.append(a, ']') catch {};
+    return out.items;
+}
+
+pub fn queueDraft(s: *State, chat_id: []const u8, d: Draft) ?u32 {
+    const text = d.text;
+    const reply_to = d.reply_to;
     const tl = s.store.timeline(chat_id) catch return null;
     const local = s.out.next_local;
     s.out.next_local += 1;
@@ -83,12 +136,86 @@ pub fn queue(s: *State, chat_id: []const u8, text: []const u8, reply_to: Id) ?u3
     var content: j.ObjectMap = .empty;
     content.put(m.o.alloc(), "text", data.string(m.o.alloc().dupe(u8, text) catch "")) catch {};
     content.put(m.o.alloc(), "media", .{ .array = std.json.Array.init(m.o.alloc()) }) catch {};
+    // The parts the payload, the body and the pending copy share.
+    var pay: std.ArrayList(u8) = .empty;
+    var plain: std.ArrayList(u8) = .empty;
+    var encb: std.ArrayList(u8) = .empty;
+    var both: std.ArrayList(u8) = .empty;
+    if (d.entities.len > 0) {
+        const ej = markdown.entitiesJson(a, d.entities) catch "[]";
+        pay.print(a, ",\"ent\":{s}", .{ej}) catch {};
+        plain.print(a, ",\"entities\":{s}", .{ej}) catch {};
+        if (j.parse(m.o.alloc(), ej)) |ev| content.put(m.o.alloc(), "entities", ev) catch {};
+    }
+    if (d.poll) |p| {
+        const opts = jsonArrayOfStrings(a, p.options);
+        const q = j.quote(a, p.question) catch "\"\"";
+        pay.print(a, ",\"poll\":{{\"q\":{s},\"o\":{s}", .{ q, opts }) catch {};
+        if (p.quiz) {
+            pay.print(a, ",\"correct\":{d}", .{p.correct orelse 0}) catch {};
+            if (p.explanation.len > 0) pay.print(a, ",\"expl\":{s}", .{j.quote(a, p.explanation) catch "\"\""}) catch {};
+        }
+        pay.append(a, '}') catch {};
+        encb.print(a, ",\"poll\":{{\"optionCount\":{d},\"multiple\":{},\"quiz\":{},\"anonymous\":{}}}", .{ p.options.len, p.multiple and !p.quiz, p.quiz, p.anonymous }) catch {};
+        plain.print(a, ",\"poll\":{{\"question\":{s},\"options\":{s},\"multiple\":{},\"quiz\":{},\"anonymous\":{}", .{ q, opts, p.multiple and !p.quiz, p.quiz, p.anonymous }) catch {};
+        if (p.quiz) {
+            plain.print(a, ",\"correct\":{d}", .{p.correct orelse 0}) catch {};
+            if (p.explanation.len > 0) plain.print(a, ",\"explanation\":{s}", .{j.quote(a, p.explanation) catch "\"\""}) catch {};
+        }
+        plain.append(a, '}') catch {};
+        const shown = std.fmt.allocPrint(a, "{{\"question\":{s},\"options\":{s}}}", .{ q, opts }) catch "{}";
+        if (j.parse(m.o.alloc(), shown)) |pv| content.put(m.o.alloc(), "poll", pv) catch {};
+        const meta = std.fmt.allocPrint(a, "{{\"optionCount\":{d},\"multiple\":{},\"quiz\":{},\"anonymous\":{},\"total\":0}}", .{ p.options.len, p.multiple and !p.quiz, p.quiz, p.anonymous }) catch "{}";
+        if (j.parse(a, meta)) |mv| m.o.set("poll", mv) catch {};
+    }
+    if (d.location) |l| {
+        const lj = std.fmt.allocPrint(a, "{{\"lat\":{d},\"lng\":{d},\"accuracy\":{d},\"title\":{s}}}", .{ l.lat, l.lng, l.accuracy, j.quote(a, l.title) catch "\"\"" }) catch "{}";
+        pay.print(a, ",\"loc\":{s}", .{lj}) catch {};
+        plain.print(a, ",\"location\":{s}", .{lj}) catch {};
+        if (j.parse(m.o.alloc(), lj)) |lv| content.put(m.o.alloc(), "location", lv) catch {};
+    }
+    if (d.sticker) |e| {
+        const sj = std.fmt.allocPrint(a, "{{\"emoji\":{s}}}", .{j.quote(a, e) catch "\"\""}) catch "{}";
+        pay.print(a, ",\"sticker\":{s}", .{sj}) catch {};
+        plain.print(a, ",\"sticker\":{s}", .{sj}) catch {};
+        if (j.parse(m.o.alloc(), sj)) |sv| content.put(m.o.alloc(), "sticker", sv) catch {};
+    }
+    if (d.preview_json) |pj| {
+        pay.print(a, ",\"preview\":{s}", .{pj}) catch {};
+        plain.print(a, ",\"preview\":{s}", .{pj}) catch {};
+        if (j.parse(m.o.alloc(), pj)) |pv| content.put(m.o.alloc(), "preview", pv) catch {};
+    }
+    if (d.mentions.len > 0) both.print(a, ",\"mentions\":{s}", .{jsonArrayOfStrings(a, d.mentions)}) catch {};
+    if (d.silent) both.appendSlice(a, ",\"silent\":true") catch {};
+    if (d.scheduled_at > 0) both.print(a, ",\"scheduledAt\":{d}", .{d.scheduled_at}) catch {};
+    if (d.when_online) both.appendSlice(a, ",\"whenOnline\":true") catch {};
+    if (d.ttl > 0) {
+        both.print(a, ",\"ttl\":{d}", .{d.ttl}) catch {};
+        m.o.set("ttl", data.int(d.ttl)) catch {};
+    }
     m.content = .{ .object = content };
+    const later = d.scheduled_at > 0 or d.when_online;
+    if (later) m.state = .scheduled;
     tl.pending.append(gpa, m) catch {
         m.destroy();
         return null;
     };
-    s.out.items.append(gpa, .{ .local = local, .chat = Id.of(chat_id), .client_id = cid, .reply_to = reply_to }) catch return null;
+    const own = struct {
+        fn f(x: []const u8) ?[]u8 {
+            return if (x.len == 0) null else gpa.dupe(u8, x) catch null;
+        }
+    }.f;
+    s.out.items.append(gpa, .{
+        .local = local,
+        .chat = Id.of(chat_id),
+        .client_id = cid,
+        .reply_to = reply_to,
+        .payload_extra = own(pay.items),
+        .plain_extra = own(plain.items),
+        .enc_body_extra = own(encb.items),
+        .body_extra = own(both.items),
+        .later = later,
+    }) catch return null;
     return local;
 }
 
@@ -196,15 +323,20 @@ pub fn pump(s: *State, chat_id: []const u8) void {
         if (text.len > 0) payload.print(a, ",\"t\":{s}", .{j.quote(a, text) catch return}) catch return;
         if (o.media_json.items.len > 0) payload.print(a, ",\"media\":{s}", .{media_arr.items}) catch return;
         if (o.fwd_json) |f| payload.print(a, ",\"fwd\":{s}", .{f}) catch return;
+        if (o.payload_extra) |x| payload.appendSlice(a, x) catch return;
         payload.append(a, '}') catch return;
         const env = keys.encrypt(s, c, payload.items) orelse return fail(s, o, t("Could not encrypt the message"));
-        body.print(a, ",\"enc\":{s},\"tags\":[{s}]", .{ env, tagsOf(a, text, o.media_json.items) }) catch return;
+        const tags = tagsOf(a, text, o.media_json.items);
+        const more = extraTags(a, o);
+        body.print(a, ",\"enc\":{s},\"tags\":[{s}{s}]", .{ env, tags, if (tags.len == 0 and more.len > 0) more[1..] else more }) catch return;
         if (o.media_json.items.len > 0) {
             body.appendSlice(a, ",\"mediaIds\":[") catch return;
             for (o.media_json.items, 0..) |mj, i| body.print(a, "{s}\"{s}\"", .{ if (i == 0) "" else ",", j.strOr(j.parse(a, mj), "id", "") }) catch {};
             body.append(a, ']') catch return;
         }
+        if (o.enc_body_extra) |x| body.appendSlice(a, x) catch return;
     } else {
+        if (o.plain_extra) |x| body.appendSlice(a, x) catch return;
         if (text.len > 0) body.print(a, ",\"text\":{s}", .{j.quote(a, text) catch return}) catch return;
         if (o.fwd_json) |f| {
             // A copy forwarded from an encrypted chat: the label is informational (date in ms).
@@ -224,6 +356,7 @@ pub fn pump(s: *State, chat_id: []const u8) void {
             body.append(a, ']') catch return;
         }
     }
+    if (o.body_extra) |x| body.appendSlice(a, x) catch return;
     body.append(a, '}') catch return;
     s.out.posting.put(gpa, gpa.dupe(u8, chat_id) catch return, {}) catch return;
     app.api(s, .POST, std.fmt.allocPrint(a, "/chats/{s}/messages", .{chat_id}) catch return, body.items, .{ .send_message = .{ .chat = Id.of(chat_id), .local = o.local } });
@@ -241,6 +374,16 @@ fn tagsOf(a: std.mem.Allocator, text: []const u8, media_json: []const []u8) []co
     }
     if (std.mem.indexOf(u8, text, "http://") != null or std.mem.indexOf(u8, text, "https://") != null)
         out.print(a, "{s}\"link\"", .{if (out.items.len == 0) "" else ","}) catch {};
+    return out.items;
+}
+
+fn extraTags(a: std.mem.Allocator, o: *const Out) []const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    const p = o.payload_extra orelse return "";
+    if (std.mem.indexOf(u8, p, "\"poll\":") != null) out.appendSlice(a, ",\"poll\"") catch {};
+    if (std.mem.indexOf(u8, p, "\"loc\":") != null) out.appendSlice(a, ",\"location\"") catch {};
+    if (std.mem.indexOf(u8, p, "\"sticker\":") != null) out.appendSlice(a, ",\"sticker\"") catch {};
+    if (std.mem.indexOf(u8, p, "\"preview\":") != null) out.appendSlice(a, ",\"link\"") catch {};
     return out.items;
 }
 
@@ -300,6 +443,7 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
                     // Scheduled: it leaves the list until it is sent.
                     tl.dropPending(x.local);
                     m.destroy();
+                    s.scheduled_count += 1;
                 }
             } else tl.dropPending(x.local);
             removeOut(s, x.local);
@@ -315,14 +459,8 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
             const tl = s.store.existingTimeline(x.chat.str()) orelse return true;
             const old = tl.find(x.msg.str()) orelse return true;
             const m = data.newMessage(raw) catch return true;
-            if (m.enc() != null) {
-                // Our own edit: we know the words.
-                var content = j.clone(m.o.alloc(), old.content orelse j.emptyObject()) catch return true;
-                content.object.put(m.o.alloc(), "text", data.string(m.o.alloc().dupe(u8, s.fields.get(.composer).get()) catch "")) catch {};
-                m.content = content;
-                m.decrypt = .ok;
-                m.verified = true;
-            }
+            _ = old;
+            if (m.enc() != null) keys.hydrate(s, x.chat.str(), m);
             tl.insert(m) catch {};
         },
         else => return false,
@@ -331,9 +469,10 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
 }
 
 /// Edit my message: re-encrypted with the current key in encrypted chats.
-pub fn edit(s: *State, chat_id: []const u8, msg_id: []const u8, text: []const u8) void {
+pub fn edit(s: *State, chat_id: []const u8, msg_id: []const u8, text: []const u8, entities: []const markdown.Entity) void {
     const c = s.store.chat(chat_id) orelse return;
     const a = tmp();
+    const ej: ?[]const u8 = if (entities.len > 0) (markdown.entitiesJson(a, entities) catch null) else null;
     var body: []const u8 = "";
     if (c.encrypted()) {
         const tl = s.store.existingTimeline(chat_id) orelse return;
@@ -342,11 +481,12 @@ pub fn edit(s: *State, chat_id: []const u8, msg_id: []const u8, text: []const u8
         payload.print(a, "{{\"v\":1,\"t\":{s}", .{j.quote(a, text) catch return}) catch return;
         const media_items = m.media();
         if (media_items.len > 0) payload.print(a, ",\"media\":{s}", .{j.stringify(a, media_items) catch "[]"}) catch {};
+        if (ej) |e| payload.print(a, ",\"ent\":{s}", .{e}) catch {};
         payload.append(a, '}') catch return;
         const env = keys.encrypt(s, c, payload.items) orelse return app.toastError(s, t("Waiting for a member to share this chat's encryption key"));
         body = std.fmt.allocPrint(a, "{{\"enc\":{s},\"tags\":[]}}", .{env}) catch return;
     } else {
-        body = std.fmt.allocPrint(a, "{{\"text\":{s}}}", .{j.quote(a, text) catch return}) catch return;
+        body = std.fmt.allocPrint(a, "{{\"text\":{s},\"entities\":{s}}}", .{ j.quote(a, text) catch return, ej orelse "[]" }) catch return;
     }
     app.api(s, .PATCH, std.fmt.allocPrint(a, "/chats/{s}/messages/{s}", .{ chat_id, msg_id }) catch return, body, .{ .edit_message = .{ .chat = Id.of(chat_id), .msg = Id.of(msg_id) } });
 }
