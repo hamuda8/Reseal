@@ -43,7 +43,7 @@ export async function tab(browser, out, { width = 1280, height = 800, mobile = f
   t.texts = () => t.evaluate(`[...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent).map(d => d.textContent)`);
   t.hasText = async (s) => (await t.texts())?.some(x => x.includes(s));
   t.waitText = async (s, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await t.hasText(s)) return true; await sleep(250); } return false; };
-  t.centerOfText = (label, exact = true) => t.evaluate(`(() => { const els = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && (${exact} ? d.textContent === ${JSON.stringify(label)} : d.textContent.includes(${JSON.stringify(label)}))); const top = (e) => { const r = e.getBoundingClientRect(); if (!r.width) return false; const h = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return h && (h === e || e.contains(h) || h.contains(e)); }; const el = els.find(top) || els.find(e => e.getBoundingClientRect().width > 0) || els[0]; if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+  t.centerOfText = (label, exact = true) => t.evaluate(`(() => { const els = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && (${exact} ? d.textContent === ${JSON.stringify(label)} : d.textContent.includes(${JSON.stringify(label)}))); const top = (e) => { const r = e.getBoundingClientRect(); if (!r.width) return false; const h = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return h && (h === e || e.contains(h) || h.contains(e)); }; let el = els.find(top); if (!el) { el = els.find(e => e.getBoundingClientRect().width > 0) || els[0]; if (el) el.scrollIntoView({ block: 'center' }); } if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
   t.clickText = async (label, exact = true) => {
     const p = await t.centerOfText(label, exact);
     if (!p) throw new Error(`${name}: no text ${label}`);
@@ -53,9 +53,10 @@ export async function tab(browser, out, { width = 1280, height = 800, mobile = f
   /** Clicks the pressable box holding the n-th svg icon whose path starts with `d` (icon buttons). */
   t.clickAt = async (x, y) => { await t.click(x, y); await sleep(400); };
   t.typeIn = async (placeholder, text) => {
-    const p = await t.evaluate(`(() => { const el = [...document.querySelectorAll('input')].find(i => i.placeholder === ${JSON.stringify(placeholder)}); if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+    const p = await t.evaluate(`(() => { const el = [...document.querySelectorAll('input,textarea')].find(i => i.placeholder === ${JSON.stringify(placeholder)}); if (!el) return null; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
     if (!p) throw new Error(`${name}: no input ${placeholder}`);
     await t.click(p[0], p[1]);
+    await t.evaluate(`(() => { const el = document.activeElement; if (el && el.select) el.select(); })()`);
     await send('Input.insertText', { text });
     await sleep(250);
   };

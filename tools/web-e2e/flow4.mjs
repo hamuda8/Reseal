@@ -110,9 +110,10 @@ try {
   if (want('schedule')) {
     await a.clickText('Plain crew');
     await typeComposer('See you tomorrow');
-    // The send-options button sits between the input and the send button.
-    const p = await a.evaluate(`(() => { const el = [...document.querySelectorAll('input,textarea')].find(i => i.placeholder === 'Message'); const r = el.getBoundingClientRect(); const cands = [...document.querySelectorAll('[role=button]')].map(b => b.getBoundingClientRect()).filter(b => Math.abs((b.y + b.height / 2) - (r.y + r.height / 2)) < 30 && b.width < 46 && b.x > r.x); cands.sort((x, y) => y.x - x.x); const b = cands[0]; return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
-    await a.click(p[0], p[1]);
+    // A right click on Send opens the send options.
+    const p = await a.evaluate(`(() => { const el = [...document.querySelectorAll('input,textarea')].find(i => i.placeholder === 'Message'); const r = el.getBoundingClientRect(); const cands = [...document.querySelectorAll('[role=button]')].map(b => b.getBoundingClientRect()).filter(b => Math.abs((b.y + b.height / 2) - (r.y + r.height / 2)) < 30 && b.x > r.x + r.width - 10 && b.width >= 48); cands.sort((x, y) => y.x - x.x); const b = cands[0]; return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
+    await a.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: p[0], y: p[1], button: 'right', buttons: 2, clickCount: 1 });
+    await a.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p[0], y: p[1], button: 'right', buttons: 0, clickCount: 1 });
     await sleep(500);
     await a.shot('94-send-options');
     await a.clickText('Schedule message');
@@ -156,7 +157,7 @@ try {
     await a.waitText('Group info');
     await a.waitText('Carol Nasser');
     await a.shot('96-group-info');
-    const manage = await a.evaluate(`(() => { const row = [...document.querySelectorAll('div')].find(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Carol Nasser'); const y = row.getBoundingClientRect().y; const b = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Manage').map(d => d.getBoundingClientRect()).sort((p, q) => Math.abs(p.y - y) - Math.abs(q.y - y))[0]; return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
+    const manage = await a.evaluate(`(() => { [...document.querySelectorAll('div')].find(d => d.textContent === 'Carol Nasser' && ![...d.children].some(k => k.tagName === 'DIV')).scrollIntoView({ block: 'center' }); const row = [...document.querySelectorAll('div')].find(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Carol Nasser'); const y = row.getBoundingClientRect().y; const b = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Manage').map(d => d.getBoundingClientRect()).filter(p => p.y > y).sort((p, q) => p.y - q.y)[0]; return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
     await a.click(manage[0], manage[1]);
     await sleep(500);
     await a.clickText('Make admin');
@@ -167,7 +168,7 @@ try {
     await sleep(1500);
     const { members } = await alice.api.get(`/api/chats/${group.id}/members?filter=admins`);
     const carolM = members.find(m => m.userId === carol.id);
-    check('admin: Carol is an admin with a title, without banUsers', carolM?.role === 'admin' && carolM?.title === 'Navigator' && carolM?.rights?.banUsers === false, JSON.stringify(carolM));
+    check('admin: Carol is an admin with a title, without banUsers', carolM?.role === 'admin' && carolM?.title === 'Navigator' && carolM?.rights?.banUsers === false, JSON.stringify(members));
     check('admin: role shown', await a.waitText('Navigator', 4000));
     await a.clickText('Edit');
     await a.clickText('Add members');
@@ -219,11 +220,9 @@ try {
     await a.typeIn('Chat lock code', '1111');
     await a.clickText('Unlock');
     check('lock: wrong code refused', await a.waitText('That code is not right.', 3000));
-    await a.evaluate(`(() => { const i = [...document.querySelectorAll('input')].find(i => i.placeholder === 'Chat lock code'); i.select(); })()`);
-    await a.send('Input.insertText', { text: '4321' });
-    await sleep(300);
+    await a.typeIn('Chat lock code', '4321');
     await a.clickText('Unlock');
-    check('lock: right code opens it', await a.waitText('Bold move and', 5000));
+    check('lock: right code opens it', await a.waitText('End-to-end encrypted', 5000) && !(await a.hasText('Unlock chat')));
     await a.shot('100-unlocked');
   }
 
@@ -241,7 +240,7 @@ try {
     let file = null;
     for (let i = 0; i < 40 && !file; i++) { await sleep(250); file = fs.readdirSync(dl).find(f => f.endsWith('.txt')); }
     const body = file ? fs.readFileSync(path.join(dl, file), 'utf8') : '';
-    check('export: a text file with the chat', Boolean(file) && body.includes('Plain crew') && body.includes('Capital of Jordan?'), file || 'no file');
+    check('export: a text file with the chat', Boolean(file) && body.includes('Plain crew') && (only.size || body.includes('Capital of Jordan?')), file || 'no file');
   }
 
   if (want('arabic')) {
