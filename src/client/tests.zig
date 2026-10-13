@@ -340,3 +340,32 @@ test "export: a plain-text export of a chat, saved as a file" {
     try testing.expect(first < second);
     try testing.expect(state().modal == null);
 }
+
+test "assistants and the developer console" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[]}"));
+    // A new assistant.
+    D.R.dispatch(.{ .bots = .open_list });
+    try testing.expect(D.respond("/api/bots/discover", 200, "{\"bots\":[]}"));
+    try testing.expect(D.respond("/api/bots", 200, "{\"bots\":[]}"));
+    try D.press("Create an assistant");
+    try D.typeInto("e.g. Travel Planner", "Trip helper");
+    D.R.dispatch(.{ .bots = .temp_up });
+    D.R.dispatch(.{ .bots = .save });
+    const bot = lastPost("/api/bots");
+    try testing.expect(std.mem.indexOf(u8, bot, "\"name\":\"Trip helper\"") != null);
+    try testing.expect(std.mem.indexOf(u8, bot, "\"temperature\":0.8") != null);
+    // A new app in the console.
+    D.R.dispatch(.{ .dev = .open });
+    try testing.expect(D.respond("/api/dev/apps", 200, "{\"apps\":[]}"));
+    try D.press("Create an app");
+    try D.typeInto("e.g. My Store", "Shop");
+    D.R.dispatch(.{ .dev = .create_submit });
+    try testing.expect(std.mem.indexOf(u8, lastPost("/api/dev/apps"), "\"name\":\"Shop\"") != null);
+    try testing.expect(D.respond("/api/dev/apps", 200, "{\"app\":{\"id\":\"a1\",\"name\":\"Shop\",\"secretKey\":\"rsl_sk_test\"}}"));
+    try testing.expect(D.findText("Secret key") != 0);
+    try testing.expectEqualStrings("rsl_sk_test", state().dev.secret.get());
+}

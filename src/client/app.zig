@@ -27,6 +27,7 @@ pub const folders = @import("folders.zig");
 pub const chatlock = @import("chatlock.zig");
 pub const exporter = @import("export.zig");
 pub const bots = @import("bots.zig");
+pub const dev = @import("dev.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
 
@@ -139,6 +140,21 @@ pub const Field = enum {
     bot_max_tokens,
     bot_context,
     model_search,
+    dev_app_name,
+    dev_origins,
+    dev_storage_url,
+    dev_webhook_url,
+    dev_name,
+    dev_description,
+    dev_primary,
+    dev_title,
+    dev_subtitle,
+    dev_launcher_label,
+    dev_welcome,
+    dev_placeholder,
+    dev_agent_id,
+    dev_agent_name,
+    dev_delete_confirm,
 };
 
 pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
@@ -170,13 +186,15 @@ pub const Pane = union(enum) {
     chat_lock,
     bots,
     bot_edit,
+    dev,
+    dev_app,
 };
 
 pub const Picker = enum { new_message, new_group, add_contact, add_members, block };
 
 pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices, member, slow_mode, reactions_setting, folder_pick };
 
-pub const ConfirmKind = enum { logout, delete_chat, leave_chat, clear_history, delete_messages, start_fresh, block, unblock, delete_saved, remove_contact, ban_member, transfer_owner };
+pub const ConfirmKind = enum { logout, delete_chat, leave_chat, clear_history, delete_messages, start_fresh, block, unblock, delete_saved, remove_contact, ban_member, transfer_owner, dev_roll };
 
 pub const Modal = union(enum) {
     menu: struct { kind: MenuKind, target: Id = .{}, item: Id = .{} },
@@ -201,6 +219,11 @@ pub const Modal = union(enum) {
     export_options,
     export_progress,
     model_picker,
+    dev_create,
+    dev_secret,
+    dev_agent,
+    dev_payload,
+    dev_delete,
 };
 
 pub const Msg = union(enum) {
@@ -264,6 +287,7 @@ pub const Msg = union(enum) {
     chat_lock: chatlock.Act,
     export_chat: exporter.Act,
     bots: bots.Act,
+    dev: dev.Act,
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
@@ -445,6 +469,7 @@ pub const State = struct {
     lock: chatlock.Lock = .{},
     exporter: exporter.Export = .{},
     bots: bots.Bots = .{},
+    dev: dev.Dev = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -569,6 +594,21 @@ pub const Op = union(enum) {
     bots_models,
     bots_saved,
     bots_deleted,
+    dev_apps,
+    dev_app,
+    dev_created,
+    dev_secret_rolled,
+    dev_patched,
+    dev_users,
+    dev_teams,
+    dev_deliveries,
+    dev_bots,
+    dev_tab_changed,
+    dev_agent_added,
+    dev_storage_tested,
+    dev_webhook_tested,
+    dev_signing_secret,
+    dev_deleted,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -931,6 +971,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (chatlock.onAnswer(s, op, r)) return;
             if (exporter.onAnswer(s, op, r)) return;
             if (bots.onAnswer(s, op, r)) return;
+            if (dev.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

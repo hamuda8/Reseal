@@ -51,6 +51,8 @@ pub const Bots = struct {
     own_key: bool = false,
     stats: app.Text = .{},
     busy: bool = false,
+    /// Set when editing from the developer console: the app the assistant belongs to.
+    app_id: Id = .{},
 };
 
 const default_prompt = "You are a helpful, friendly assistant. Answer clearly and concisely.";
@@ -76,6 +78,7 @@ pub fn act(s: *State, a: Act) void {
     switch (a) {
         .open_list => {
             s.modal = null;
+            b.app_id = .{};
             views.onUi(s, .{ .push_pane = .bots });
             load(s);
         },
@@ -181,6 +184,7 @@ fn save(s: *State) void {
     if (un.len > 0) out.print(a, ",\"username\":{s}", .{j.quote(a, un) catch return}) catch {};
     const k = f.get(.bot_key).trimmed();
     if (k.len > 0) out.print(a, ",\"apiKey\":{s}", .{j.quote(a, k) catch return}) catch {};
+    if (b.app_id.isSet() and !b.id.isSet()) out.print(a, ",\"appId\":\"{s}\"", .{b.app_id.str()}) catch {};
     out.append(a, '}') catch {};
     b.busy = true;
     if (b.id.isSet()) app.api(s, .PATCH, path("/bots/{s}", .{b.id.str()}), out.items, .bots_saved) else app.api(s, .POST, "/bots", out.items, .bots_saved);
@@ -202,6 +206,10 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
             const created = !b.id.isSet();
             app.toast(s, if (created) t("Assistant created") else t("Assistant saved"));
             views.onUi(s, .pop_pane);
+            if (b.app_id.isSet()) {
+                app.dev.botSaved(s, j.strOr(v, "bot.id", ""), created);
+                return true;
+            }
             load(s);
             if (created) if (j.str(v, "bot.id")) |id| act(s, .{ .chat = Id.of(id) });
         },
@@ -211,7 +219,7 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
                 return true;
             }
             views.onUi(s, .pop_pane);
-            load(s);
+            if (b.app_id.isSet()) app.dev.botSaved(s, "", false) else load(s);
         },
         else => return false,
     }

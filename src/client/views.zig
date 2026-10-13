@@ -140,6 +140,7 @@ pub fn onUi(s: *State, msg: Msg) void {
         .chat_lock => |a| @import("chatlock.zig").act(s, a),
         .export_chat => |a| @import("export.zig").act(s, a),
         .bots => |a| @import("bots.zig").act(s, a),
+        .dev => |a| @import("dev.zig").act(s, a),
         .located => |l| compose.onLocation(s, l),
         .cancel_reply => {
             if (s.editing.isSet()) s.fields.getPtr(.composer).clear();
@@ -441,6 +442,7 @@ fn confirm(s: *State) void {
         .unblock => app.api(s, .DELETE, path("/blocks/{s}", .{chat}), null, .unblock),
         .remove_contact => app.api(s, .DELETE, path("/contacts/{s}", .{chat}), null, .contact_remove),
         .ban_member, .transfer_owner => group.confirmed(s, x.kind, x.target, x.item),
+        .dev_roll => @import("dev.zig").confirmed(s),
     }
 }
 
@@ -1177,6 +1179,11 @@ fn modal(cx: Cx) void {
         .export_options => @import("export.zig").optionsSheet(cx),
         .export_progress => @import("export.zig").progressSheet(cx),
         .model_picker => @import("bots.zig").modelSheet(cx),
+        .dev_create => @import("dev.zig").createSheet(cx),
+        .dev_secret => @import("dev.zig").secretSheet(cx),
+        .dev_agent => @import("dev.zig").agentSheet(cx),
+        .dev_payload => @import("dev.zig").payloadSheet(cx),
+        .dev_delete => @import("dev.zig").deleteSheet(cx),
     }
 }
 
@@ -1244,6 +1251,11 @@ fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id, target_item: Id) void 
             title = fmt.tf("Ban {name}?", .{ .name = who });
             text = t("They will be removed and cannot rejoin.");
             action = t("Ban");
+        },
+        .dev_roll => {
+            title = t("Roll the secret key?");
+            text = t("The current key stops working immediately.");
+            action = t("Roll key");
         },
         .transfer_owner => {
             const who = if (s.store.user(target_item.str())) |u| s.store.userName(u) else "";

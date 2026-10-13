@@ -56,6 +56,7 @@ pub fn settingsRoot(cx: Cx) void {
     kit.row(cx, t("Appearance"), .{ .icon = icons.palette, .on = .{ .push_pane = .appearance } });
     kit.row(cx, t("Chat folders"), .{ .icon = icons.folder, .on = .{ .push_pane = .folders } });
     if (s.mode == .app) kit.row(cx, t("AI assistants"), .{ .icon = icons.sparkles, .on = .{ .bots = .open_list } });
+    if (s.mode == .app and !(if (s.store.me) |m| m.s("appId") != null else false)) kit.row(cx, t("Developers"), .{ .icon = icons.code, .on = .{ .dev = .open } });
     kit.row(cx, t("Language"), .{ .icon = icons.globe, .value = if (s.lang == .ar) "العربية" else "English", .on = .{ .push_pane = .language } });
     ui.end();
     kit.divider(cx);
@@ -84,6 +85,8 @@ pub fn pane(cx: Cx, p: app.Pane) void {
         .chat_lock => chatLockPane(cx),
         .bots => @import("bots.zig").listPane(cx),
         .bot_edit => @import("bots.zig").editPane(cx),
+        .dev => @import("dev.zig").homePane(cx),
+        .dev_app => @import("dev.zig").appPane(cx),
         .archive => {},
     }
 }
