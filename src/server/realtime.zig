@@ -476,7 +476,7 @@ pub fn pingLoop() void {
 fn reject(ctx: *http.Context, status: u16, message: []const u8) !void {
     ctx.responded = true;
     ctx.close_connection = true;
-    try ctx.request.respond(message, .{ .status = @enumFromInt(status), .keep_alive = false, .extra_headers = &.{.{ .name = "content-type", .value = "text/plain" }} });
+    try ctx.request.respond(message, .{ .status = @fromBackingInt(@intCast(status)), .keep_alive = false, .extra_headers = &.{.{ .name = "content-type", .value = "text/plain" }} });
 }
 
 /// Takes WebSocket upgrades (any path; only /ws is accepted, as Node's 'upgrade' handler did).

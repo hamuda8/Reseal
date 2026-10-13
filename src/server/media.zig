@@ -24,9 +24,10 @@ fn col() *A.Cols {
 /// uploaded HTML or SVG file can never run script on Reseal's origin.
 fn inlineSafe(mime: []const u8) bool {
     const ok = [_][]const u8{
-        "image/png",  "image/jpeg", "image/gif",  "image/webp", "image/avif",
-        "video/mp4",  "video/webm", "video/ogg",  "video/quicktime",
-        "audio/mpeg", "audio/mp4",  "audio/ogg",  "audio/webm", "audio/wav", "audio/aac", "audio/x-m4a", "audio/flac",
+        "image/png",   "image/jpeg", "image/gif",  "image/webp",      "image/avif",
+        "video/mp4",   "video/webm", "video/ogg",  "video/quicktime", "audio/mpeg",
+        "audio/mp4",   "audio/ogg",  "audio/webm", "audio/wav",       "audio/aac",
+        "audio/x-m4a", "audio/flac",
     };
     for (ok) |x| if (std.mem.eql(u8, x, mime)) return true;
     return false;
@@ -203,10 +204,10 @@ pub fn stream(q: *web.Req, m: Val, download: bool) !void {
         // std's streaming writer expects every promised byte; a HEAD answer has none, so the
         // length goes out as a plain header on an otherwise empty response.
         try q.addHeader("content-length", try r.fmt("{d}", .{len}));
-        var head = try q.ctx.request.respondStreaming(&buf, .{ .respond_options = .{ .status = @enumFromInt(status), .extra_headers = q.ctx.response_headers.items, .transfer_encoding = .none } });
+        var head = try q.ctx.request.respondStreaming(&buf, .{ .respond_options = .{ .status = @fromBackingInt(@intCast(status)), .extra_headers = q.ctx.response_headers.items, .transfer_encoding = .none } });
         return head.end();
     }
-    var body = try q.ctx.request.respondStreaming(&buf, .{ .content_length = len, .respond_options = .{ .status = @enumFromInt(status), .extra_headers = q.ctx.response_headers.items } });
+    var body = try q.ctx.request.respondStreaming(&buf, .{ .content_length = len, .respond_options = .{ .status = @fromBackingInt(@intCast(status)), .extra_headers = q.ctx.response_headers.items } });
     if (len == 0) return body.end();
     // Each stored chunk is chunkSize bytes, plus a 16-byte tag when encrypted.
     const stride = (m.get("chunkSize").asInt() orelse CHUNK) + @as(i64, if (m.get("encrypted").truthy()) GCM_TAG else 0);
@@ -237,6 +238,7 @@ pub fn stream(q: *web.Req, m: Val, download: bool) !void {
     }
     try body.end();
 }
+
 /// /^bytes=(\d*)-(\d*)$/
 fn parseRange(h: []const u8) ?struct { from: ?i64, to: ?i64 } {
     if (!std.mem.startsWith(u8, h, "bytes=")) return null;
@@ -297,12 +299,14 @@ fn sweep() void {
     defer arena.deinit();
     const a = arena.allocator();
     const t = A.nowMs();
-    const stale = col().media.find(a, .{ .@"$or" = .{
-        .{ .status = "uploading", .createdAt = .{ .@"$lt" = Val{ .date = t - 24 * 3600_000 } } },
-        .{ .status = "ready", .public = false, .chatIds = .{ .@"$size" = 0 }, .purpose = "message", .createdAt = .{ .@"$lt" = Val{ .date = t - 48 * 3600_000 } } },
-        // A story file whose story was never posted (posted ones go with their story).
-        .{ .purpose = "story", .storyId = .{ .@"$exists" = false }, .createdAt = .{ .@"$lt" = Val{ .date = t - 48 * 3600_000 } } },
-    } }, .{ .projection = .{ ._id = 1 }, .limit = 200 }) catch |e| {
+    const stale = col().media.find(a, .{
+        .@"$or" = .{
+            .{ .status = "uploading", .createdAt = .{ .@"$lt" = Val{ .date = t - 24 * 3600_000 } } },
+            .{ .status = "ready", .public = false, .chatIds = .{ .@"$size" = 0 }, .purpose = "message", .createdAt = .{ .@"$lt" = Val{ .date = t - 48 * 3600_000 } } },
+            // A story file whose story was never posted (posted ones go with their story).
+            .{ .purpose = "story", .storyId = .{ .@"$exists" = false }, .createdAt = .{ .@"$lt" = Val{ .date = t - 48 * 3600_000 } } },
+        },
+    }, .{ .projection = .{ ._id = 1 }, .limit = 200 }) catch |e| {
         std.log.err("Media sweep failed: {t}", .{e});
         return;
     };

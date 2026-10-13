@@ -307,8 +307,8 @@ fn expires(a: std.mem.Allocator, ms: i64) ![]const u8 {
     const md = yd.calculateMonthDay();
     const ds = es.getDaySeconds();
     return std.fmt.allocPrint(a, "{s}, {d:0>2} {s} {d} {d:0>2}:{d:0>2}:{d:0>2} GMT", .{
-        days[@intCast(ed.day % 7)], md.day_index + 1, months[md.month.numeric() - 1], yd.year,
-        ds.getHoursIntoDay(), ds.getMinutesIntoHour(), ds.getSecondsIntoMinute(),
+        days[@intCast(ed.day % 7)], md.day_index + 1,        months[md.month.numeric() - 1], yd.year,
+        ds.getHoursIntoDay(),       ds.getMinutesIntoHour(), ds.getSecondsIntoMinute(),
     });
 }
 
@@ -336,7 +336,7 @@ pub fn logout(q: *Req) !void {
     const t = tokenFromRequest(q);
     forgetToken(a, t.token);
     const token = q.cookie("auth_token") orelse q.cookie("wufour_token");
-    if (token) |tok| A.spawn(tellWufourLogout, .{ A.app.gpa.dupe(u8, tok) catch return });
+    if (token) |tok| A.spawn(tellWufourLogout, .{A.app.gpa.dupe(u8, tok) catch return});
     try clearAuthCookies(q);
     const xhr = if (q.header("x-requested-with")) |x| std.ascii.eqlIgnoreCase(x, "xmlhttprequest") else false;
     const accept = q.header("accept") orelse "";

@@ -131,7 +131,7 @@ pub const Peer = struct {
             const h = p.in.takeArray(2) catch return error.Closed;
             const fin = h[0] & 0x80 != 0;
             const rsv = h[0] & 0x70;
-            const op: Op = @enumFromInt(@as(u4, @truncate(h[0])));
+            const op: Op = @fromBackingInt(@intCast(@as(u4, @truncate(h[0]))));
             const masked = h[1] & 0x80 != 0;
             var len: u64 = h[1] & 0x7f;
             if (rsv != 0) return p.protocolError(1002);
@@ -142,7 +142,7 @@ pub const Peer = struct {
             const mask = (p.in.takeArray(4) catch return error.Closed).*;
             const n: usize = @intCast(len);
 
-            if (@intFromEnum(op) >= 8) {
+            if (@backingInt(op) >= 8) {
                 if (!fin or n > 125) return p.protocolError(1002);
                 var ctl: [125]u8 = undefined;
                 p.in.readSliceAll(ctl[0..n]) catch return error.Closed;
@@ -195,7 +195,7 @@ pub const Peer = struct {
 
 fn writeFrame(w: *Io.Writer, op: Op, data: []const u8) !void {
     var hdr: [10]u8 = undefined;
-    hdr[0] = 0x80 | @as(u8, @intFromEnum(op));
+    hdr[0] = 0x80 | @as(u8, @backingInt(op));
     var n: usize = 2;
     if (data.len < 126) {
         hdr[1] = @intCast(data.len);

@@ -95,7 +95,7 @@ pub const Req = struct {
 
     pub fn send(q: *Req, status: u16, content_type: []const u8, data: []const u8) !void {
         q.status = status;
-        try q.ctx.send(@enumFromInt(status), content_type, data);
+        try q.ctx.send(@fromBackingInt(@intCast(status)), content_type, data);
     }
 
     pub fn redirect(q: *Req, location: []const u8) !void {
@@ -108,7 +108,7 @@ pub const Req = struct {
     pub fn end(q: *Req, status: u16) !void {
         q.status = status;
         q.ctx.responded = true;
-        try q.ctx.request.respond("", .{ .status = @enumFromInt(status), .extra_headers = q.ctx.response_headers.items });
+        try q.ctx.request.respond("", .{ .status = @fromBackingInt(@intCast(status)), .extra_headers = q.ctx.response_headers.items });
     }
 
     /// Path match (Express style). Sets the params on success.

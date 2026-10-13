@@ -16,9 +16,10 @@ const Val = A.Val;
 const Rq = A.Rq;
 
 pub const FEATURES = [_][]const u8{
-    "groups",       "channels", "calls",   "video",     "voiceMessages", "videoMessages", "files",     "photos",   "reactions",
-    "polls",        "stickers", "replies", "forwarding", "editing",      "deleting",      "pinning",   "search",   "typing",
-    "readReceipts", "presence", "scheduled", "selfDestruct", "location",  "contacts",      "userSearch", "profiles", "stories", "export",
+    "groups",       "channels", "calls",     "video",        "voiceMessages", "videoMessages", "files",      "photos",   "reactions",
+    "polls",        "stickers", "replies",   "forwarding",   "editing",       "deleting",      "pinning",    "search",   "typing",
+    "readReceipts", "presence", "scheduled", "selfDestruct", "location",      "contacts",      "userSearch", "profiles", "stories",
+    "export",
 };
 
 fn col() *A.Cols {
@@ -39,9 +40,22 @@ pub fn defaultSettings(a: std.mem.Allocator) !Val {
         .features = features,
         .theme = .{ .mode = "auto", .primary = "#6c5cff", .accent = "#4f8cff", .radius = 14, .font = "system", .density = "comfortable", .bubbleStyle = "rounded", .wallpaper = "pattern", .title = "", .subtitle = "", .logo = Val.null },
         .widget = .{
-            .mode = "bubble",            .position = "right",   .offsetX = 24,       .offsetY = 24,          .launcherIcon = "chat", .launcherLabel = "",
-            .defaultView = "chats",      .botId = Val.null,     .agentIds = .{},     .supportTitle = "",     .welcome = "",          .placeholder = "",
-            .width = 400,                .height = 640,         .showBranding = true, .locale = "auto",
+            .mode = "bubble",
+            .position = "right",
+            .offsetX = 24,
+            .offsetY = 24,
+            .launcherIcon = "chat",
+            .launcherLabel = "",
+            .defaultView = "chats",
+            .botId = Val.null,
+            .agentIds = .{},
+            .supportTitle = "",
+            .welcome = "",
+            .placeholder = "",
+            .width = 400,
+            .height = 640,
+            .showBranding = true,
+            .locale = "auto",
         },
     });
 }

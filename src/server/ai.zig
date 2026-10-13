@@ -427,7 +427,7 @@ fn complete(r: *Rq, api_key: []const u8, bot: Val, messages: Val, g: *Generating
     var res = try req.receiveHead(&.{});
     var transfer: [256]u8 = undefined;
     const reader = res.reader(&transfer);
-    const status: u16 = @intFromEnum(res.head.status);
+    const status: u16 = @backingInt(res.head.status);
     if (status < 200 or status >= 300) {
         const raw: []const u8 = reader.allocRemaining(a, .limited(64 * 1024)) catch "";
         var detail: []const u8 = "";

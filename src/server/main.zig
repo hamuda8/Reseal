@@ -311,8 +311,8 @@ fn appPage(q: *Req) !void {
 fn contentType(path: []const u8) []const u8 {
     const ext = std.fs.path.extension(path);
     const extra = [_]struct { []const u8, []const u8 }{
-        .{ ".mp3", "audio/mpeg" }, .{ ".ogg", "audio/ogg" }, .{ ".wav", "audio/wav" }, .{ ".mp4", "video/mp4" },
-        .{ ".webm", "video/webm" }, .{ ".woff", "font/woff" }, .{ ".ttf", "font/ttf" }, .{ ".map", "application/json" },
+        .{ ".mp3", "audio/mpeg" },  .{ ".ogg", "audio/ogg" },       .{ ".wav", "audio/wav" }, .{ ".mp4", "video/mp4" },
+        .{ ".webm", "video/webm" }, .{ ".woff", "font/woff" },      .{ ".ttf", "font/ttf" },  .{ ".map", "application/json" },
         .{ ".avif", "image/avif" }, .{ ".pdf", "application/pdf" },
     };
     for (extra) |e| if (std.ascii.eqlIgnoreCase(ext, e[0])) return e[1];

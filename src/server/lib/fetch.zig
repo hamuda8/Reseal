@@ -101,7 +101,7 @@ fn attempt(a: Allocator, url: []const u8, opts: Options) !Response {
     const uri = std.Uri.parse(url) catch return error.InvalidUrl;
     var req = try A.app.client.request(opts.method, uri, .{
         .extra_headers = opts.headers,
-        .redirect_behavior = if (opts.follow) @enumFromInt(3) else .unhandled,
+        .redirect_behavior = if (opts.follow) @fromBackingInt(@intCast(3)) else .unhandled,
         .keep_alive = true,
         .headers = .{
             .accept_encoding = .omit,
@@ -119,7 +119,7 @@ fn attempt(a: Allocator, url: []const u8, opts: Options) !Response {
     } else try req.sendBodiless();
     var redirect_buf: [2048]u8 = undefined;
     var res = try req.receiveHead(if (opts.follow) &redirect_buf else &.{});
-    const status: u16 = @intFromEnum(res.head.status);
+    const status: u16 = @backingInt(res.head.status);
     const content_type = try a.dupe(u8, res.head.content_type orelse "");
     var location: ?[]const u8 = null;
     var it = res.head.iterateHeaders();

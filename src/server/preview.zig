@@ -139,45 +139,47 @@ pub fn linkPreview(r: *Rq, raw_url: []const u8) !Val {
         if (cache.get(key)) |hit| if (A.nowMs() - hit.at < 3600_000) return if (hit.json) |j| try val.parseJson(a, j) else .null;
     }
     var value: Val = .null;
-    if (fetchLimited(r, key)) |res| { if (res.html.len > 0) {
-        const html = res.html;
-        var title = try meta(a, html, &.{ "og:title", "twitter:title" });
-        if (title == null) if (indexOfI(html, "<title", 0)) |t| {
-            const gt = std.mem.indexOfScalarPos(u8, html, t, '>') orelse t;
-            const end = std.mem.indexOfScalarPos(u8, html, gt, '<') orelse gt;
-            const d = try decode(a, html[@min(gt + 1, end)..end]);
-            if (d.len > 0) title = d;
-        };
-        const description = try meta(a, html, &.{ "og:description", "twitter:description", "description" });
-        var image = try meta(a, html, &.{ "og:image", "og:image:url", "twitter:image" });
-        if (image) |img| {
-            const base = std.Uri.parse(res.url) catch null;
-            if (base) |b| {
-                var buf: [4096]u8 = undefined;
-                if (img.len <= buf.len) {
-                    @memcpy(buf[0..img.len], img);
-                    var aux: []u8 = buf[0..];
-                    image = if (std.Uri.resolveInPlace(b, img.len, &aux)) |u| try std.fmt.allocPrint(a, "{f}", .{u}) else |_| null;
-                } else image = null;
+    if (fetchLimited(r, key)) |res| {
+        if (res.html.len > 0) {
+            const html = res.html;
+            var title = try meta(a, html, &.{ "og:title", "twitter:title" });
+            if (title == null) if (indexOfI(html, "<title", 0)) |t| {
+                const gt = std.mem.indexOfScalarPos(u8, html, t, '>') orelse t;
+                const end = std.mem.indexOfScalarPos(u8, html, gt, '<') orelse gt;
+                const d = try decode(a, html[@min(gt + 1, end)..end]);
+                if (d.len > 0) title = d;
+            };
+            const description = try meta(a, html, &.{ "og:description", "twitter:description", "description" });
+            var image = try meta(a, html, &.{ "og:image", "og:image:url", "twitter:image" });
+            if (image) |img| {
+                const base = std.Uri.parse(res.url) catch null;
+                if (base) |b| {
+                    var buf: [4096]u8 = undefined;
+                    if (img.len <= buf.len) {
+                        @memcpy(buf[0..img.len], img);
+                        var aux: []u8 = buf[0..];
+                        image = if (std.Uri.resolveInPlace(b, img.len, &aux)) |u| try std.fmt.allocPrint(a, "{f}", .{u}) else |_| null;
+                    } else image = null;
+                }
+            }
+            var site = try meta(a, html, &.{"og:site_name"});
+            if (site == null) if (std.Uri.parse(res.url) catch null) |u| if (u.host) |h| {
+                var hb: [256]u8 = undefined;
+                const host = h.toRaw(&hb) catch "";
+                site = try a.dupe(u8, if (std.mem.startsWith(u8, host, "www.")) host[4..] else host);
+            };
+            if (title != null or description != null) {
+                const img_ok = if (image) |i| std.mem.startsWith(u8, i, "http://") or std.mem.startsWith(u8, i, "https://") else false;
+                value = try val.from(a, .{
+                    .url = key,
+                    .title = if (title) |t| (if (t.len > 0) Val{ .str = v.sliceUtf16(t, 300) } else Val.null) else Val.null,
+                    .description = if (description) |d| (if (d.len > 0) Val{ .str = v.sliceUtf16(d, 600) } else Val.null) else Val.null,
+                    .siteName = if (site) |s| (if (s.len > 0) Val{ .str = v.sliceUtf16(s, 120) } else Val.null) else Val.null,
+                    .image = if (img_ok) Val{ .str = v.sliceUtf16(image.?, 2048) } else Val.null,
+                });
             }
         }
-        var site = try meta(a, html, &.{"og:site_name"});
-        if (site == null) if (std.Uri.parse(res.url) catch null) |u| if (u.host) |h| {
-            var hb: [256]u8 = undefined;
-            const host = h.toRaw(&hb) catch "";
-            site = try a.dupe(u8, if (std.mem.startsWith(u8, host, "www.")) host[4..] else host);
-        };
-        if (title != null or description != null) {
-            const img_ok = if (image) |i| std.mem.startsWith(u8, i, "http://") or std.mem.startsWith(u8, i, "https://") else false;
-            value = try val.from(a, .{
-                .url = key,
-                .title = if (title) |t| (if (t.len > 0) Val{ .str = v.sliceUtf16(t, 300) } else Val.null) else Val.null,
-                .description = if (description) |d| (if (d.len > 0) Val{ .str = v.sliceUtf16(d, 600) } else Val.null) else Val.null,
-                .siteName = if (site) |s| (if (s.len > 0) Val{ .str = v.sliceUtf16(s, 120) } else Val.null) else Val.null,
-                .image = if (img_ok) Val{ .str = v.sliceUtf16(image.?, 2048) } else Val.null,
-            });
-        }
-    } } else |_| {}
+    } else |_| {}
     lock.lockUncancelable(A.app.io);
     defer lock.unlock(A.app.io);
     if (cache.count() > 1000) {
