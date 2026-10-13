@@ -286,3 +286,21 @@ test "folders: create one with groups and a chat, then filter by it" {
     try testing.expect(D.respond("/api/folders", 200, "{\"folders\":[{\"id\":\"f1\",\"name\":\"Work\",\"include\":[\"groups\"],\"chatIds\":[\"p1\"],\"excludeChatIds\":[]}]}"));
     try testing.expect(D.findText("Work") != 0);
 }
+
+test "chat lock: a locked chat asks for the code before it opens" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"lastMessage\":{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"secret plans\",\"createdAt\":\"2026-10-12T14:00:00Z\"},\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0,\"locked\":true}}]}"));
+    try testing.expect(D.findText("secret plans") == 0);
+    try testing.expect(D.findText("Locked chat") != 0);
+    try D.press("Launch crew");
+    try testing.expect(!state().open_chat.isSet());
+    try testing.expect(D.findText("Unlock chat") != 0);
+    try D.typeInto("Chat lock code", "4321");
+    try D.press("Unlock");
+    try testing.expect(std.mem.indexOf(u8, lastPost("/api/me/chat-lock/verify"), "\"code\":\"4321\"") != null);
+    try testing.expect(D.respond("/api/me/chat-lock/verify", 200, "{\"ok\":true}"));
+    try testing.expect(state().open_chat.eql("g1"));
+}

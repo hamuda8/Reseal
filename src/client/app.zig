@@ -24,6 +24,7 @@ const fmt = @import("fmt.zig");
 pub const compose = @import("compose.zig");
 pub const group = @import("group.zig");
 pub const folders = @import("folders.zig");
+pub const chatlock = @import("chatlock.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
 
@@ -121,6 +122,9 @@ pub const Field = enum {
     admin_title,
     invite_name,
     folder_name,
+    lock_code,
+    lock_code_2,
+    lock_current,
 };
 
 pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
@@ -149,6 +153,7 @@ pub const Pane = union(enum) {
     group_details: enum { group, channel },
     saved_edit: Id,
     folders,
+    chat_lock,
 };
 
 pub const Picker = enum { new_message, new_group, add_contact, add_members, block };
@@ -174,6 +179,9 @@ pub const Modal = union(enum) {
     admin_rights: Id,
     invite_new,
     folder_edit,
+    chat_unlock: struct { chat: Id, purpose: chatlock.Purpose },
+    chat_lock_code: bool,
+    chat_lock_off,
 };
 
 pub const Msg = union(enum) {
@@ -228,6 +236,7 @@ pub const Msg = union(enum) {
     compose: compose.Act,
     group: group.Act,
     folder: folders.Act,
+    chat_lock: chatlock.Act,
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
@@ -279,7 +288,7 @@ pub const Msg = union(enum) {
 };
 
 pub const Filter = union(enum) { all, unread, people, groups, channels, ai, folder: Id };
-pub const ChatAction = enum { add_to_folder, pin, unpin, archive, unarchive, mute, unmute, mark_read, mark_unread, delete, leave, clear, block, unblock, add_contact, info, call_voice, call_video, saved_edit, search, show_safety };
+pub const ChatAction = enum { lock, unlock, add_to_folder, pin, unpin, archive, unarchive, mute, unmute, mark_read, mark_unread, delete, leave, clear, block, unblock, add_contact, info, call_voice, call_video, saved_edit, search, show_safety };
 pub const MessageAction = enum { reply, edit, copy, pin, unpin, delete, delete_everyone, save, select, details, forward, retract_vote, close_poll, open_map, open_link, reveal };
 pub const Theme = enum { auto, light, dark };
 pub const Lang = enum { en, ar };
@@ -399,6 +408,7 @@ pub const State = struct {
     compose: compose.Compose = .{},
     group: group.Group = .{},
     folder: folders.Editor = .{},
+    lock: chatlock.Lock = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -511,6 +521,9 @@ pub const Op = union(enum) {
     chat_patch: Id,
     invite_created,
     folders_changed,
+    lock_verify: struct { chat: Id, purpose: chatlock.Purpose },
+    lock_code_saved: bool,
+    lock_off,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -850,6 +863,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (compose.onAnswer(s, op, r)) return;
             if (group.onAnswer(s, op, r)) return;
             if (folders.onAnswer(s, op, r)) return;
+            if (chatlock.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }
@@ -1004,6 +1018,7 @@ fn onHost(s: *State, json: []const u8) void {
 fn setVisible(s: *State, visible: bool) void {
     if (s.visible == visible) return;
     s.visible = visible;
+    chatlock.onVisible(s, visible);
     sendPresence(s);
     if (visible) {
         if (s.ws.socket == 0 and !s.ws.stopped and s.phase == .ready) connect(s);

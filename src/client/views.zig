@@ -133,6 +133,7 @@ pub fn onUi(s: *State, msg: Msg) void {
         .compose => |a| compose.act(s, a),
         .group => |a| group.act(s, a),
         .folder => |a| @import("folders.zig").act(s, a),
+        .chat_lock => |a| @import("chatlock.zig").act(s, a),
         .located => |l| compose.onLocation(s, l),
         .cancel_reply => {
             if (s.editing.isSet()) s.fields.getPtr(.composer).clear();
@@ -249,6 +250,7 @@ fn isPhone() bool {
 }
 
 pub fn openChat(s: *State, id: []const u8) void {
+    if (!@import("chatlock.zig").mayOpen(s, id)) return;
     if (s.open_chat.isSet() and !s.open_chat.eql(id)) sync.cancelTyping(s);
     if (!s.open_chat.eql(id)) {
         endSelection(s);
@@ -353,6 +355,8 @@ fn chatAction(s: *State, what: app.ChatAction, chat: []const u8) void {
         .mark_unread => setChatState(s, chat, "{\"markedUnread\":true}"),
         .delete => s.modal = .{ .confirm = .{ .kind = if (c.is("saved") and !c.o.b("primary")) .delete_saved else if (c.is("saved")) .clear_history else .delete_chat, .target = Id.of(chat) } },
         .leave => s.modal = .{ .confirm = .{ .kind = .leave_chat, .target = Id.of(chat) } },
+        .lock => @import("chatlock.zig").act(s, .{ .lock = Id.of(chat) }),
+        .unlock => @import("chatlock.zig").act(s, .{ .remove = Id.of(chat) }),
         .add_to_folder => s.modal = .{ .menu = .{ .kind = .folder_pick, .target = Id.of(chat) } },
         .clear => s.modal = .{ .confirm = .{ .kind = .clear_history, .target = Id.of(chat) } },
         .block => s.modal = .{ .confirm = .{ .kind = .block, .target = Id.of(chat) } },
@@ -1130,6 +1134,9 @@ fn modal(cx: Cx) void {
         .admin_rights => vgroup.adminRights(cx),
         .invite_new => vgroup.inviteNew(cx),
         .folder_edit => @import("folders.zig").editor(cx),
+        .chat_unlock => |x| @import("chatlock.zig").unlockSheet(cx, x.chat, x.purpose),
+        .chat_lock_code => |change| @import("chatlock.zig").codeSheet(cx, change),
+        .chat_lock_off => @import("chatlock.zig").offSheet(cx),
     }
 }
 

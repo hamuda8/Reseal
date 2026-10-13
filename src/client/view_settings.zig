@@ -80,6 +80,7 @@ pub fn pane(cx: Cx, p: app.Pane) void {
         .group_details => |k| groupDetails(cx, k == .channel),
         .saved_edit => |id| savedEdit(cx, id),
         .folders => foldersPane(cx),
+        .chat_lock => chatLockPane(cx),
         .archive => {},
     }
 }
@@ -99,6 +100,17 @@ fn profile(cx: Cx) void {
     kit.field(cx, .profile_bio, .{ .label = t("Bio"), .hint = t("Any details such as age, occupation or city.") });
     if (me.s("appId") == null) kit.field(cx, .profile_username, .{ .label = t("Username"), .placeholder = "username" });
     kit.button(cx, t("Save"), .save_profile, .{ .block = true, .busy = s.busy });
+    ui.end();
+    ui.end();
+}
+
+fn chatLockPane(cx: Cx) void {
+    const ui = cx.ui;
+    ui.begin(.{ .width = .fill, .height = .fill }, .{});
+    vlist.paneHeader(cx, t("Chat lock"), true, false);
+    vlist.endHeader(cx);
+    padded(cx, "chatlock");
+    @import("chatlock.zig").pane(cx);
     ui.end();
     ui.end();
 }
@@ -162,6 +174,7 @@ fn privacy(cx: Cx) void {
     const receipts = j.field(me.v, "privacy.readReceipts") == null or j.truthy(me.v, "privacy.readReceipts");
     kit.row(cx, t("Read receipts"), .{ .subtitle = t("If off, you will not see read receipts from others either"), .switch_on = receipts, .on = .toggle_read_receipts });
     kit.row(cx, t("Blocked users"), .{ .chevron = true, .on = .{ .push_pane = .blocked } });
+    kit.row(cx, t("Chat lock"), .{ .chevron = true, .on = .{ .push_pane = .chat_lock } });
     kit.divider(cx);
     protection(cx);
     kit.divider(cx);
