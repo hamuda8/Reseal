@@ -282,7 +282,7 @@ pub fn field(cx: Cx, comptime f: app.Field, o: FieldOpts) void {
 pub fn searchBox(cx: Cx, comptime f: app.Field, placeholder: []const u8) void {
     const ui = cx.ui;
     const c = cx.c;
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 9, .height = .{ .px = 42 }, .padding = .xy(14, 0), .radius = 14, .background = c.surface_2, .grow = 1, .width = .fill }, .{});
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 9, .height = .{ .px = 42 }, .padding = .xy(14, 0), .radius = 14, .background = c.surface_2, .grow = 1, .width = .fill }, .{ .key = zui.key("box-" ++ @tagName(f)) });
     ui.icon(icons.search, 18, c.text_3, .{}, 0);
     ui.input(.{ .key = zui.key(@tagName(f)), .value = cx.s.fields.get(f).get(), .placeholder = placeholder, .on_change = app.onField(f), .on_focus = if (f == .search) .{ .toggle_search = true } else null, .style = .{ .grow = 1, .width = .fill, .font_size = 15, .color = c.text } });
     ui.end();

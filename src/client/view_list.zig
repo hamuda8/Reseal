@@ -521,7 +521,8 @@ fn chatsPane(cx: Cx) void {
         kit.iconButton(cx, icons.compose, .{ .menu = .{ .menu = .{ .kind = .compose } } }, .{ .soft = true });
         ui.end();
     }
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .{ .start = 14, .end = 14, .bottom = 10, .top = if (s.searching) 14 else 0 } }, .{});
+    // Keyed, so the input (and its focus) survives the header going away when searching starts.
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .{ .start = 14, .end = 14, .bottom = 10, .top = if (s.searching) 14 else 0 } }, .{ .key = zui.key("search-row") });
     if (s.searching) kit.iconButton(cx, icons.back, .{ .toggle_search = false }, .{ .rtl = icons.back_rtl });
     kit.searchBox(cx, .search, t("Search people and chats"));
     ui.end();
@@ -616,8 +617,12 @@ fn searchResults(cx: Cx) void {
     if (q.len == 0) {
         // Recent people as quick picks, then the chats.
         const all = s.store.sorted(a, false);
-        groupTitle(cx, t("Recent"));
-        ui.beginScroll(.{ .direction = .row, .gap = 4, .padding = .{ .start = 4, .end = 4, .bottom = 10 }, .height = .{ .px = 100 } }, key(.{"recent"}));
+        var people: usize = 0;
+        for (all) |c| {
+            if (c.is("private") or c.is("bot")) people += 1;
+        }
+        if (people > 0) groupTitle(cx, t("Recent"));
+        if (people > 0) ui.beginScroll(.{ .direction = .row, .gap = 4, .padding = .{ .start = 4, .end = 4, .bottom = 10 }, .height = .{ .px = 100 } }, key(.{"recent"}));
         var n: usize = 0;
         for (all) |c| {
             if (!(c.is("private") or c.is("bot"))) continue;
@@ -628,7 +633,7 @@ fn searchResults(cx: Cx) void {
             ui.text(fmt.firstName(s.store.title(c)), .{ .font_size = 12.5, .color = cx.c.text, .max_lines = 1, .max_width = 66 });
             ui.end();
         }
-        ui.end();
+        if (people > 0) ui.end();
         groupTitle(cx, t("Chats"));
         for (all[0..@min(all.len, 30)]) |c| chatItem(cx, c, .{ .open_chat = Id.of(c.id()) });
         ui.end();
