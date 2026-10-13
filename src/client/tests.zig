@@ -207,3 +207,23 @@ test "composer: formatting, a quiz, a scheduled message, emoji" {
     D.R.dispatch(.{ .compose = .{ .emoji = .{ .cat = 0, .i = 0 } } });
     try testing.expect(state().fields.get(.composer).get().len > 0);
 }
+
+test "multi-select: pick two messages, delete both" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"first one\",\"createdAt\":\"2026-10-12T14:00:00Z\"},{\"id\":\"m2\",\"chatId\":\"g1\",\"seq\":2,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"second one\",\"createdAt\":\"2026-10-12T14:01:00Z\"}],\"floor\":0}"));
+    D.R.dispatch(.{ .message_action = .{ .what = .select, .msg = app.Id.of("m1") } });
+    try testing.expect(D.findText("1 selected") != 0);
+    try D.press("second one");
+    try testing.expect(D.findText("2 selected") != 0);
+    D.R.dispatch(.select_delete);
+    try testing.expect(D.findText("Delete 2 messages?") != 0);
+    D.R.dispatch(.confirm);
+    const body = lastPost("/chats/g1/messages/delete");
+    try testing.expect(std.mem.indexOf(u8, body, "\"ids\":[\"m1\",\"m2\"]") != null);
+    try testing.expect(!state().selecting);
+}

@@ -89,7 +89,7 @@ fn scheduleSheet(cx: Cx) void {
 
 fn ttlSheet(cx: Cx) void {
     views.sheet(cx, t("Send as disappearing…"));
-    for (compose.ttl_presets) |p| views.menuItem(cx, icons.timer, fmt.tf("Disappear after {time}", .{ .time = p.label }), act(.{ .ttl = p.seconds }), false);
+    for (compose.ttl_presets) |p| views.menuItem(cx, icons.timer, fmt.tf("Disappear after {time}", .{ .time = t(p.label) }), act(.{ .ttl = p.seconds }), false);
     views.endSheet(cx);
 }
 
@@ -112,7 +112,7 @@ fn pollSheet(cx: Cx) void {
                 ui.end();
             }
             ui.begin(.{ .grow = 1, .width = .fill, .height = .{ .px = 44 }, .padding = .xy(14, 0), .radius = theme.radius, .border_width = 1, .border_color = cx.c.border_strong, .background = cx.c.surface_2, .justify = .center }, .{});
-            ui.input(.{ .key = zui.key(@tagName(f)), .value = s.fields.get(f).get(), .placeholder = fmt.tf("Option {n}", .{ .n = i + 1 }), .on_change = app.onField(f), .on_submit = act(.poll_more), .style = .{ .width = .fill, .font_size = 15, .color = cx.c.text } });
+            ui.input(.{ .key = zui.key(@tagName(f)), .value = s.fields.get(f).get(), .placeholder = fmt.tf("Option {n}", .{ .n = @as(i64, i + 1) }), .on_change = app.onField(f), .on_submit = act(.poll_more), .style = .{ .width = .fill, .font_size = 15, .color = cx.c.text } });
             ui.end();
             ui.end();
         }

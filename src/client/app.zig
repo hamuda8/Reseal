@@ -217,6 +217,10 @@ pub const Msg = union(enum) {
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
+    select_cancel,
+    select_forward,
+    select_delete,
+    select_copy,
     message_action: struct { what: MessageAction, msg: Id },
     react: struct { msg: Id, emoji: u8 },
     vote: struct { msg: Id, option: u8 },
@@ -379,6 +383,9 @@ pub const State = struct {
     /// Bumped when a scheduled message was accepted (the scheduled list reloads).
     scheduled_count: u32 = 0,
     compose: compose.Compose = .{},
+    /// Selection mode in the open chat (forward or delete several).
+    selecting: bool = false,
+    selected: std.ArrayList(Id) = .empty,
     /// Messages whose spoilers were shown.
     revealed: std.ArrayList(Id) = .empty,
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
@@ -390,6 +397,11 @@ pub const State = struct {
     invite: ?*data.Obj = null,
     call_ticking: bool = false,
     fast_clock: bool = false,
+
+    pub fn isSelected(s: *const State, id: []const u8) bool {
+        for (s.selected.items) |x| if (x.eql(id)) return true;
+        return false;
+    }
 
     pub fn isRevealed(s: *const State, id: []const u8) bool {
         for (s.revealed.items) |x| if (x.eql(id)) return true;

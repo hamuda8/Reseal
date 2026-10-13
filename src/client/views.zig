@@ -65,7 +65,10 @@ pub fn onUi(s: *State, msg: Msg) void {
             if (isPhone()) closeChat(s);
         },
         .open_chat => |id| openChat(s, id.str()),
-        .close_chat => closeChat(s),
+        .close_chat => {
+            endSelection(s);
+            closeChat(s);
+        },
         .push_pane => |p| pushPane(s, p),
         .pop_pane => _ = s.panes.pop(),
         .open_info => |id| {
@@ -129,7 +132,18 @@ pub fn onUi(s: *State, msg: Msg) void {
             s.reply_to = .{};
             s.editing = .{};
         },
-        .message_tap => |id| s.modal = .{ .menu = .{ .kind = .message, .target = s.open_chat, .item = id } },
+        .message_tap => |id| if (s.selecting) toggleSelected(s, id) else {
+            s.modal = .{ .menu = .{ .kind = .message, .target = s.open_chat, .item = id } };
+        },
+        .select_cancel => endSelection(s),
+        .select_forward => if (s.selected.items.len > 0) {
+            s.modal = .{ .forward = .{} };
+        },
+        .select_delete => if (s.selected.items.len > 0) {
+            s.confirm_check = false;
+            s.modal = .{ .confirm = .{ .kind = .delete_messages, .target = s.open_chat } };
+        },
+        .select_copy => copySelected(s),
         .message_action => |x| messageAction(s, x.what, x.msg.str()),
         .react => |x| react(s, x.msg.str(), x.emoji),
         .vote => |x| {
@@ -230,6 +244,7 @@ fn isPhone() bool {
 pub fn openChat(s: *State, id: []const u8) void {
     if (s.open_chat.isSet() and !s.open_chat.eql(id)) sync.cancelTyping(s);
     if (!s.open_chat.eql(id)) {
+        endSelection(s);
         s.reply_to = .{};
         s.editing = .{};
         s.fields.getPtr(.composer).clear();
@@ -375,8 +390,19 @@ fn confirm(s: *State) void {
         .leave_chat => app.api(s, .POST, path("/chats/{s}/leave", .{chat}), "{}", .{ .leave = x.target }),
         .clear_history => app.api(s, .POST, path("/chats/{s}/clear", .{chat}), if (s.confirm_check or (s.store.chat(chat) != null and s.store.chat(chat).?.is("saved"))) "{\"forEveryone\":true}" else "{\"forEveryone\":false}", .{ .clear = x.target }),
         .delete_messages => {
-            app.api(s, .POST, path("/chats/{s}/messages/delete", .{chat}), path("{{\"ids\":[\"{s}\"],\"forEveryone\":{}}}", .{ x.item.str(), s.confirm_check }), .{ .delete_messages = x.target });
-            if (s.store.existingTimeline(chat)) |tl| tl.remove(x.item.str());
+            // One message (from its menu), or the selection.
+            var ids: std.ArrayList(u8) = .empty;
+            const a = tmp();
+            if (x.item.isSet()) {
+                ids.print(a, "\"{s}\"", .{x.item.str()}) catch {};
+            } else for (s.selected.items, 0..) |id, i| {
+                ids.print(a, "{s}\"{s}\"", .{ if (i > 0) "," else "", id.str() }) catch {};
+            }
+            app.api(s, .POST, path("/chats/{s}/messages/delete", .{chat}), path("{{\"ids\":[{s}],\"forEveryone\":{}}}", .{ ids.items, s.confirm_check }), .{ .delete_messages = x.target });
+            if (s.store.existingTimeline(chat)) |tl| {
+                if (x.item.isSet()) tl.remove(x.item.str()) else for (s.selected.items) |id| tl.remove(id.str());
+            }
+            if (!x.item.isSet()) endSelection(s);
         },
         .block => if (s.store.chat(chat)) |c| if (c.peerId()) |pid| {
             app.api(s, .POST, "/blocks", path("{{\"userId\":\"{s}\"}}", .{pid}), .block);
@@ -445,17 +471,61 @@ fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
             };
             s.revealed.append(app.gpa, Id.of(msg_id)) catch {};
         },
-        .select, .details => {},
+        .select => {
+            s.selecting = true;
+            s.selected.clearRetainingCapacity();
+            s.selected.append(app.gpa, Id.of(msg_id)) catch {};
+        },
+        .details => {},
     }
 }
 
 fn forwardTo(s: *State, to: []const u8) void {
     const m_id = if (s.modal) |m| (if (m == .forward) m.forward else return) else return;
     s.modal = null;
+    if (m_id.isSet()) {
+        forwardOne(s, to, m_id.str());
+    } else {
+        // The selection, oldest first (as they appear in the chat).
+        const tl = s.store.existingTimeline(s.open_chat.str()) orelse return;
+        for (tl.items.items) |m| if (s.isSelected(m.id())) forwardOne(s, to, m.id());
+        endSelection(s);
+    }
+    app.toast(s, t("Forwarded"));
+}
+
+fn toggleSelected(s: *State, id: Id) void {
+    for (s.selected.items, 0..) |x, i| if (x.eql(id.str())) {
+        _ = s.selected.orderedRemove(i);
+        if (s.selected.items.len == 0) s.selecting = false;
+        return;
+    };
+    s.selected.append(app.gpa, id) catch {};
+}
+
+pub fn endSelection(s: *State) void {
+    s.selecting = false;
+    s.selected.clearRetainingCapacity();
+}
+
+fn copySelected(s: *State) void {
+    const tl = s.store.existingTimeline(s.open_chat.str()) orelse return;
+    var out: std.ArrayList(u8) = .empty;
+    const a = tmp();
+    for (tl.items.items) |m| if (s.isSelected(m.id()) and m.text().len > 0) {
+        if (out.items.len > 0) out.appendSlice(a, "\n\n") catch {};
+        out.appendSlice(a, m.text()) catch {};
+    };
+    app.fx.copy(out.items);
+    app.toast(s, t("Copied"));
+    endSelection(s);
+}
+
+fn forwardOne(s: *State, to: []const u8, msg_id: []const u8) void {
     const from = s.store.chat(s.open_chat.str()) orelse return;
     const target = s.store.chat(to) orelse return;
     const tl = s.store.existingTimeline(from.id()) orelse return;
-    const m = tl.find(m_id.str()) orelse return;
+    const m = tl.find(msg_id) orelse return;
     if (!from.encrypted() and !target.encrypted()) {
         // Both readable by the server: it copies the message itself.
         const body = path("{{\"fwd\":{{\"messageId\":\"{s}\",\"chatId\":\"{s}\"}},\"clientId\":\"fwd-{s}-{d}\"}}", .{ m.id(), from.id(), m.id(), sys.now() });
@@ -474,7 +544,6 @@ fn forwardTo(s: *State, to: []const u8) void {
         });
         send.forward(s, to, m.text(), media_items, fwd);
     }
-    app.toast(s, t("Forwarded"));
 }
 
 fn react(s: *State, msg_id: []const u8, emoji_index: u8) void {
@@ -1040,7 +1109,7 @@ fn modal(cx: Cx) void {
     const m = cx.s.modal.?;
     switch (m) {
         .menu => |x| vchat.menu(cx, x.kind, x.target, x.item),
-        .confirm => |x| confirmView(cx, x.kind, x.target),
+        .confirm => |x| confirmView(cx, x.kind, x.target, x.item),
         .recovery_key => vset.recoveryKey(cx),
         .enable_advanced, .disable_advanced, .change_passcode, .new_recovery => vset.passcodeForm(cx, m),
         .fingerprint => vset.fingerprint(cx),
@@ -1052,7 +1121,7 @@ fn modal(cx: Cx) void {
     }
 }
 
-fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id) void {
+fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id, target_item: Id) void {
     const s = cx.s;
     const c = s.store.chat(target.str());
     const name = if (c) |cc| s.store.title(cc) else "";
@@ -1093,7 +1162,8 @@ fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id) void {
             if (c != null and c.?.is("private")) check = fmt.tf("Also delete for {name}", .{ .name = name });
         },
         .delete_messages => {
-            title = t("Delete message?");
+            const n = if (target_item.isSet()) 1 else s.selected.items.len;
+            title = fmt.tn(tmp(), @intCast(n), "Delete message?", "Delete {n} messages?");
             text = t("This cannot be undone.");
             if (c != null and !c.?.is("saved")) check = t("Delete for everyone");
         },

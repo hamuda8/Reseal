@@ -85,10 +85,27 @@ pub fn chatView(cx: Cx) void {
     ui.end();
 }
 
+/// Selection mode: how many, and what to do with them.
+fn selectionBar(cx: Cx, c: *const data.Chat) void {
+    const ui = cx.ui;
+    const s = cx.s;
+    const col = cx.c;
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .height = .{ .px = theme.header_h }, .padding = .{ .start = if (cx.phone) 6 else 16, .end = 12 }, .background = col.surface }, .{ .key = zui.key("selection-bar") });
+    kit.iconButton(cx, icons.close, .select_cancel, .{});
+    ui.text(fmt.tn(cx.a(), @intCast(s.selected.items.len), "{n} selected", "{n} selected"), .{ .font_size = 16, .weight = 700, .color = col.text, .grow = 1, .width = .fill, .max_lines = 1 });
+    const soft = if (cx.phone) null else col.surface_2;
+    kit.iconButton(cx, icons.copy, .select_copy, .{ .background = soft });
+    if (!c.o.b("protectedContent") and feature(s, "forwarding")) kit.iconButton(cx, icons.forward, .select_forward, .{ .background = soft });
+    kit.iconButton(cx, icons.trash, .select_delete, .{ .background = soft, .color = col.danger });
+    ui.end();
+    kit.divider(cx);
+}
+
 fn header(cx: Cx, c: *const data.Chat) void {
     const ui = cx.ui;
     const s = cx.s;
     const col = cx.c;
+    if (s.selecting) return selectionBar(cx, c);
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .height = .{ .px = theme.header_h }, .padding = .{ .start = if (cx.phone) 6 else 16, .end = 12 }, .background = col.surface }, .{});
     if (cx.phone) kit.iconButton(cx, icons.back, .close_chat, .{ .rtl = icons.back_rtl });
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .grow = 1, .width = .fill, .padding = .xy(8, 5), .radius = 14, .pressed_background = col.hover }, .{ .on_press = .{ .open_info = Id.of(c.id()) } });
@@ -338,8 +355,15 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     const run_start = !sameRun(older, m);
     const run_end = !sameRun(newer, m);
     const max_w = @min(580, (if (cx.phone) cx.w else cx.w - 400) * if (cx.phone) @as(f32, 0.84) else 0.76);
+    const selected = s.selecting and m.local_id == 0 and s.isSelected(m.id());
     // Turned list: "start" is the far side, so outgoing rows align to start.
-    ui.begin(.{ .rotate = 180, .direction = .row, .align_items = .end, .gap = 8, .width = .fill, .justify = if (out) .end else .start, .padding = .{ .top = if (run_start) 10 else 1.5, .bottom = 1.5 } }, .{ .key = k });
+    ui.begin(.{ .rotate = 180, .direction = .row, .align_items = .end, .gap = 8, .width = .fill, .justify = if (out) .end else .start, .padding = .{ .top = if (run_start) 10 else 1.5, .bottom = 1.5 }, .background = if (selected) col.accent_soft else null, .radius = if (selected) 12 else 0 }, .{ .key = k });
+    if (s.selecting and m.local_id == 0) {
+        // The selection mark, on the far side from the bubble's tail.
+        ui.begin(.{ .width = .{ .px = 22 }, .height = .{ .px = 22 }, .radius = 11, .border_width = if (selected) 0 else 1.5, .border_color = col.border_strong, .background = if (selected) col.brand else null, .align_items = .center, .justify = .center, .align_self = .center }, .{});
+        if (selected) ui.icon(icons.check, 14, col.on_accent, .{}, 0);
+        ui.end();
+    }
     if (group_names) {
         if (run_end) {
             const u = s.store.user(m.senderId());
