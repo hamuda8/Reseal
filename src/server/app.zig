@@ -66,7 +66,7 @@ pub const Config = struct {
         const port = e.int(u16, "PORT", 8000);
         const public_url = std.mem.trimEnd(u8, e.str("PUBLIC_URL", try std.fmt.allocPrint(a, "http://localhost:{d}", .{port})), "/");
         var early: std.ArrayList([]const u8) = .empty;
-        for (try list(a, e.get("EARLY_ACCESS_USERS"), &.{})) |u| try early.append(a, try std.ascii.allocLowerString(a, u));
+        for (try list(a, e.get("EARLY_ACCESS_USERS"), &.{})) |u| try early.append(a, try @import("validate.zig").jsLower(a, u));
         const keys = try masterKey(a, io, e);
         const max_mb = std.fmt.parseInt(i64, e.str("MAX_UPLOAD_MB", "2048"), 10) catch 2048;
         const rate: i64 = if (e.get("API_RATE_LIMIT")) |v| (if (std.fmt.parseInt(i64, std.mem.trim(u8, v, " "), 10)) |x| (if (x >= 0) x else 600) else |_| 600) else 600;

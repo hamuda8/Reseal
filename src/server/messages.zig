@@ -457,7 +457,7 @@ pub fn sendMessage(r: *Rq, chat: Val, sender: Val, input: Val, o: SendOpts) !Val
         try doc.put(a, "fwd", f.fwd);
         if (f.copy.get("mediaIds").truthy()) try claimMedia(r, f.copy.get("mediaIds"), sender, chat);
     }
-    if (!chat.get("encrypted").truthy() and doc.get("text").truthy()) try doc.set(a, "search", v.sliceUtf16(try std.ascii.allocLowerString(a, doc.get("text").str), 4000));
+    if (!chat.get("encrypted").truthy() and doc.get("text").truthy()) try doc.set(a, "search", v.sliceUtf16(try v.jsLower(a, doc.get("text").str), 4000));
     if (input.get("silent").isTrue()) try doc.set(a, "silent", true);
 
     const ttl: i64 = if (input.get("ttl") != .undef) (try v.int(r, input.get("ttl"), "ttl", .{ .min = 0, .max = 365 * 86400 })) orelse 0 else chat.get("ttl").asInt() orelse 0;
@@ -590,7 +590,7 @@ pub fn publishRaw(r: *Rq, chat: Val, sender: Val, fields: Val, quiet: bool) !Val
     const a = r.a;
     const doc = try val.from(a, .{ .chatId = chat.get("_id"), .senderId = sender.get("_id"), .kind = "message", .createdAt = A.now(), .reactions = try Val.object(a) });
     for (fields.keys()) |kv| try doc.put(a, kv.k, kv.v);
-    if (!chat.get("encrypted").truthy() and doc.get("text").truthy()) try doc.set(a, "search", v.sliceUtf16(try std.ascii.allocLowerString(a, doc.get("text").str), 4000));
+    if (!chat.get("encrypted").truthy() and doc.get("text").truthy()) try doc.set(a, "search", v.sliceUtf16(try v.jsLower(a, doc.get("text").str), 4000));
     try doc.set(a, "seq", try nextSeq(r, chat.get("_id")));
     try store.insert(r, chat, doc);
     try afterPublish(r, chat, doc, sender, quiet);
@@ -737,7 +737,7 @@ pub fn editMessage(r: *Rq, chat: Val, member: Val, user: Val, message_id: Val, i
         if (text != null and v.jsTrim(text.?).len > 0) {
             const t = v.trimEnd(text.?);
             try set.set(a, "text", t);
-            try set.set(a, "search", v.sliceUtf16(try std.ascii.allocLowerString(a, t), 4000));
+            try set.set(a, "search", v.sliceUtf16(try v.jsLower(a, t), 4000));
             // Content checks (Wufour Moderation): only reached in readable chats.
             try set.put(a, "moderation", try moderation.stamp(a, try moderation.check(r, user, try val.from(a, .{ .type = "message", .id = try r.str(chat.get("_id")), .field = "edit" }), try val.from(a, .{ .text = t }), null)));
             if (try cleanEntities(r, input.get("entities"), v.utf16Len(t))) |ents| {

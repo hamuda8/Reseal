@@ -316,7 +316,7 @@ pub fn setChatUsername(r: *Rq, chat: Val, username: Val) !Val {
     }
     const name = try v.reqStr(r, username, "username", .{ .pattern = v.isUsername });
     try r.ensure(!chat.get("encrypted").truthy(), "Encrypted groups cannot be public. Create an unencrypted group to give it a public link.", 400, null);
-    const lower = try std.ascii.allocLowerString(a, name);
+    const lower = try v.jsLower(a, name);
     const taken = try col().users.findOne(a, .{ .usernameLower = lower }, .{ .projection = .{ ._id = 1 } });
     try r.ensure(taken == null, "That username is taken", 409, "username_taken");
     _ = col().chats.updateOne(a, .{ ._id = chat.get("_id") }, .{ .@"$set" = .{ .username = name, .usernameLower = lower } }, .{}) catch |e| {

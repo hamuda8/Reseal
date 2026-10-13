@@ -119,7 +119,7 @@ fn systemUser(r: *Rq, app_doc: Val) !Val {
         .appId = app_doc.get("_id"),
         .externalId = "__system__",
         .displayName = name,
-        .displayNameLower = try std.ascii.allocLowerString(a, name),
+        .displayNameLower = try v.jsLower(a, name),
         .privacy = try auth.defaultPrivacy(a),
         .settings = try Val.object(a),
         .botInfo = .{ .description = "System messages", .system = true },

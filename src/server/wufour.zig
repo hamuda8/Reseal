@@ -38,7 +38,7 @@ var cache: std.StringArrayHashMapUnmanaged(Hit) = .empty;
 pub fn lookup(r: *Rq, query: []const u8) ![]Val {
     const a = r.a;
     const gpa = A.app.gpa;
-    const key = try std.ascii.allocLowerString(a, query);
+    const key = try @import("validate.zig").jsLower(a, query);
     {
         lock.lockUncancelable(A.app.io);
         defer lock.unlock(A.app.io);

@@ -75,7 +75,7 @@ fn search(q: *Req) !void {
     if (v.utf16Len(text) < 2 or wufour_id.len == 0) return q.json(.{ .results = try Val.array(a), .more = more });
     const alive = .{ .@"$exists" = false };
     const me = (try col().users.findOne(a, .{ .wufourId = wufour_id, .deletedAt = alive }, .{ .projection = .{ ._id = 1 }, .maxTimeMS = MAX_TIME_MS })) orelse return q.json(.{ .results = try Val.array(a), .more = more });
-    const lower = try std.ascii.allocLowerString(a, text);
+    const lower = try v.jsLower(a, text);
     const prefix: Val = .{ .regex = .{ .pattern = try r.fmt("^{s}", .{try account.escapeRe(a, lower)}), .options = "" } };
     const word: Val = .{ .regex = .{ .pattern = try r.fmt("(^|\\s){s}", .{try account.escapeRe(a, lower)}), .options = "" } };
     const memberships = try col().members.find(a, .{ .userId = me.get("_id"), .status = "active" }, .{ .projection = .{ .chatId = 1, .clearedSeq = 1 }, .sort = .{ .lastActivityAt = -1 }, .limit = MAX_CHATS, .maxTimeMS = MAX_TIME_MS });

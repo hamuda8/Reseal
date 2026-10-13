@@ -133,7 +133,7 @@ pub fn upsertWufourUser(r: *Rq, wu: Val) !Val {
         .appId = Val.null,
         .wufourId = wufour_id,
         .displayName = display,
-        .displayNameLower = try std.ascii.allocLowerString(a, display),
+        .displayNameLower = try v.jsLower(a, display),
         .bio = "",
         .avatar = Val.null,
         .privacy = try defaultPrivacy(a),
@@ -144,7 +144,7 @@ pub fn upsertWufourUser(r: *Rq, wu: Val) !Val {
     });
     // Offer the Wufour username as the Reseal @username when it is valid and free.
     if (uname.asStr()) |un| if (v.isUsername(un)) {
-        const lower = try std.ascii.allocLowerString(a, un);
+        const lower = try v.jsLower(a, un);
         if (try col.users.findOne(a, .{ .usernameLower = lower }, .{ .projection = .{ ._id = 1 } }) == null) {
             try doc.set(a, "username", un);
             try doc.set(a, "usernameLower", lower);

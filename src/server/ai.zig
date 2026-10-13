@@ -114,7 +114,7 @@ pub fn createBot(r: *Rq, owner: Val, body: Val, app_id: Val) !Val {
         .kind = "bot",
         .appId = app_id,
         .displayName = name,
-        .displayNameLower = try std.ascii.allocLowerString(a, name),
+        .displayNameLower = try v.jsLower(a, name),
         .bio = if (f.get("description").truthy()) f.get("description") else Val.s(""),
         .avatar = Val.null,
         .privacy = try auth.defaultPrivacy(a),
@@ -127,7 +127,7 @@ pub fn createBot(r: *Rq, owner: Val, body: Val, app_id: Val) !Val {
         const un = try v.reqStr(r, body.get("username"), "username", .{ .pattern = v.isUsername });
         try r.ensure(std.ascii.endsWithIgnoreCase(un, "bot"), "Bot usernames must end in \"bot\"", 400, null);
         try user_doc.set(a, "username", un);
-        try user_doc.set(a, "usernameLower", try std.ascii.allocLowerString(a, un));
+        try user_doc.set(a, "usernameLower", try v.jsLower(a, un));
     }
     const id = col().users.insertOne(a, user_doc) catch |e| {
         if (e == error.DuplicateKey) return r.fail(409, "That username is taken", "username_taken");
@@ -169,7 +169,7 @@ pub fn updateBot(r: *Rq, bot: Val, body: Val) !Val {
     inline for (.{ "model", "systemPrompt", "temperature", "maxTokens", "contextMessages", "greeting", "public", "allowGroups", "vision", "starters" }) |k| if (f.get(k) != .undef) try bot_set.put(a, k, f.get(k));
     if (f.get("name").truthy()) {
         try user_set.put(a, "displayName", f.get("name"));
-        try user_set.set(a, "displayNameLower", try std.ascii.allocLowerString(a, f.get("name").str));
+        try user_set.set(a, "displayNameLower", try v.jsLower(a, f.get("name").str));
     }
     if (f.get("description") != .undef) {
         try user_set.put(a, "botInfo.description", f.get("description"));
@@ -194,7 +194,7 @@ pub fn updateBot(r: *Rq, bot: Val, body: Val) !Val {
         const un = try v.reqStr(r, body.get("username"), "username", .{ .pattern = v.isUsername });
         try r.ensure(std.ascii.endsWithIgnoreCase(un, "bot"), "Bot usernames must end in \"bot\"", 400, null);
         try user_set.set(a, "username", un);
-        try user_set.set(a, "usernameLower", try std.ascii.allocLowerString(a, un));
+        try user_set.set(a, "usernameLower", try v.jsLower(a, un));
     }
     _ = try col().bots.updateOne(a, .{ ._id = bot.get("_id") }, .{ .@"$set" = bot_set }, .{});
     if (user_set.len() > 0) _ = col().users.updateOne(a, .{ ._id = bot.get("_id") }, .{ .@"$set" = user_set }, .{}) catch |e| {
@@ -249,7 +249,8 @@ pub fn listModels(r: *Rq) !Val {
         }
         std.mem.sort(Val, list.arr.items, {}, struct {
             fn lt(_: void, x: Val, y: Val) bool {
-                return std.mem.order(u8, x.get("name").asStr() orelse "", y.get("name").asStr() orelse "") == .lt;
+                // Close to localeCompare: case is ignored.
+                return std.ascii.orderIgnoreCase(x.get("name").asStr() orelse "", y.get("name").asStr() orelse "") == .lt;
             }
         }.lt);
     } else |_| {}
@@ -564,7 +565,7 @@ fn generate(r: *Rq, bot: Val, bot_user: Val, chat: Val, trigger_seq: i64, existi
         try b.set(a, "markdown", true);
         try set.put(a, "bot", b);
     }
-    try set.set(a, "search", v.sliceUtf16(try std.ascii.allocLowerString(a, set.get("text").str), 4000));
+    try set.set(a, "search", v.sliceUtf16(try v.jsLower(a, set.get("text").str), 4000));
     const final = (try store.update(r, chat, msg.get("_id"), try val.from(a, .{ .@"$set" = set, .@"$unset" = .{ .streaming = "" } }))) orelse blk: {
         const f = try val.clone(a, msg);
         for (set.keys()) |kv| try f.put(a, kv.k, kv.v);
@@ -606,13 +607,13 @@ fn botsToAnswer(r: *Rq, chat: Val, message: Val, sender: Val) ![]Val {
     const bots = try col().users.find(a, .{ ._id = .{ .@"$in" = ids.items }, .kind = "bot" }, .{ .projection = .{ .username = 1 } });
     if (bots.len == 0) return &.{};
     const replied = if (message.path("replyTo.id").truthy()) try store.findOne(r, chat, message.path("replyTo.id"), null) else null;
-    const text = try std.ascii.allocLowerString(a, message.get("text").asStr() orelse "");
+    const text = try v.jsLower(a, message.get("text").asStr() orelse "");
     for (bots) |b| {
         var hit = false;
         for (message.get("mentions").items()) |m| if (val.same(m, b.get("_id"))) {
             hit = true;
         };
-        if (b.get("username").asStr()) |un| if (std.mem.indexOf(u8, text, try r.fmt("@{s}", .{try std.ascii.allocLowerString(a, un)})) != null) {
+        if (b.get("username").asStr()) |un| if (std.mem.indexOf(u8, text, try r.fmt("@{s}", .{try v.jsLower(a, un)})) != null) {
             hit = true;
         };
         if (replied) |rp| if (val.same(rp.get("senderId"), b.get("_id"))) {

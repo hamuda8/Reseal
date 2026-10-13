@@ -206,7 +206,7 @@ fn getOne(q: *Req) !void {
 fn byUsername(q: *Req) !void {
     const r = &q.r;
     const a = r.a;
-    var lower = try std.ascii.allocLowerString(a, q.param("username"));
+    var lower = try v.jsLower(a, q.param("username"));
     if (lower.len > 0 and lower[0] == '@') lower = lower[1..];
     const me = q.user();
     if (try col().chats.findOne(a, .{ .usernameLower = lower, .appId = if (me.get("appId").truthy()) me.get("appId") else Val.null, .deletedAt = .{ .@"$exists" = false } }, .{})) |chat| {
@@ -391,12 +391,12 @@ fn members(q: *Req) !void {
     };
     std.mem.sort(Val, rows, Ctx{ .users = serialized }, order.lt);
     var out = try Val.array(a);
-    const needle = if (q.query("q")) |t| (if (t.len > 0) try std.ascii.allocLowerString(a, t) else null) else null;
+    const needle = if (q.query("q")) |t| (if (t.len > 0) try v.jsLower(a, t) else null) else null;
     for (rows) |m| {
         const u = userOf(serialized, m.get("userId"));
         if (needle) |n| {
-            const dn = try std.ascii.allocLowerString(a, u.get("displayName").asStr() orelse "");
-            const un = try std.ascii.allocLowerString(a, u.get("username").asStr() orelse "");
+            const dn = try v.jsLower(a, u.get("displayName").asStr() orelse "");
+            const un = try v.jsLower(a, u.get("username").asStr() orelse "");
             if (std.mem.indexOf(u8, dn, n) == null and std.mem.indexOf(u8, un, n) == null) continue;
         }
         const o = try ser.member(a, m);

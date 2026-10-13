@@ -136,8 +136,8 @@ fn cleanOrigins(r: *Rq, list: Val) !Val {
         try r.ensure(std.ascii.eqlIgnoreCase(uri.scheme, "http") or std.ascii.eqlIgnoreCase(uri.scheme, "https"), "Origins must use http or https", 400, null);
         const host = uri.host orelse return r.fail(400, try r.fmt("\"{s}\" is not a valid origin, e.g. https://shop.example.com", .{s}), "invalid_input");
         var hbuf: [256]u8 = undefined;
-        const h = try std.ascii.allocLowerString(a, host.toRaw(&hbuf) catch "");
-        const scheme = try std.ascii.allocLowerString(a, uri.scheme);
+        const h = try v.jsLower(a, host.toRaw(&hbuf) catch "");
+        const scheme = try v.jsLower(a, uri.scheme);
         const default_port: u16 = if (std.mem.eql(u8, scheme, "https")) 443 else 80;
         const origin = if (uri.port != null and uri.port.? != default_port) try r.fmt("{s}://{s}:{d}", .{ scheme, h, uri.port.? }) else try r.fmt("{s}://{s}", .{ scheme, h });
         var dup = false;
@@ -346,7 +346,7 @@ pub fn upsertAppUser(r: *Rq, app_doc: Val, body: Val) !Val {
     if (body.get("name") != .undef) {
         const name = try v.reqStr(r, body.get("name"), "name", .{ .min = 1, .max = 64 });
         try set.set(a, "displayName", name);
-        try set.set(a, "displayNameLower", try std.ascii.allocLowerString(a, name));
+        try set.set(a, "displayNameLower", try v.jsLower(a, name));
     }
     if (body.get("avatarUrl") != .undef) try set.put(a, "avatarUrl", if (body.get("avatarUrl").truthy()) Val{ .str = try v.reqStr(r, body.get("avatarUrl"), "avatarUrl", .{ .max = 2048, .pattern = httpsUrl }) } else Val.null);
     if (body.get("bio") != .undef) try set.set(a, "bio", try v.reqStr(r, body.get("bio"), "bio", .{ .max = 300 }));
@@ -360,13 +360,13 @@ pub fn upsertAppUser(r: *Rq, app_doc: Val, body: Val) !Val {
         const un = try v.reqStr(r, body.get("username"), "username", .{ .pattern = v.isUsername });
         try set.set(a, "username", un);
         // Usernames are unique per app.
-        try set.set(a, "usernameLower", try r.fmt("{s}:{s}", .{ try r.str(app_doc.get("_id")), try std.ascii.allocLowerString(a, un) }));
+        try set.set(a, "usernameLower", try r.fmt("{s}:{s}", .{ try r.str(app_doc.get("_id")), try v.jsLower(a, un) }));
     }
     const now = A.now();
     const on_insert = try val.from(a, .{ .kind = "app", .appId = app_doc.get("_id"), .externalId = external_id, .privacy = try auth.defaultPrivacy(a), .settings = try Val.object(a), .createdAt = now, .lastSeenAt = now });
     if (set.get("displayName") == .undef) {
         try on_insert.set(a, "displayName", if (std.mem.startsWith(u8, external_id, "guest:")) "Guest" else external_id);
-        try on_insert.set(a, "displayNameLower", try std.ascii.allocLowerString(a, external_id));
+        try on_insert.set(a, "displayNameLower", try v.jsLower(a, external_id));
     }
     const user = col().users.findOneAndUpdate(a, .{ .appId = app_doc.get("_id"), .externalId = external_id }, .{ .@"$set" = set, .@"$setOnInsert" = on_insert, .@"$unset" = .{ .deletedAt = "" } }, .{ .upsert = true }) catch |e| {
         if (e == error.DuplicateKey) return r.fail(409, "That username is taken in this app", "username_taken");

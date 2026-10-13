@@ -99,7 +99,7 @@ fn patchMe(q: *Req) !void {
     if (b.get("displayName") != .undef) {
         const name = try v.reqStr(r, b.get("displayName"), "displayName", .{ .min = 1, .max = 64 });
         try set.set(a, "displayName", name);
-        try set.set(a, "displayNameLower", try std.ascii.allocLowerString(a, name));
+        try set.set(a, "displayNameLower", try v.jsLower(a, name));
     }
     if (b.get("bio") != .undef) try set.set(a, "bio", try v.reqStr(r, b.get("bio"), "bio", .{ .max = 140 }));
     // Content checks (Wufour Moderation): the name and bio are visible to everyone.
@@ -111,7 +111,7 @@ fn patchMe(q: *Req) !void {
         if (b.get("username").truthy()) {
             const un = try v.reqStr(r, b.get("username"), "username", .{ .pattern = v.isUsername });
             try set.set(a, "username", un);
-            const lower = try std.ascii.allocLowerString(a, un);
+            const lower = try v.jsLower(a, un);
             try set.set(a, "usernameLower", lower);
             try r.ensure(!std.ascii.endsWithIgnoreCase(un, "bot"), "Only bots can have usernames ending in \"bot\"", 400, null);
             const taken = try col().chats.findOne(a, .{ .usernameLower = lower }, .{ .projection = .{ ._id = 1 } });
@@ -170,7 +170,7 @@ fn username(q: *Req) !void {
     const a = q.r.a;
     const name = q.param("name");
     if (!v.isUsername(name)) return q.json(.{ .available = false, .reason = "Use 4-32 letters, numbers and underscores, starting with a letter." });
-    const lower = try std.ascii.allocLowerString(a, name);
+    const lower = try v.jsLower(a, name);
     const u = try col().users.findOne(a, .{ .usernameLower = lower }, .{ .projection = .{ ._id = 1 } });
     const c = try col().chats.findOne(a, .{ .usernameLower = lower }, .{ .projection = .{ ._id = 1 } });
     const mine = u != null and val.same(u.?.get("_id"), q.user().get("_id"));
@@ -324,7 +324,7 @@ fn search(q: *Req) !void {
     if (text.len > 0 and text[0] == '@') text = text[1..];
     const me = q.user();
     const scope_ = scope(me);
-    const lower = try std.ascii.allocLowerString(a, text);
+    const lower = try v.jsLower(a, text);
     const re = try regex(a, try r.fmt("^{s}", .{try escapeRe(a, lower)}), "");
     const word_re = try regex(a, try r.fmt("(^|\\s){s}", .{try escapeRe(a, lower)}), "");
     if (scope_ != .null) try apps.assertFeature(r, me, "userSearch", "Search is turned off in this app");

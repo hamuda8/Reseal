@@ -373,3 +373,46 @@ pub fn clampInt(x: f64) i64 {
     if (t < -9.007199254740991e15) return -9007199254740991;
     return @intFromFloat(t);
 }
+
+/// String.prototype.toLowerCase for the scripts people write names in: ASCII, Latin-1,
+/// Latin Extended-A, Greek and Cyrillic (scripts without case, such as Arabic, pass through).
+pub fn jsLower(a: std.mem.Allocator, s: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    try out.ensureTotalCapacity(a, s.len);
+    var i: usize = 0;
+    while (i < s.len) {
+        const l = std.unicode.utf8ByteSequenceLength(s[i]) catch 1;
+        if (l == 1 or i + l > s.len) {
+            try out.append(a, std.ascii.toLower(s[i]));
+            i += 1;
+            continue;
+        }
+        const cp = std.unicode.utf8Decode(s[i .. i + l]) catch {
+            try out.appendSlice(a, s[i .. i + l]);
+            i += l;
+            continue;
+        };
+        const low: u21 = switch (cp) {
+            0xC0...0xD6, 0xD8...0xDE => cp + 0x20,
+            0x100...0x137, 0x14A...0x177 => if (cp % 2 == 0) cp + 1 else cp,
+            0x139...0x148, 0x179...0x17E => if (cp % 2 == 1) cp + 1 else cp,
+            0x178 => 0xFF,
+            0x391...0x3A1, 0x3A3...0x3AB => cp + 0x20,
+            0x400...0x40F => cp + 0x50,
+            0x410...0x42F => cp + 0x20,
+            0x460...0x481, 0x48A...0x4BF => if (cp % 2 == 0) cp + 1 else cp,
+            else => cp,
+        };
+        var buf: [4]u8 = undefined;
+        const n = std.unicode.utf8Encode(low, &buf) catch 0;
+        try out.appendSlice(a, buf[0..n]);
+        i += l;
+    }
+    return out.items;
+}
+
+test jsLower {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectEqualStrings("émile дом ołów", try jsLower(arena.allocator(), "ÉMILE ДОМ OŁÓW"));
+}

@@ -258,7 +258,7 @@ fn appUsers(q: *Req) !void {
     const a = r.a;
     const f = try val.from(a, .{ .appId = app_doc.get("_id"), .kind = "app", .deletedAt = .{ .@"$exists" = false } });
     if (q.qv("role").truthy()) try f.set(a, "role", try v.reqOneOf(r, q.qv("role"), "role", &.{ "user", "agent" }));
-    if (q.query("q")) |text| if (text.len > 0) try f.set(a, "displayNameLower", .{ .@"$regex" = try account.escapeRe(a, try std.ascii.allocLowerString(a, text)) });
+    if (q.query("q")) |text| if (text.len > 0) try f.set(a, "displayNameLower", .{ .@"$regex" = try account.escapeRe(a, try v.jsLower(a, text)) });
     const rows = try col().users.find(a, f, .{ .sort = .{ .createdAt = -1 }, .limit = 100 });
     var out = try Val.array(a);
     for (rows) |u| try out.push(a, try apps.describeAppUser(r, u));
