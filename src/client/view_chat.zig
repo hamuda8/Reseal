@@ -412,7 +412,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     const small: f32 = 7;
     const big: f32 = theme.bubble_radius;
     _ = small;
-    ui.begin(.{ .max_width = max_w, .min_width = 60, .padding = if (media_only) .{} else .{ .top = 8, .bottom = 8, .start = 13, .end = 13 }, .radius = big, .background = bg, .gap = 2, .clip = media_only }, .{ .on_press = tap });
+    ui.begin(.{ .max_width = max_w, .min_width = 60, .padding = if (media_only) .{} else .{ .top = 8, .bottom = 8, .start = 13, .end = 13 }, .radius = big, .background = bg, .gap = 2, .clip = media_only }, .{ .on_press = tap, .on_long_press = if (m.local_id == 0 and !s.selecting) Msg{ .message_action = .{ .what = .select, .msg = Id.of(m.id()) } } else null, .on_context = tap });
     if (group_names and run_start) {
         const u = s.store.user(m.senderId());
         ui.text(if (u) |x| s.store.userName(x) else "…", .{ .font_size = 13.5, .weight = 700, .color = theme.nameColor(if (u) |x| x.i("color") orelse 0 else 0, col.dark), .max_lines = 1 });
@@ -724,12 +724,11 @@ fn composer(cx: Cx, c: *const data.Chat) void {
             .style = .{ .grow = 1, .width = .fill, .font_size = cx.fs + 0.5, .color = col.text, .max_height = 180 },
         });
         kit.iconButton(cx, icons.smile, .{ .compose = .{ .open = .emoji } }, .{ .size = 40 });
-        // Send options (silent, scheduled, when online, disappearing): Reseal-js opens them with a
-        // right click or long press on Send; zui has neither yet, so a button beside it.
-        if (!s.editing.isSet() and s.fields.get(.composer).trimmed().len > 0) kit.iconButton(cx, icons.scheduleSend, .{ .compose = .{ .open = .options } }, .{ .size = 40 });
         ui.end();
         ui.end();
-        ui.begin(.{ .width = .{ .px = 50 }, .height = .{ .px = 50 }, .radius = 17, .background = col.brand, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = .send_text });
+        // A long press or right click on Send: the send options (Reseal-js sendMenu).
+        const options: ?Msg = if (!s.editing.isSet()) Msg{ .compose = .{ .open = .options } } else null;
+        ui.begin(.{ .width = .{ .px = 50 }, .height = .{ .px = 50 }, .radius = 17, .background = col.brand, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = .send_text, .on_long_press = options, .on_context = options });
         ui.icon(if (s.editing.isSet()) icons.check else if (s.lang == .ar) icons.send_rtl else icons.send, 22, col.on_accent, .{}, 0);
         ui.end();
         ui.end();

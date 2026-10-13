@@ -300,7 +300,9 @@ pub fn chatItem(cx: Cx, c: *const data.Chat, msg: Msg) void {
     const active = s.open_chat.eql(c.id());
     const m = c.last;
     const at: i64 = if (m) |x| x.at else sys.parseIso(j.str(c.me(), "draft.at") orelse c.o.s("lastMessageAt") orelse "") orelse 0;
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 13, .height = .{ .px = 70 }, .padding = .xy(10, 0), .radius = 18, .background = if (active) col.accent_soft else null, .pressed_background = col.active }, .{ .on_press = msg, .key = key(.{ "chat", c.id() }) });
+    // A long press or right click opens the chat's menu (Reseal-js chatlist contextmenu).
+    const menu_msg: ?Msg = if (s.mode == .app) Msg{ .menu = .{ .menu = .{ .kind = .chat_row, .target = Id.of(c.id()) } } } else null;
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 13, .height = .{ .px = 70 }, .padding = .xy(10, 0), .radius = 18, .background = if (active) col.accent_soft else null, .pressed_background = col.active, .hover_background = if (active) null else col.hover }, .{ .on_press = msg, .on_long_press = menu_msg, .on_context = menu_msg, .key = key(.{ "chat", c.id() }) });
     chatAvatar(cx, c, 50);
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 3 }, .{});
     // Title row
