@@ -32,9 +32,9 @@ export async function freePort() {
   return port;
 }
 
-export async function startServer(extraEnv = {}) {
+export async function startServer(extraEnv = {}, { zig = useZig } = {}) {
   const port = await freePort();
-  const dbName = `${useZig ? 'ResealTest_zig' : 'Reseal_test'}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+  const dbName = `${zig ? 'ResealTest_zig' : 'Reseal_test'}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
   const env = {
     ...process.env,
     PORT: String(port),
@@ -50,7 +50,7 @@ export async function startServer(extraEnv = {}) {
   };
   // The Zig server reads .env.production / .env from its working folder: give it an empty one,
   // so nothing but the variables above reaches it.
-  const child = useZig
+  const child = zig
     ? spawn(zigBin, [], { cwd: mkdtempSync(path.join(tmpdir(), 'reseal-zig-')), env, stdio: ['ignore', 'pipe', 'pipe'] })
     : spawn(process.execPath, ['server.js'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';

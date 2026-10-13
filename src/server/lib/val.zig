@@ -725,11 +725,11 @@ pub fn toEjson(a: Allocator, v: Val) !Val {
             for (l.items) |e| try out.push(a, if (e == .undef) .null else try toEjson(a, e));
             break :blk out;
         },
+        // EJSON's serializeValue turns undefined into null (in objects too).
         .obj => |o| blk: {
             const out = try Val.object(a);
             for (o.items.items) |kv| {
-                if (kv.v == .undef) continue;
-                try out.obj.items.append(a, .{ .k = kv.k, .v = try toEjson(a, kv.v) });
+                try out.obj.items.append(a, .{ .k = kv.k, .v = if (kv.v == .undef) .null else try toEjson(a, kv.v) });
             }
             break :blk out;
         },
