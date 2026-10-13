@@ -304,3 +304,21 @@ test "chat lock: a locked chat asks for the code before it opens" {
     try testing.expect(D.respond("/api/me/chat-lock/verify", 200, "{\"ok\":true}"));
     try testing.expect(state().open_chat.eql("g1"));
 }
+
+test "export: a plain-text export of a chat, saved as a file" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    D.R.dispatch(.{ .chat_action = .{ .what = .export_chat, .chat = app.Id.of("g1") } });
+    try D.press("Plain text");
+    try D.press("Export");
+    try testing.expect(D.respond("/chats/g1/messages?limit=100", 200, "{\"messages\":[{\"id\":\"m2\",\"chatId\":\"g1\",\"seq\":2,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"second\",\"createdAt\":\"2026-10-12T14:01:00Z\"},{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"first\",\"createdAt\":\"2026-10-12T14:00:00Z\"}],\"floor\":0}"));
+    try testing.expect(std.mem.endsWith(u8, host.saved_name.items, ".txt"));
+    const saved = host.saved_data.items;
+    const first = std.mem.indexOf(u8, saved, "first") orelse return error.NotSaved;
+    const second = std.mem.indexOf(u8, saved, "second") orelse return error.NotSaved;
+    try testing.expect(first < second);
+    try testing.expect(state().modal == null);
+}

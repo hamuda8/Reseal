@@ -134,6 +134,7 @@ pub fn onUi(s: *State, msg: Msg) void {
         .group => |a| group.act(s, a),
         .folder => |a| @import("folders.zig").act(s, a),
         .chat_lock => |a| @import("chatlock.zig").act(s, a),
+        .export_chat => |a| @import("export.zig").act(s, a),
         .located => |l| compose.onLocation(s, l),
         .cancel_reply => {
             if (s.editing.isSet()) s.fields.getPtr(.composer).clear();
@@ -356,6 +357,7 @@ fn chatAction(s: *State, what: app.ChatAction, chat: []const u8) void {
         .delete => s.modal = .{ .confirm = .{ .kind = if (c.is("saved") and !c.o.b("primary")) .delete_saved else if (c.is("saved")) .clear_history else .delete_chat, .target = Id.of(chat) } },
         .leave => s.modal = .{ .confirm = .{ .kind = .leave_chat, .target = Id.of(chat) } },
         .lock => @import("chatlock.zig").act(s, .{ .lock = Id.of(chat) }),
+        .export_chat => @import("export.zig").act(s, .{ .open = Id.of(chat) }),
         .unlock => @import("chatlock.zig").act(s, .{ .remove = Id.of(chat) }),
         .add_to_folder => s.modal = .{ .menu = .{ .kind = .folder_pick, .target = Id.of(chat) } },
         .clear => s.modal = .{ .confirm = .{ .kind = .clear_history, .target = Id.of(chat) } },
@@ -1137,6 +1139,8 @@ fn modal(cx: Cx) void {
         .chat_unlock => |x| @import("chatlock.zig").unlockSheet(cx, x.chat, x.purpose),
         .chat_lock_code => |change| @import("chatlock.zig").codeSheet(cx, change),
         .chat_lock_off => @import("chatlock.zig").offSheet(cx),
+        .export_options => @import("export.zig").optionsSheet(cx),
+        .export_progress => @import("export.zig").progressSheet(cx),
     }
 }
 

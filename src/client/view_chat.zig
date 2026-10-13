@@ -821,6 +821,7 @@ fn chatMenu(cx: Cx, target: Id) void {
     }
     views.menuItem(cx, if (unread) icons.checks else icons.chat, if (unread) t("Mark as read") else t("Mark as unread"), act(if (unread) .mark_read else .mark_unread, id), false);
     if (s.mode == .app) views.menuItem(cx, icons.folder, t("Add to folder"), act(.add_to_folder, id), false);
+    if (s.mode == .app and !c.o.b("protectedContent")) views.menuItem(cx, icons.download, t("Export chat"), act(.export_chat, id), false);
     if (s.mode == .app) views.menuItem(cx, if (c.meBool("locked")) icons.unlock else icons.lock, if (c.meBool("locked")) t("Remove lock") else t("Lock chat"), act(if (c.meBool("locked")) .unlock else .lock, id), false);
     if (c.is("saved")) views.menuItem(cx, icons.edit, t("Edit"), act(.saved_edit, id), false);
     if (c.is("private")) {

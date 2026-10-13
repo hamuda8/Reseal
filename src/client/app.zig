@@ -25,6 +25,7 @@ pub const compose = @import("compose.zig");
 pub const group = @import("group.zig");
 pub const folders = @import("folders.zig");
 pub const chatlock = @import("chatlock.zig");
+pub const exporter = @import("export.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
 
@@ -125,6 +126,8 @@ pub const Field = enum {
     lock_code,
     lock_code_2,
     lock_current,
+    export_from,
+    export_to,
 };
 
 pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
@@ -182,6 +185,8 @@ pub const Modal = union(enum) {
     chat_unlock: struct { chat: Id, purpose: chatlock.Purpose },
     chat_lock_code: bool,
     chat_lock_off,
+    export_options,
+    export_progress,
 };
 
 pub const Msg = union(enum) {
@@ -237,6 +242,7 @@ pub const Msg = union(enum) {
     group: group.Act,
     folder: folders.Act,
     chat_lock: chatlock.Act,
+    export_chat: exporter.Act,
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
@@ -288,7 +294,7 @@ pub const Msg = union(enum) {
 };
 
 pub const Filter = union(enum) { all, unread, people, groups, channels, ai, folder: Id };
-pub const ChatAction = enum { lock, unlock, add_to_folder, pin, unpin, archive, unarchive, mute, unmute, mark_read, mark_unread, delete, leave, clear, block, unblock, add_contact, info, call_voice, call_video, saved_edit, search, show_safety };
+pub const ChatAction = enum { export_chat, lock, unlock, add_to_folder, pin, unpin, archive, unarchive, mute, unmute, mark_read, mark_unread, delete, leave, clear, block, unblock, add_contact, info, call_voice, call_video, saved_edit, search, show_safety };
 pub const MessageAction = enum { reply, edit, copy, pin, unpin, delete, delete_everyone, save, select, details, forward, retract_vote, close_poll, open_map, open_link, reveal };
 pub const Theme = enum { auto, light, dark };
 pub const Lang = enum { en, ar };
@@ -409,6 +415,7 @@ pub const State = struct {
     group: group.Group = .{},
     folder: folders.Editor = .{},
     lock: chatlock.Lock = .{},
+    exporter: exporter.Export = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -524,6 +531,10 @@ pub const Op = union(enum) {
     lock_verify: struct { chat: Id, purpose: chatlock.Purpose },
     lock_code_saved: bool,
     lock_off,
+    export_page: u32,
+    export_info: u32,
+    export_chunk: struct { seq: u32, index: u32 },
+    export_plain: u32,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -545,6 +556,18 @@ pub fn request(s: *State, method: zui.Method, path: []const u8, body: ?[]const u
     headers.append(a, .{ "X-Reseal-Client", if (zui.platform == .web) "web" else "app" }) catch {};
     if (s.bearer.get().len > 0) headers.append(a, .{ "Authorization", std.fmt.allocPrint(a, "Bearer {s}", .{s.bearer.get()}) catch "" }) catch {};
     fx.fetch(.{ .url = url, .method = method, .body = body orelse "", .content_type = content_type, .headers = headers.items, .tag = tag }, onHttp);
+}
+
+/// A request for a whole address (a signed file link), not under /api.
+pub fn fetchRaw(s: *State, url: []const u8, op: Op) void {
+    const tag = s.next_op;
+    s.next_op +%= 1;
+    if (s.next_op == 0) s.next_op = 1;
+    s.ops.put(gpa, tag, op) catch return;
+    const a = tmp();
+    var headers: std.ArrayList([2][]const u8) = .empty;
+    if (s.bearer.get().len > 0) headers.append(a, .{ "Authorization", std.fmt.allocPrint(a, "Bearer {s}", .{s.bearer.get()}) catch "" }) catch {};
+    fx.fetch(.{ .url = url, .method = .GET, .headers = headers.items, .tag = tag }, onHttp);
 }
 
 /// The error a failed answer carries ({error:{code,message}}).
@@ -864,6 +887,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (group.onAnswer(s, op, r)) return;
             if (folders.onAnswer(s, op, r)) return;
             if (chatlock.onAnswer(s, op, r)) return;
+            if (exporter.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }
@@ -1162,4 +1186,5 @@ test {
     _ = @import("markdown.zig");
     _ = @import("rich.zig");
     _ = @import("compose.zig");
+    _ = @import("export.zig");
 }

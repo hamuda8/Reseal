@@ -73,6 +73,14 @@
     }
     function save(name, url) {
       const a = document.createElement('a');
+      // Big data: addresses (decrypted files, chat exports) download as blobs.
+      const m = /^data:([^,]*?)(;base64)?,/.exec(url || '');
+      if (m) {
+        const raw = url.slice(m[0].length);
+        const bytes = m[2] ? Uint8Array.from(atob(raw), (c) => c.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(raw));
+        url = URL.createObjectURL(new Blob([bytes], { type: m[1] || 'application/octet-stream' }));
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
       a.href = url;
       a.download = name || 'file';
       document.body.append(a);
