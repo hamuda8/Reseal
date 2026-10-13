@@ -764,7 +764,7 @@ fn ejsonScalar(a: Allocator, v: Val) ?Val {
     if (d != .undef and v.len() == 1) {
         return switch (d) {
             .str => |t| if (parseDate(t)) |ms| Val{ .date = ms } else null,
-            .num => |x| Val{ .date = @intFromFloat(x) },
+            .num => |x| if (std.math.isFinite(x) and @abs(x) < 8.64e15) Val{ .date = @intFromFloat(x) } else null,
             .obj => if (d.get("$numberLong").asStr()) |t| (if (std.fmt.parseInt(i64, t, 10)) |ms| Val{ .date = ms } else |_| null) else null,
             else => null,
         };

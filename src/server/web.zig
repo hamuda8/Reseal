@@ -76,11 +76,11 @@ pub const Req = struct {
     }
 
     pub fn setHeader(q: *Req, name: []const u8, value: []const u8) !void {
-        try q.ctx.setHeader(name, value);
+        try q.ctx.setHeader(name, try headerSafe(q.r.a, value));
     }
 
     pub fn addHeader(q: *Req, name: []const u8, value: []const u8) !void {
-        try q.ctx.response_headers.append(q.r.a, .{ .name = name, .value = value });
+        try q.ctx.response_headers.append(q.r.a, .{ .name = name, .value = try headerSafe(q.r.a, value) });
     }
 
     /// `res.json(value)` with status 200.
@@ -99,13 +99,16 @@ pub const Req = struct {
     }
 
     pub fn redirect(q: *Req, location: []const u8) !void {
-        try q.ctx.setHeader("location", location);
+        try q.ctx.setHeader("location", try headerSafe(q.r.a, location));
         // Express's res.redirect body for non-HTML clients.
         return q.send(302, "text/plain; charset=utf-8", try std.fmt.allocPrint(q.r.a, "Found. Redirecting to {s}", .{location}));
     }
 
+    /// `res.status(status).end()`: no body, no content type.
     pub fn end(q: *Req, status: u16) !void {
-        return q.send(status, "text/plain; charset=utf-8", "");
+        q.status = status;
+        q.ctx.responded = true;
+        try q.ctx.request.respond("", .{ .status = @enumFromInt(status), .extra_headers = q.ctx.response_headers.items });
     }
 
     /// Path match (Express style). Sets the params on success.
@@ -198,8 +201,23 @@ pub const Req = struct {
         }
         q.ctx.max_body = limit;
         const data = q.ctx.body() catch |e| switch (e) {
-            error.PayloadTooLarge => return q.r.fail(413, "That request is too large", "too_large"),
-            else => return q.r.fail(400, "The request body could not be read", "bad_request"),
+            // The rest of the body is still on the connection. Read it away (as Node does) so the
+            // client sees the 413 instead of a reset; past 64 MiB just close the connection.
+            error.PayloadTooLarge => {
+                const total = req.head.content_length orelse std.math.maxInt(u64);
+                if (total > 64 * 1024 * 1024) {
+                    q.ctx.close_connection = true;
+                } else {
+                    _ = req.server.reader.interface.discardRemaining() catch {
+                        q.ctx.close_connection = true;
+                    };
+                }
+                return q.r.fail(413, "That request is too large", "too_large");
+            },
+            else => {
+                q.ctx.close_connection = true;
+                return q.r.fail(400, "The request body could not be read", "bad_request");
+            },
         };
         q.raw = data;
         return data;
@@ -329,4 +347,15 @@ pub fn sendError(q: *Req, err: anyerror) !void {
     try body.set(q.r.a, "code", code);
     if (extra) |x| for (x.keys()) |kv| try body.put(q.r.a, kv.k, kv.v);
     return q.jsonStatus(status, .{ .@"error" = body });
+}
+
+/// A header value without CR or LF: std.http asserts on them (a crash, not an error), and
+/// redirect targets and file names can carry them from the request.
+pub fn headerSafe(a: std.mem.Allocator, value: []const u8) ![]const u8 {
+    if (std.mem.indexOfAny(u8, value, "\r\n") == null) return value;
+    const out = try a.dupe(u8, value);
+    for (out) |*c| if (c.* == '\r' or c.* == '\n') {
+        c.* = ' ';
+    };
+    return out;
 }

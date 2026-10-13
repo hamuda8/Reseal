@@ -112,7 +112,7 @@ fn fetchLimited(r: *Rq, url_in: []const u8) !struct { url: []const u8, html: []c
             .user_agent = "Mozilla/5.0 (compatible; ResealBot/1.0; +link-preview)",
             .headers = &.{.{ .name = "Accept", .value = "text/html,application/xhtml+xml" }},
         });
-        if (res.status >= 300 and res.status < 400 and res.location != null and hops < 3) {
+        if (res.status >= 300 and res.status < 400 and res.location != null and res.location.?.len < 2048 and hops < 3) {
             const base = try std.Uri.parse(url);
             var buf: [4096]u8 = undefined;
             @memcpy(buf[0..res.location.?.len], res.location.?);

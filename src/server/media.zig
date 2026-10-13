@@ -176,7 +176,7 @@ pub fn stream(q: *web.Req, m: Val, download: bool) !void {
         } else start = @max(0, total - rg.to.?);
         if (start > end_ or start >= total) {
             try q.setHeader("content-range", try r.fmt("bytes */{d}", .{total}));
-            return q.send(416, "text/plain; charset=utf-8", "");
+            return q.end(416);
         }
         status = 206;
         try q.setHeader("content-range", try r.fmt("bytes {d}-{d}/{d}", .{ start, end_, total }));
@@ -199,8 +199,15 @@ pub fn stream(q: *web.Req, m: Val, download: bool) !void {
     q.status = status;
     q.ctx.responded = true;
     var buf: [16 * 1024]u8 = undefined;
+    if (q.method == .HEAD) {
+        // std's streaming writer expects every promised byte; a HEAD answer has none, so the
+        // length goes out as a plain header on an otherwise empty response.
+        try q.addHeader("content-length", try r.fmt("{d}", .{len}));
+        var head = try q.ctx.request.respondStreaming(&buf, .{ .respond_options = .{ .status = @enumFromInt(status), .extra_headers = q.ctx.response_headers.items, .transfer_encoding = .none } });
+        return head.end();
+    }
     var body = try q.ctx.request.respondStreaming(&buf, .{ .content_length = len, .respond_options = .{ .status = @enumFromInt(status), .extra_headers = q.ctx.response_headers.items } });
-    if (q.method == .HEAD or len == 0) return body.end();
+    if (len == 0) return body.end();
     // Each stored chunk is chunkSize bytes, plus a 16-byte tag when encrypted.
     const stride = (m.get("chunkSize").asInt() orelse CHUNK) + @as(i64, if (m.get("encrypted").truthy()) GCM_TAG else 0);
     const first = @divFloor(start, stride);
@@ -208,17 +215,28 @@ pub fn stream(q: *web.Req, m: Val, download: bool) !void {
     var n = first;
     var chunk_arena = std.heap.ArenaAllocator.init(A.app.gpa);
     defer chunk_arena.deinit();
+    var sent: u64 = 0;
     while (n <= last) : (n += 1) {
         _ = chunk_arena.reset(.retain_capacity);
         var cr: Rq = .{ .a = chunk_arena.allocator() };
         const data = (try readChunk(&cr, m, n)) orelse break;
         const from: usize = if (n == first) @intCast(start - n * stride) else 0;
         const to: usize = if (n == last) @intCast(end_ - n * stride + 1) else data.len;
-        try body.writer.writeAll(data[@min(from, data.len)..@min(to, data.len)]);
+        const lo = @min(from, data.len);
+        const hi = @max(lo, @min(to, data.len));
+        const part = data[lo..@min(hi, lo + (len - sent))];
+        try body.writer.writeAll(part);
+        sent += part.len;
+    }
+    if (sent != len) {
+        // A chunk is missing or short: end the connection rather than promise bytes that never
+        // come (std asserts on that).
+        body.writer.flush() catch {};
+        q.ctx.close_connection = true;
+        return;
     }
     try body.end();
 }
-
 /// /^bytes=(\d*)-(\d*)$/
 fn parseRange(h: []const u8) ?struct { from: ?i64, to: ?i64 } {
     if (!std.mem.startsWith(u8, h, "bytes=")) return null;

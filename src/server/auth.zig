@@ -280,7 +280,7 @@ fn clearAuthCookies(q: *Req) !void {
 
 fn redirectToLogin(q: *Req) !void {
     const a = q.r.a;
-    const original = q.ctx.request.head.target;
+    const original = if (q.ctx.query.len > 0) try std.fmt.allocPrint(a, "{s}?{s}", .{ q.path, q.ctx.query }) else q.path;
     const back = try std.fmt.allocPrint(a, "{s}://{s}/auth/callback?next={s}", .{ q.protocol(), q.header("host") orelse "localhost", try web.encodeComponent(a, original) });
     const sso = try std.fmt.allocPrint(a, "{s}/auth?returnTo={s}", .{ A.app.config.auth_host, try web.encodeComponent(a, back) });
     return q.redirect(sso);

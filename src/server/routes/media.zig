@@ -145,7 +145,7 @@ fn ice(q: *Req) !void {
 fn callHistory(q: *Req) !void {
     try auth.requireUser(q);
     const lim = v.toNumber(q.qv("limit"));
-    const limit: i64 = if (std.math.isFinite(lim) and lim != 0) @intFromFloat(@trunc(lim)) else 50;
+    const limit: i64 = if (std.math.isFinite(lim) and lim != 0) v.clampInt(lim) else 50;
     return q.json(.{ .calls = try calls.history(&q.r, q.user(), q.query("before"), limit) });
 }
 

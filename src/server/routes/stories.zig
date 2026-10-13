@@ -82,7 +82,7 @@ fn audience(q: *Req) !void {
 fn archive(q: *Req) !void {
     const r = &q.r;
     const lim = v.toNumber(q.qv("limit"));
-    const list = try stories.archive(r, q.user(), try v.id(r, q.qv("before"), "before", true), if (std.math.isFinite(lim) and lim != 0) @intFromFloat(@trunc(lim)) else 60);
+    const list = try stories.archive(r, q.user(), try v.id(r, q.qv("before"), "before", true), if (std.math.isFinite(lim) and lim != 0) v.clampInt(lim) else 60);
     return q.json(.{ .stories = try listOut(q, list) });
 }
 

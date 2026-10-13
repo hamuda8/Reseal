@@ -62,6 +62,7 @@ function normalizer() {
   const ids = new Map();
   const id = (h) => { if (!ids.has(h)) ids.set(h, `<id${ids.size}>`); return ids.get(h); };
   const str = (s) => s
+    .replace(/e=\d+&s=[0-9a-f]+/g, 'e=<e>&s=<s>')
     .replace(/\b[0-9a-f]{64}\b/g, '<hex64>')
     .replace(/[0-9a-f]{24}/g, id)
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '<date>')
@@ -284,6 +285,63 @@ async function script(srv, storage) {
   await call('resolve', 'GET', '/api/embed/resolve?user=u1', undefined, { token: guest.token });
   await call('embed teams', 'GET', '/api/embed/teams', undefined, { token: guest.token });
   await call('embed team', 'POST', '/api/embed/team', { team: 't1' }, { token: guest.token });
+
+  // Files: a plain upload, the file itself, ranges, and the photo as an avatar.
+  const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(3000, 7)]);
+  const up = await call('upload', 'POST', '/api/media', { size: png.length, mime: 'image/PNG', name: 'a b<c>.png', purpose: 'avatar' }, { token: A });
+  await call('upload too big', 'POST', '/api/media', { size: 1e15 }, { token: A });
+  await call('upload bad mime', 'POST', '/api/media', { size: 10, mime: 'nope' }, { token: A });
+  await call('chunk wrong size', 'PUT', `/api/media/${up.id}/chunks/0`, png.subarray(0, 10), { token: A, raw: true, headers: { 'Content-Type': 'application/octet-stream' } });
+  await call('chunk out of range', 'PUT', `/api/media/${up.id}/chunks/3`, png, { token: A, raw: true, headers: { 'Content-Type': 'application/octet-stream' } });
+  await call('complete early', 'POST', `/api/media/${up.id}/complete`, {}, { token: A });
+  await call('chunk', 'PUT', `/api/media/${up.id}/chunks/0`, png, { token: A, raw: true, headers: { 'Content-Type': 'application/octet-stream' } });
+  const done = await call('complete', 'POST', `/api/media/${up.id}/complete`, { sha256: 'a'.repeat(64) }, { token: A });
+  await call('media', 'GET', `/api/media/${up.id}`, undefined, { token: A });
+  await call('media other', 'GET', `/api/media/${up.id}`, undefined, { token: B });
+  for (const [label, headers] of [['content', {}], ['range', { Range: 'bytes=0-9' }], ['suffix range', { Range: 'bytes=-5' }], ['bad range', { Range: 'bytes=5000-6000' }]]) {
+    const res = await fetch(`${base}/api/media/${up.id}/content`, { headers: { Authorization: `Bearer ${A}`, ...headers } });
+    const bytes = Buffer.from(await res.arrayBuffer());
+    out.push({ label, status: res.status, json: { len: bytes.length, first: bytes[0] ?? null, type: res.headers.get('content-type'), range: res.headers.get('content-range'), disp: res.headers.get('content-disposition') } });
+  }
+  const signed = await fetch(base + done.media.url);
+  out.push({ label: 'signed link', status: signed.status, json: { len: (await signed.arrayBuffer()).byteLength, type: signed.headers.get('content-type'), cache: signed.headers.get('cache-control') } });
+  const head = await fetch(base + done.media.url, { method: 'HEAD' });
+  out.push({ label: 'signed head', status: head.status, json: { len: head.headers.get('content-length') } });
+  await call('avatar', 'PATCH', '/api/me', { avatar: up.id }, { token: A });
+  const pub = await fetch(`${base}/m/${up.id}`);
+  out.push({ label: 'public avatar', status: pub.status, json: { cache: pub.headers.get('cache-control') } });
+
+  // Keys: publish, look up, restore, protection.
+  const pk = (n) => Buffer.concat([Buffer.from([4]), Buffer.alloc(64, n)]).toString('base64');
+  const box = { v: 1, kdf: 'escrow', iv: Buffer.alloc(12, 1).toString('base64'), ct: Buffer.alloc(40, 2).toString('base64') };
+  await call('keys bad', 'PUT', '/api/keys', { enc: 'AAAA', sig: pk(2) }, { token: B });
+  await call('keys no backup', 'PUT', '/api/keys', { enc: pk(1), sig: pk(2) }, { token: B });
+  await call('keys', 'PUT', '/api/keys', { enc: pk(1), sig: pk(2), backup: { escrow: box }, escrowKey: Buffer.alloc(32, 3).toString('base64') }, { token: B });
+  await call('keys again', 'PUT', '/api/keys', { enc: pk(5), sig: pk(2), backup: { escrow: box }, escrowKey: Buffer.alloc(32, 3).toString('base64') }, { token: B });
+  await call('key lookup', 'POST', '/api/keys/lookup', { userIds: [badr.id, amal.id] }, { token: A });
+  await call('restore', 'POST', '/api/keys/restore', undefined, { token: B });
+  await call('protection', 'PUT', '/api/keys/protection', { mode: 'advanced', passcode: { kdf: 'pbkdf2-sha256', iter: 600000, salt: 'c2FsdA==', iv: 'aXY=', ct: 'Y3Q=' } }, { token: B });
+  await call('restore advanced', 'POST', '/api/keys/restore', undefined, { token: B });
+  await call('backup', 'GET', '/api/keys/backup', undefined, { token: B });
+  await call('key requests', 'GET', '/api/keys/requests', undefined, { token: B });
+
+  // Chat lock
+  await call('lock without code', 'POST', `/api/chats/${ch.id}/state`, { locked: true }, { token: A });
+  await call('lock code', 'PUT', '/api/me/chat-lock', { code: '2468' }, { token: A });
+  await call('lock code change', 'PUT', '/api/me/chat-lock', { code: '1357', current: '0000' }, { token: A });
+  await call('lock verify', 'POST', '/api/me/chat-lock/verify', { code: '2468' }, { token: A });
+  await call('lock chat', 'POST', `/api/chats/${ch.id}/state`, { locked: true }, { token: A });
+  await call('unlock all', 'DELETE', '/api/me/chat-lock', { code: '2468' }, { token: A });
+
+  // Saved chats, support, deleting an account.
+  await call('saved', 'POST', '/api/chats/saved', { title: 'Ideas', about: 'All of them' }, { token: A });
+  await call('support', 'POST', '/api/embed/support', undefined, { token: guest.token });
+  await call('push token reseal', 'POST', '/api/push/token', undefined, { token: A });
+  await call('push token app', 'POST', '/api/push/token', undefined, { token: guest.token });
+  await call('push subscribe off', 'POST', '/api/push/subscribe', { endpoint: 'https://push.example/x', keys: { p256dh: 'a', auth: 'b' } }, { token: A });
+  await call('delete me bad', 'DELETE', '/api/me', { confirm: 'no' }, { token: C });
+  await call('delete me', 'DELETE', '/api/me', { confirm: 'DELETE' }, { token: C });
+  await call('logout json', 'POST', '/logout', undefined, { headers: { Accept: 'application/json', Cookie: 'wufour_token=tok-carm' } });
 
   // Pages
   for (const p of ['/developers', '/sdk/reseal.js', '/c/x', '/nothing.js', '/m/ffffffffffffffffffffffff', '/login']) {

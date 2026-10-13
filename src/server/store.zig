@@ -456,7 +456,7 @@ pub fn list(r: *Rq, chat: Val, o: ListOpts) ![]Val {
         }.lt);
         for (docs.items) |d| if (out.items.len < o.limit and matches(a, d, match_filter)) try out.append(a, d);
         if (docs.items.len < want) break;
-        const last: i64 = @intFromFloat(docs.items[docs.items.len - 1].get("seq").num);
+        const last: i64 = docs.items[docs.items.len - 1].get("seq").asInt() orelse break;
         if (o.asc) lo = last else hi = last;
     }
     return out.items;

@@ -332,7 +332,7 @@ fn removeTeamMember(q: *Req) !void {
 fn teamChats(q: *Req) !void {
     const t = try teamOf(q);
     const lim = v.toNumber(q.qv("limit"));
-    const list = try teams.teamChats(&q.r, t, if (std.math.isFinite(lim) and lim != 0) @intFromFloat(@trunc(lim)) else 100, q.query("before"));
+    const list = try teams.teamChats(&q.r, t, if (std.math.isFinite(lim) and lim != 0) v.clampInt(lim) else 100, q.query("before"));
     var total: f64 = 0;
     for (list.items()) |c| total += c.get("unread").asNum() orelse 0;
     return q.json(.{ .chats = list, .unreadTotal = total });

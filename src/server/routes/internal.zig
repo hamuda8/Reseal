@@ -68,7 +68,7 @@ fn search(q: *Req) !void {
     if (text.len > 0 and text[0] == '@') text = text[1..];
     text = v.sliceUtf16(text, 64);
     const lim_n = v.toNumber(q.b("limit"));
-    const limit: i64 = @min(@max(if (std.math.isFinite(lim_n) and @trunc(lim_n) != 0) @as(i64, @intFromFloat(@trunc(lim_n))) else 4, 1), 10);
+    const limit: i64 = @min(@max(if (std.math.isFinite(lim_n) and @trunc(lim_n) != 0) v.clampInt(lim_n) else 4, 1), 10);
     const wufour_id = if (q.b("userId").truthy()) try r.str(q.b("userId")) else "";
     const L = if (eq(q.b("lang"), "ar")) AR else EN;
     const more = try val.from(a, .{ .label = L.open, .url = "/" });

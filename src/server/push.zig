@@ -27,7 +27,7 @@ fn col() *A.Cols {
 fn vapidHeader(a: std.mem.Allocator, endpoint: []const u8) ![]const u8 {
     const uri = try std.Uri.parse(endpoint);
     var hbuf: [256]u8 = undefined;
-    const host = try uri.host.?.toRaw(&hbuf);
+    const host = try (uri.host orelse return error.BadEndpoint).toRaw(&hbuf);
     // The audience is the endpoint's origin (with a port when it has one), as `new URL().origin`.
     const default_port: u16 = if (std.ascii.eqlIgnoreCase(uri.scheme, "https")) 443 else 80;
     const origin = if (uri.port != null and uri.port.? != default_port) try std.fmt.allocPrint(a, "{s}://{s}:{d}", .{ uri.scheme, host, uri.port.? }) else try std.fmt.allocPrint(a, "{s}://{s}", .{ uri.scheme, host });

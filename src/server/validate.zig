@@ -61,7 +61,7 @@ pub fn int(r: *Rq, value: Val, name: []const u8, o: NumOpts) !?i64 {
     const x = toNumber(value);
     if (!std.math.isFinite(x) or @floor(x) != x) return fail(r, name, "must be a whole number");
     if (x < o.min or x > o.max) return fail(r, name, try r.fmt("must be between {s} and {s}", .{ try val.fmtNum(r.a, o.min), try val.fmtNum(r.a, o.max) }));
-    return @intFromFloat(x);
+    return clampInt(x);
 }
 
 pub fn reqInt(r: *Rq, value: Val, name: []const u8, o: NumOpts) !i64 {
@@ -362,4 +362,14 @@ test "validators" {
     try std.testing.expectEqual(@as(usize, 2), utf16Len("😀"));
     try std.testing.expectEqualStrings("a", sliceUtf16("a😀", 2));
     try std.testing.expectEqual(@as(f64, 12), toNumber(.{ .str = " 12 " }));
+}
+
+/// A JS number as an integer, truncated and kept in the range where f64 is exact (casting a
+/// larger value would trap).
+pub fn clampInt(x: f64) i64 {
+    if (std.math.isNan(x)) return 0;
+    const t = @trunc(x);
+    if (t > 9.007199254740991e15) return 9007199254740991;
+    if (t < -9.007199254740991e15) return -9007199254740991;
+    return @intFromFloat(t);
 }
