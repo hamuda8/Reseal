@@ -6,6 +6,10 @@
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Voice and video calls. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- New-message notifications; an incoming call rings full screen over the lock screen. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />

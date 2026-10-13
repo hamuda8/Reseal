@@ -27,6 +27,10 @@
         <integer>1</integer>
         <integer>2</integer>
     </array>
+    <key>NSCameraUsageDescription</key>
+    <string>Reseal uses the camera for video calls.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Reseal uses the microphone for calls.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Reseal uses your location only when you choose to share it in a chat.</string>
     <key>UILaunchScreen</key>

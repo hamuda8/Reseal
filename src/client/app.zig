@@ -22,6 +22,8 @@ const views = @import("views.zig");
 const crypto = @import("crypto.zig");
 const fmt = @import("fmt.zig");
 pub const compose = @import("compose.zig");
+/// The calls engine on Android and iOS (the web uses the browser's WebRTC).
+pub const rtc = @import("reseal_rtc").zui_engine;
 
 pub const panic = zui.panic;
 pub const boot: Msg = .boot;

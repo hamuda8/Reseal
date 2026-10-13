@@ -13,6 +13,8 @@ pub fn build(b: *std.Build) void {
 
     core.addApp(b, b.dependency("zig_core", .{}), .{
         .client_config = options.createModule(),
+        // Calls on the phones: Reseal's WebRTC engine (zui openMedia/openPeer use it through app.rtc).
+        .client_imports = &.{.{ .name = "reseal_rtc", .module = b.dependency("reseal_rtc", .{}).module("reseal_rtc") }},
         .name = "reseal",
         .client = b.path("src/client/app.zig"),
         .server = b.path("src/server/main.zig"),
