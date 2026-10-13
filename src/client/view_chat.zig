@@ -339,6 +339,10 @@ fn unreadLine(cx: Cx) void {
 fn intro(cx: Cx, c: *const data.Chat) void {
     const ui = cx.ui;
     const col = cx.c;
+    // Plain chats (Reseal-js chatview intro): a card only while there is nothing yet.
+    if (!c.is("saved") and !c.encrypted()) if (cx.s.store.existingTimeline(c.id())) |tl| {
+        for (tl.items.items) |m| if (!m.isService()) return;
+    };
     flipped(cx);
     ui.begin(.{ .align_items = .center, .padding = .{ .top = 24, .bottom = 22 } }, .{});
     ui.begin(.{ .max_width = 360, .align_items = .center, .gap = 6, .padding = .{ .top = 24, .bottom = 20, .start = 24, .end = 24 }, .radius = 24, .background = col.surface_2 }, .{});
@@ -963,6 +967,7 @@ fn messageMenu(cx: Cx, chat_id: Id, item: Id) void {
     } else false;
     if (can(c, "pinMessages") and !m.deleted()) views.menuItem(cx, if (pinned) icons.unpin else icons.pin, if (pinned) t("Unpin") else t("Pin"), act(if (pinned) .unpin else .pin, id), false);
     if (content_ok and !c.o.b("protectedContent") and feature(s, "forwarding")) views.menuItem(cx, icons.forward, t("Forward"), act(.forward, id), false);
+    if (s.mode == .app) views.menuItem(cx, icons.selectCircle, t("Select"), act(.select, id), false);
     if (content_ok and !c.is("saved") and s.mode == .app and m.text().len > 0) views.menuItem(cx, icons.bookmark, t("Save to Saved Messages"), act(.save, id), false);
     if (j.arr(m.o.v, "reactions").len > 0) views.menuItem(cx, icons.heart, t("Reactions"), .{ .menu = .{ .reactions = id } }, false);
     const deletable = mine or can(c, "deleteMessages") or c.is("private") or c.is("saved") or c.is("bot") or !c.is("channel");
