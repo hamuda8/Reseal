@@ -22,6 +22,7 @@ const views = @import("views.zig");
 const crypto = @import("crypto.zig");
 const fmt = @import("fmt.zig");
 pub const compose = @import("compose.zig");
+pub const group = @import("group.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
 
@@ -113,6 +114,11 @@ pub const Field = enum {
     poll_o11,
     schedule_at,
     emoji_search,
+    info_title,
+    info_about,
+    chat_username,
+    admin_title,
+    invite_name,
 };
 
 pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
@@ -144,9 +150,9 @@ pub const Pane = union(enum) {
 
 pub const Picker = enum { new_message, new_group, add_contact, add_members, block };
 
-pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices };
+pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices, member, slow_mode, reactions_setting };
 
-pub const ConfirmKind = enum { logout, delete_chat, leave_chat, clear_history, delete_messages, start_fresh, block, unblock, delete_saved, remove_contact };
+pub const ConfirmKind = enum { logout, delete_chat, leave_chat, clear_history, delete_messages, start_fresh, block, unblock, delete_saved, remove_contact, ban_member, transfer_owner };
 
 pub const Modal = union(enum) {
     menu: struct { kind: MenuKind, target: Id = .{}, item: Id = .{} },
@@ -162,6 +168,8 @@ pub const Modal = union(enum) {
     join: Id,
     forward: Id,
     compose: compose.Sheet,
+    admin_rights: Id,
+    invite_new,
 };
 
 pub const Msg = union(enum) {
@@ -214,6 +222,7 @@ pub const Msg = union(enum) {
     send_text,
     attach,
     compose: compose.Act,
+    group: group.Act,
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
@@ -383,6 +392,7 @@ pub const State = struct {
     /// Bumped when a scheduled message was accepted (the scheduled list reloads).
     scheduled_count: u32 = 0,
     compose: compose.Compose = .{},
+    group: group.Group = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -488,6 +498,12 @@ pub const Op = union(enum) {
     embed_team,
     saved_save: Id,
     link_preview: u32,
+    group_requests: Id,
+    group_list: group.Page,
+    group_list_reload: group.Page,
+    group_changed: Id,
+    chat_patch: Id,
+    invite_created,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -825,6 +841,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (send.onAnswer(s, op, r)) return;
             if (media.onAnswer(s, op, r)) return;
             if (compose.onAnswer(s, op, r)) return;
+            if (group.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

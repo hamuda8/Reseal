@@ -22,6 +22,7 @@ const views = @import("views.zig");
 const vcompose = @import("view_compose.zig");
 const markdown = @import("markdown.zig");
 const rich = @import("rich.zig");
+const vgroup = @import("view_group.zig");
 const vlist = @import("view_list.zig");
 const media = @import("media.zig");
 const calls = @import("calls.zig");
@@ -33,20 +34,48 @@ const Color = zui.Color;
 const t = zui.i18n.t;
 const key = kit.key;
 
+/// What members can do by default in a group (Reseal-js ui/perm.js DEFAULT_PERMS).
+pub const default_perms = [_]struct { key: []const u8, on: bool }{
+    .{ .key = "sendMessages", .on = true },
+    .{ .key = "sendMedia", .on = true },
+    .{ .key = "sendVoice", .on = true },
+    .{ .key = "sendPolls", .on = true },
+    .{ .key = "sendLinks", .on = true },
+    .{ .key = "addMembers", .on = true },
+    .{ .key = "pinMessages", .on = false },
+    .{ .key = "changeInfo", .on = false },
+};
+
+fn eq(x: []const u8, y: []const u8) bool {
+    return std.mem.eql(u8, x, y);
+}
+
+/// The client's mirror of the server's permission rules (ui/perm.js can), only to show or hide
+/// controls.
 pub fn can(c: *const data.Chat, action: []const u8) bool {
     const me = c.me() orelse return false;
     if (!j.eqlStr(me, "status", "active")) return false;
-    if (c.is("private") or c.is("saved") or c.is("bot")) return !std.mem.eql(u8, action, "addMembers") and !std.mem.eql(u8, action, "changeInfo");
-    const role = c.role();
-    if (std.mem.eql(u8, role, "owner")) return true;
-    if (c.is("support")) return std.mem.eql(u8, role, "admin") or std.mem.startsWith(u8, action, "send");
-    if (std.mem.eql(u8, role, "admin")) {
-        if (c.is("channel") and std.mem.startsWith(u8, action, "send")) return j.field(me, "rights.postMessages") == null or j.truthy(me, "rights.postMessages");
+    if (c.is("private") or c.is("saved") or c.is("bot")) {
+        for ([_][]const u8{ "addMembers", "banUsers", "addAdmins", "changeInfo", "inviteUsers" }) |x| if (eq(x, action)) return false;
         return true;
+    }
+    const role = c.role();
+    if (eq(role, "owner")) return true;
+    if (c.is("support")) {
+        if (eq(role, "admin")) return true;
+        for ([_][]const u8{ "sendMessages", "sendMedia", "sendVoice", "sendLinks", "sendPolls" }) |x| if (eq(x, action)) return true;
+        return false;
+    }
+    if (eq(role, "admin")) {
+        if (c.is("group")) for (default_perms) |p| if (eq(p.key, action)) return true;
+        if (c.is("channel") and std.mem.startsWith(u8, action, "send")) return if (j.field(me, "rights.postMessages")) |v| !(v == .bool and !v.bool) else true;
+        if (j.field(me, "rights")) |r| if (j.field(r, action)) |v| if (v == .bool) return v.bool;
+        return !eq(action, "addAdmins");
     }
     if (c.is("channel")) return false;
     if (j.field(c.o.v, "permissions")) |p| if (j.field(p, action)) |v| if (v == .bool) return v.bool;
-    return std.mem.eql(u8, action, "sendMessages") or std.mem.eql(u8, action, "sendMedia") or std.mem.eql(u8, action, "addMembers");
+    for (default_perms) |p| if (eq(p.key, action)) return p.on;
+    return false;
 }
 
 pub fn isAdmin(c: *const data.Chat) bool {
@@ -746,6 +775,9 @@ pub fn menu(cx: Cx, kind: app.MenuKind, target: Id, item: Id) void {
         .chat_row => chatMenu(cx, target),
         .mute => muteMenu(cx, target),
         .message => messageMenu(cx, target, item),
+        .member => vgroup.memberMenu(cx, target, item),
+        .slow_mode => vgroup.slowModeMenu(cx),
+        .reactions_setting => vgroup.reactionsMenu(cx),
         .embed, .call_devices => {},
     }
 }
@@ -985,11 +1017,13 @@ pub fn infoPanel(cx: Cx) void {
     const ui = cx.ui;
     const s = cx.s;
     const col = cx.c;
-    const a = cx.a();
     ui.begin(.{ .width = .fill, .height = .fill }, .{});
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .height = .{ .px = theme.header_h }, .padding = .xy(14, 0) }, .{});
-    kit.iconButton(cx, icons.close, .close_info, .{});
-    ui.text(t("Info"), .{ .font_size = 20, .weight = 750, .color = col.text, .grow = 1, .width = .fill });
+    const gchat: ?*const data.Chat = if (s.user_info.isSet()) null else if (s.store.chat(s.info.str())) |c| (if (c.is("private") or c.is("bot") or c.is("saved")) null else c) else null;
+    if (gchat != null and s.group.page != .main) {
+        kit.iconButton(cx, icons.back, .{ .group = .{ .page = if (s.group.page == .admins or s.group.page == .banned) .edit else .main } }, .{ .rtl = icons.back_rtl });
+    } else kit.iconButton(cx, icons.close, .close_info, .{});
+    ui.text(if (gchat) |c| vgroup.pageTitle(s, c) orelse t("Info") else t("Info"), .{ .font_size = 20, .weight = 750, .color = col.text, .grow = 1, .width = .fill, .max_lines = 1 });
     ui.end();
     ui.beginScroll(.{ .grow = 1, .width = .fill, .height = .fill, .padding = .{ .start = 8, .end = 8, .bottom = 24 } }, key(.{"info"}));
     if (s.user_info.isSet()) {
@@ -998,42 +1032,13 @@ pub fn infoPanel(cx: Cx) void {
         if (c.is("private") or c.is("bot")) {
             if (s.store.peer(c)) |u| userCard(cx, u, c);
         } else {
-            ui.begin(.{ .align_items = .center, .gap = 6, .padding = .{ .top = 12, .bottom = 16 } }, .{});
-            vlist.chatAvatar(cx, c, 96);
-            ui.text(s.store.title(c), .{ .font_size = 22, .weight = 800, .color = col.text, .text_align = .center });
-            ui.text(status(cx, c).text, .{ .font_size = 14, .color = col.text_2, .text_align = .center });
-            ui.end();
-            if (c.o.s("about")) |about| if (about.len > 0) {
-                kit.sectionTitle(cx, t("About"));
-                ui.begin(.{ .padding = .xy(12, 4) }, .{});
-                ui.text(about, .{ .font_size = 15, .color = col.text, .line_height = 1.5 });
-                ui.end();
-            };
-            if (c.o.s("username")) |un| kit.row(cx, std.fmt.allocPrint(a, "@{s}", .{un}) catch "", .{ .icon = icons.at, .subtitle = t("Username") });
-            if (c.encrypted()) kit.row(cx, t("End-to-end encrypted"), .{ .icon = icons.lock, .subtitle = t("Messages are encrypted on members' devices.") });
-            if (s.members) |mres| if (s.members_chat.eql(c.id())) {
-                kit.sectionTitle(cx, fmt.tn(a, j.intOr(mres.v, "total", 0), "{n} member", "{n} members"));
-                if (can(c, "addMembers") and !c.is("channel")) kit.row(cx, t("Add members"), .{ .icon = icons.userPlus, .on = .{ .push_pane = .{ .picker = .add_members } } });
-                for (j.arr(mres.v, "members")) |m| {
-                    const u = j.obj(m, "user") orelse continue;
-                    const uid = j.strOr(u, "id", "");
-                    const role = j.strOr(m, "role", "");
-                    const obj = s.store.user(uid);
-                    const name = if (obj) |o| s.store.userName(o) else j.strOr(u, "displayName", "");
-                    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52, .padding = .xy(12, 6), .radius = theme.radius, .pressed_background = col.active }, .{ .on_press = .{ .open_user = Id.of(uid) }, .key = key(.{ "mem", uid }) });
-                    kit.avatar(cx, .{ .name = name, .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 42, .online = std.mem.eql(u8, j.strOr(u, "presence.status", ""), "online") }, 0);
-                    ui.begin(.{ .grow = 1, .width = .fill }, .{});
-                    ui.text(name, .{ .font_size = 15, .weight = 550, .color = col.text, .max_lines = 1 });
-                    ui.text(text.presenceText(if (obj) |o| o.get("presence") else j.field(u, "presence")), .{ .font_size = 13, .color = col.text_2, .max_lines = 1 });
-                    ui.end();
-                    if (std.mem.eql(u8, role, "owner") or std.mem.eql(u8, role, "admin")) ui.text(if (std.mem.eql(u8, role, "owner")) t("owner") else t("admin"), .{ .font_size = 12.5, .color = col.text_3 });
-                    ui.end();
-                }
-            };
+            vgroup.body(cx, c);
         }
-        ui.begin(.{ .padding = .{ .top = 12 } }, .{});
-        kit.row(cx, t("More actions"), .{ .icon = icons.more, .on = .{ .menu = .{ .menu = .{ .kind = .chat_row, .target = Id.of(c.id()) } } } });
-        ui.end();
+        if (c.is("private") or c.is("bot")) {
+            ui.begin(.{ .padding = .{ .top = 12 } }, .{});
+            kit.row(cx, t("More actions"), .{ .icon = icons.more, .on = .{ .menu = .{ .menu = .{ .kind = .chat_row, .target = Id.of(c.id()) } } } });
+            ui.end();
+        }
     }
     ui.end();
     ui.end();

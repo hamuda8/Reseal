@@ -23,6 +23,8 @@ const vset = @import("view_settings.zig");
 const vcall = @import("view_call.zig");
 const vcompose = @import("view_compose.zig");
 const compose = @import("compose.zig");
+const group = @import("group.zig");
+const vgroup = @import("view_group.zig");
 const markdown = @import("markdown.zig");
 
 const State = app.State;
@@ -74,7 +76,10 @@ pub fn onUi(s: *State, msg: Msg) void {
         .open_info => |id| {
             s.info = id;
             s.user_info = .{};
-            if (s.store.chat(id.str())) |c| if (!c.is("private") and !c.is("saved") and !c.is("bot")) loadMembers(s, id.str());
+            if (s.store.chat(id.str())) |c| if (!c.is("private") and !c.is("saved") and !c.is("bot")) {
+                group.opened(s, c);
+                if (!c.is("channel") or vchat.isAdmin(c)) loadMembers(s, id.str());
+            };
         },
         .close_info => {
             s.info = .{};
@@ -126,6 +131,7 @@ pub fn onUi(s: *State, msg: Msg) void {
         .send_text => compose.sendNow(s, .{}),
         .attach => s.modal = .{ .compose = .attach },
         .compose => |a| compose.act(s, a),
+        .group => |a| group.act(s, a),
         .located => |l| compose.onLocation(s, l),
         .cancel_reply => {
             if (s.editing.isSet()) s.fields.getPtr(.composer).clear();
@@ -410,6 +416,7 @@ fn confirm(s: *State) void {
         },
         .unblock => app.api(s, .DELETE, path("/blocks/{s}", .{chat}), null, .unblock),
         .remove_contact => app.api(s, .DELETE, path("/contacts/{s}", .{chat}), null, .contact_remove),
+        .ban_member, .transfer_owner => group.confirmed(s, x.kind, x.target, x.item),
     }
 }
 
@@ -1118,6 +1125,8 @@ fn modal(cx: Cx) void {
         .forward => vchat.forwardSheet(cx),
         .join => vchat.joinSheet(cx),
         .compose => |which| vcompose.sheet(cx, which),
+        .admin_rights => vgroup.adminRights(cx),
+        .invite_new => vgroup.inviteNew(cx),
     }
 }
 
@@ -1179,6 +1188,18 @@ fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id, target_item: Id) void 
         .remove_contact => {
             title = t("Remove contact");
             action = t("Remove");
+        },
+        .ban_member => {
+            const who = if (s.store.user(target_item.str())) |u| s.store.userName(u) else "";
+            title = fmt.tf("Ban {name}?", .{ .name = who });
+            text = t("They will be removed and cannot rejoin.");
+            action = t("Ban");
+        },
+        .transfer_owner => {
+            const who = if (s.store.user(target_item.str())) |u| s.store.userName(u) else "";
+            title = t("Transfer ownership?");
+            text = fmt.tf("{name} will become the owner. You will stay an admin.", .{ .name = who });
+            action = t("Transfer");
         },
     }
     const ui = cx.ui;

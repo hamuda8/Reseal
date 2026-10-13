@@ -227,3 +227,39 @@ test "multi-select: pick two messages, delete both" {
     try testing.expect(std.mem.indexOf(u8, body, "\"ids\":[\"m1\",\"m2\"]") != null);
     try testing.expect(!state().selecting);
 }
+
+test "group admin: members, admin rights, permissions, join requests" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"memberCount\":2,\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[],\"floor\":0}"));
+    D.R.dispatch(.{ .open_info = app.Id.of("g1") });
+    try testing.expect(D.respond("filter=requests", 200, "{\"members\":[{\"userId\":\"u7\",\"status\":\"requested\",\"user\":{\"id\":\"u7\",\"displayName\":\"Dan Saleh\"}}]}"));
+    try testing.expect(D.respond("/chats/g1/members?limit=200", 200, "{\"members\":[{\"userId\":\"65f1a2b3c4d5e6f708192a02\",\"role\":\"owner\",\"user\":{\"id\":\"65f1a2b3c4d5e6f708192a02\",\"displayName\":\"Bob Haddad\"}},{\"userId\":\"u3\",\"role\":\"member\",\"user\":{\"id\":\"u3\",\"displayName\":\"Carol Nasser\"}}],\"total\":2}"));
+    try testing.expect(D.findText("Group info") != 0);
+    try testing.expect(D.findText("1 join request") != 0);
+    // Carol: make her an admin without the right to ban.
+    try D.press("Manage");
+    try D.press("Make admin");
+    try D.press("Ban users");
+    try D.press("Save");
+    const body = lastPost("/chats/g1/members/u3/admin");
+    try testing.expect(std.mem.indexOf(u8, body, "\"banUsers\":false") != null);
+    try testing.expect(std.mem.indexOf(u8, body, "\"changeInfo\":true") != null);
+    // Edit: members may no longer add people.
+    D.R.dispatch(.{ .group = .{ .page = .edit } });
+    try D.press("Add members");
+    var patched: []const u8 = "";
+    for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, "/chats/g1") and std.mem.eql(u8, f.method, "PATCH")) {
+        patched = f.body;
+    };
+    try testing.expectEqualStrings("{\"permissions\":{\"addMembers\":false}}", patched);
+    // Join requests: approve Dan.
+    D.R.dispatch(.{ .group = .{ .page = .requests } });
+    try testing.expect(D.respond("filter=requests", 200, "{\"members\":[{\"userId\":\"u7\",\"status\":\"requested\",\"user\":{\"id\":\"u7\",\"displayName\":\"Dan Saleh\"}}]}"));
+    try D.press("Add");
+    try testing.expect(std.mem.indexOf(u8, lastPost("/chats/g1/requests/u7"), "\"approve\":true") != null);
+}
