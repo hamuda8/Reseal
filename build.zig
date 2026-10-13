@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
     // Wufour (Reseal-js's AUTH_HOST), where the phone apps sign in: POST <auth>/api/auth/login.
     // The default is AUTH_HOST's own default in Reseal-js (src/config.js); set it for real builds:
     //   zig build android -Dserver=https://... -Dauth=https://...
-    options.addOption([]const u8, "auth", b.option([]const u8, "auth", "Wufour sign-in host (AUTH_HOST) for the phone apps") orelse "http://localhost:4000");
+    options.addOption([]const u8, "auth", b.option([]const u8, "auth", "Wufour sign-in host (AUTH_HOST) for the phone apps") orelse "https://www.wreseal.com");
 
     core.addApp(b, b.dependency("zig_core", .{}), .{
         .client_config = options.createModule(),
