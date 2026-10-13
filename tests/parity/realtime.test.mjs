@@ -8,7 +8,8 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, client, socket, recorder, sleep } from './harness.mjs';
 
-let srv, wufour;
+let srv, wufour, openrouter;
+let aiSlow = false;
 const users = {
   'tok-amal': { userId: 'w-amal', username: 'amal_test', role: 'user' },
   'tok-badr': { userId: 'w-badr', username: 'badr_test', role: 'user' },
@@ -22,12 +23,24 @@ before(async () => {
     const user = users[token];
     res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(user ? { success: true, user } : { success: false }));
   });
-  srv = await startServer({ AUTH_HOST: wufour.url });
+  // A fake OpenRouter: "Hi there" in two pieces, or a slow stream that can be stopped.
+  openrouter = await recorder(async (req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    const pieces = aiSlow ? Array.from({ length: 40 }, (_, i) => `w${i} `) : ['Hi', ' there'];
+    for (const p of pieces) {
+      if (res.destroyed) return;
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: p } }] })}\n\n`);
+      if (aiSlow) await sleep(100);
+    }
+    res.end('data: [DONE]\n\n');
+  });
+  srv = await startServer({ AUTH_HOST: wufour.url, OPENROUTER_BASE_URL: openrouter.url });
 });
 
 after(async () => {
   await srv?.stop();
   await wufour?.close();
+  await openrouter?.close();
 });
 
 test('Bearer: a Wufour token signs in without cookies; bad or missing ones get 401 JSON', async () => {
@@ -158,4 +171,84 @@ test('group call: join, large signalling messages, media, reactions, end for eve
   assert.equal(calls.find(c => c.id === started.callId).status, 'ended');
   sa.close();
   sb.close();
+});
+
+test('private calls: decline, busy, and a caller who hangs up while it rings', async () => {
+  const amal = client(srv.base, 'tok-amal');
+  const badr = client(srv.base, 'tok-badr');
+  const carm = client(srv.base, 'tok-carm');
+  const bId = (await badr.get('/api/me')).user.id;
+  const cId = (await carm.get('/api/me')).user.id;
+  // Plain private chats need keys only to send messages; calls work without them.
+  const ab = (await amal.post('/api/chats/private', { userId: bId })).chat;
+  const cb = (await carm.post('/api/chats/private', { userId: bId })).chat;
+  const sa = await socket(srv.base, 'tok-amal');
+  const sb = await socket(srv.base, 'tok-badr');
+  const sc = await socket(srv.base, 'tok-carm');
+
+  const c1 = await sa.request('call.start', { chatId: ab.id, video: true });
+  assert.equal(c1.ringing, true);
+  const inc = await sb.wait('call.incoming', d => d.callId === c1.callId);
+  assert.equal(inc.video, true);
+  assert.equal(inc.callerConnId, sa.ready.connId);
+  // Carm calls Badr while he is being rung: busy.
+  const busy = await sc.request('call.start', { chatId: cb.id });
+  assert.equal(busy.busy, true);
+  sb.send('call.decline', { callId: c1.callId });
+  const declined = await sa.wait('call.ended', d => d.callId === c1.callId);
+  assert.equal(declined.status, 'declined');
+  const notice = await sa.wait('message', d => d.kind === 'service' && d.service.action === 'call' && d.service.result === 'declined');
+  assert.equal(notice.chatId, ab.id);
+
+  const c2 = await sa.request('call.start', { chatId: ab.id });
+  await sb.wait('call.incoming', d => d.callId === c2.callId);
+  sa.send('call.hangup', { callId: c2.callId });
+  const missed = await sb.wait('call.ended', d => d.callId === c2.callId);
+  assert.equal(missed.status, 'missed');
+  assert.equal(missed.reason, 'cancelled');
+  await assert.rejects(sb.request('call.accept', { callId: c2.callId }), (e) => e.code === 'call_ended');
+  // A connection that closes leaves its call.
+  const c3 = await sa.request('call.start', { chatId: ab.id });
+  await sb.request('call.accept', { callId: c3.callId });
+  sa.close();
+  const gone = await sb.wait('call.ended', d => d.callId === c3.callId);
+  assert.equal(gone.status, 'ended');
+  assert.equal(gone.reason, 'disconnected');
+  const { calls } = await badr.get('/api/calls');
+  assert.deepEqual(calls.slice(0, 4).map(c => c.status), ['ended', 'missed', 'busy', 'declined']);
+  assert.equal(calls[0].outgoing, false);
+  sb.close();
+  sc.close();
+});
+
+test('AI: a reply streams, can be regenerated, and can be stopped', async () => {
+  const amal = client(srv.base, 'tok-amal');
+  const { bot } = await amal.post('/api/bots', { name: 'Pal', model: 'x/y', apiKey: 'sk-test-0123456789', greeting: 'Welcome!' });
+  const sa = await socket(srv.base, 'tok-amal');
+  const { chat } = await amal.post('/api/chats/private', { userId: bot.id });
+  assert.equal(chat.type, 'bot');
+  await sa.wait('message', d => d.chatId === chat.id && d.text === 'Welcome!');
+  await amal.post(`/api/chats/${chat.id}/messages`, { text: 'Hello' });
+  const draft = await sa.wait('message', d => d.chatId === chat.id && d.streaming);
+  const done = await sa.wait('message.edit', d => d.id === draft.id && !d.streaming);
+  assert.equal(done.text, 'Hi there');
+  assert.equal(done.bot.markdown, true);
+  await amal.post(`/api/chats/${chat.id}/messages/${draft.id}/regenerate`);
+  const again = await sa.wait('message.edit', d => d.id === draft.id && !d.streaming && d.text === 'Hi there');
+  assert.ok(again);
+  await assert.rejects(amal.post(`/api/chats/${chat.id}/messages/${chat.id}/regenerate`), /400|404/);
+
+  aiSlow = true;
+  await amal.post(`/api/chats/${chat.id}/messages`, { text: 'Talk a lot' });
+  const slow = await sa.wait('message', d => d.chatId === chat.id && d.streaming);
+  await sa.wait('message.stream', d => d.id === slow.id);
+  const { stopped } = await amal.post(`/api/chats/${chat.id}/messages/${slow.id}/stop`);
+  assert.equal(stopped, true);
+  const end = await sa.wait('message.edit', d => d.id === slow.id && !d.streaming, 10000);
+  assert.equal(end.bot.stopped, true);
+  assert.ok(end.text.length > 0 && !end.text.includes('w39'));
+  aiSlow = false;
+  const { bots } = await amal.get('/api/bots');
+  assert.equal(bots[0].stats.replies, 3);
+  sa.close();
 });

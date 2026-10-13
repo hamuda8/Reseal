@@ -437,14 +437,17 @@ fn complete(r: *Rq, api_key: []const u8, bot: Val, messages: Val, g: *Generating
     }
     var usage: Val = .null;
     var buf: std.ArrayList(u8) = .empty;
-    var chunk: [4096]u8 = undefined;
     const started = A.nowMs();
     while (true) {
         if (g.stop.load(.acquire)) return error.Stopped;
         if (A.nowMs() - started > 180_000) return r.fail(502, "timeout", "ai_error");
-        const n = reader.readSliceShort(&chunk) catch break;
-        if (n == 0) break;
-        try buf.appendSlice(a, chunk[0..n]);
+        // Whatever has arrived, as soon as it arrives (a read into a fixed buffer would wait for
+        // it to fill, and the reply would show up all at once).
+        if (reader.bufferedLen() == 0) reader.fillMore() catch break;
+        const got = reader.buffered();
+        if (got.len == 0) break;
+        try buf.appendSlice(a, got);
+        reader.toss(got.len);
         while (std.mem.indexOfScalar(u8, buf.items, '\n')) |nl| {
             const line = std.mem.trim(u8, buf.items[0..nl], " \t\r");
             const rest = try a.dupe(u8, buf.items[nl + 1 ..]);
@@ -463,7 +466,8 @@ fn complete(r: *Rq, api_key: []const u8, bot: Val, messages: Val, g: *Generating
             }
             if (json.get("usage").truthy()) usage = json.get("usage");
         }
-        if (n < chunk.len and false) break;
+        // Deltas go out with each network read (the 60 ms batching of Reseal-js, without its timer).
+        try s.flush();
     }
     return usage;
 }
