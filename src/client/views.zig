@@ -853,6 +853,8 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) void {
             if (s.members_chat.eql(chat.str())) replaceObj(&s.members, v);
         },
         .reactions => replaceObj(&s.reactions_detail, v),
+        // Deleted for me only: the list's last message comes from the server again.
+        .delete_messages => |chat| app.api(s, .GET, path("/chats/{s}", .{chat.str()}), null, .{ .chat_refresh = chat }),
         .profile_save => {
             s.busy = false;
             if (j.obj(v, "user")) |u| app.setMe(s, u);

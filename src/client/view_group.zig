@@ -125,7 +125,7 @@ fn memberRow(cx: Cx, c: *const data.Chat, m: j.Value) void {
     var name = if (obj) |o| s.store.userName(o) else j.strOr(u, "displayName", "");
     if (me) name = std.fmt.allocPrint(cx.a(), "{s} ({s})", .{ name, t("you") }) catch name;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52, .padding = .xy(12, 6), .radius = theme.radius, .pressed_background = col.active }, .{ .on_press = if (me) null else Msg{ .open_user = Id.of(uid) }, .key = key(.{ "mem", uid }) });
-    kit.avatar(cx, .{ .name = name, .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 42, .online = eq(j.strOr(u, "presence.status", ""), "online") }, 0);
+    kit.avatar(cx, .{ .name = if (obj) |o| s.store.userName(o) else j.strOr(u, "displayName", ""), .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 42, .online = eq(j.strOr(u, "presence.status", ""), "online") }, 0);
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
     ui.text(name, .{ .font_size = 15, .weight = 550, .color = col.text, .max_lines = 1 });
     ui.text(if (j.truthy(u, "isBot")) t("bot") else text.presenceText(if (obj) |o| o.get("presence") else j.field(u, "presence")), .{ .font_size = 13, .color = col.text_2, .max_lines = 1 });
