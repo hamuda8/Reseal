@@ -288,6 +288,7 @@ pub const Embed = struct {
     host_ready: bool = false,
     init_done: bool = false,
     token_waiting: bool = false,
+    unread_sent: i64 = -1,
 };
 
 pub const State = struct {
@@ -486,6 +487,14 @@ pub fn update(s: *State, msg: Msg, e: zui.Env, f: zui.Fx(Msg)) void {
         fx.after(1000, .frame);
     }
     updateWidget(s);
+    // The page around the widget shows the unread count on its button (embed.js).
+    if (s.mode == .embed and s.phase == .ready) {
+        const n = s.store.totals().unread;
+        if (n != s.embed.unread_sent) {
+            s.embed.unread_sent = n;
+            post(std.fmt.allocPrint(tmp(), "{{\"type\":\"reseal:unread\",\"count\":{d}}}", .{n}) catch return);
+        }
+    }
 }
 
 fn handle(s: *State, msg: Msg) void {
@@ -518,7 +527,10 @@ fn handle(s: *State, msg: Msg) void {
             s.unlock_error.clear();
         },
         .start_fresh => s.modal = .{ .confirm = .{ .kind = .start_fresh } },
-        .call => |a| calls.act(s, a),
+        .call => |a| {
+            if (a != .mute and a != .camera and a != .screen and a != .switch_camera) s.modal = null;
+            calls.act(s, a);
+        },
         .media => |ev| calls.onMediaEvent(s, ev),
         .call_event => |ev| calls.onSystem(s, ev.kind, ev.id),
         .peer => |ev| calls.onPeerEvent(s, ev),

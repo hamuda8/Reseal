@@ -46,6 +46,11 @@ fn replaceObj(slot: *?*data.Obj, v: ?j.Value) void {
 // What buttons do
 
 pub fn onUi(s: *State, msg: Msg) void {
+    // Choices made in a sheet close it.
+    switch (msg) {
+        .nav, .push_pane, .open_chat, .open_info, .open_user, .open_media, .download, .start_global, .open_wufour, .embed_open, .retry_send, .cancel_send => s.modal = null,
+        else => {},
+    }
     switch (msg) {
         .nav => |sec| {
             s.section = sec;

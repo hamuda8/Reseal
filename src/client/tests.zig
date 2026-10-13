@@ -125,3 +125,26 @@ test "widget: handshake with the page, token, signed-out without one" {
     };
     try testing.expect(auth);
 }
+
+test "new group: pick people, name it, create" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[]}"));
+    D.R.dispatch(.{ .menu = .{ .menu = .{ .kind = .compose } } });
+    try D.press("New group");
+    try testing.expect(state().modal == null);
+    try testing.expect(D.respond("/api/contacts", 200, "{\"contacts\":[{\"id\":\"u3\",\"displayName\":\"Carol Nasser\",\"username\":\"carol\",\"color\":4}]}"));
+    try D.press("Carol Nasser");
+    try testing.expectEqual(@as(usize, 1), state().picked.items.len);
+    try D.press("Next");
+    try D.typeInto("Group name", "Launch crew");
+    try D.press("Create");
+    var body: []const u8 = "";
+    for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, "/api/chats") and std.mem.eql(u8, f.method, "POST")) {
+        body = f.body;
+    };
+    try testing.expect(std.mem.indexOf(u8, body, "\"members\":[\"u3\"]") != null);
+    try testing.expect(std.mem.indexOf(u8, body, "\"title\":\"Launch crew\"") != null);
+}
