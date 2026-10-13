@@ -139,6 +139,7 @@ pub fn onUi(s: *State, msg: Msg) void {
         .folder => |a| @import("folders.zig").act(s, a),
         .chat_lock => |a| @import("chatlock.zig").act(s, a),
         .export_chat => |a| @import("export.zig").act(s, a),
+        .bots => |a| @import("bots.zig").act(s, a),
         .located => |l| compose.onLocation(s, l),
         .cancel_reply => {
             if (s.editing.isSet()) s.fields.getPtr(.composer).clear();
@@ -1175,6 +1176,7 @@ fn modal(cx: Cx) void {
         .chat_lock_off => @import("chatlock.zig").offSheet(cx),
         .export_options => @import("export.zig").optionsSheet(cx),
         .export_progress => @import("export.zig").progressSheet(cx),
+        .model_picker => @import("bots.zig").modelSheet(cx),
     }
 }
 

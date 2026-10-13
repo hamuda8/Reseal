@@ -26,6 +26,7 @@ pub const group = @import("group.zig");
 pub const folders = @import("folders.zig");
 pub const chatlock = @import("chatlock.zig");
 pub const exporter = @import("export.zig");
+pub const bots = @import("bots.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
 
@@ -128,6 +129,16 @@ pub const Field = enum {
     lock_current,
     export_from,
     export_to,
+    bot_name,
+    bot_username,
+    bot_description,
+    bot_prompt,
+    bot_greeting,
+    bot_starters,
+    bot_key,
+    bot_max_tokens,
+    bot_context,
+    model_search,
 };
 
 pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
@@ -157,6 +168,8 @@ pub const Pane = union(enum) {
     saved_edit: Id,
     folders,
     chat_lock,
+    bots,
+    bot_edit,
 };
 
 pub const Picker = enum { new_message, new_group, add_contact, add_members, block };
@@ -187,6 +200,7 @@ pub const Modal = union(enum) {
     chat_lock_off,
     export_options,
     export_progress,
+    model_picker,
 };
 
 pub const Msg = union(enum) {
@@ -249,6 +263,7 @@ pub const Msg = union(enum) {
     folder: folders.Act,
     chat_lock: chatlock.Act,
     export_chat: exporter.Act,
+    bots: bots.Act,
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
@@ -429,6 +444,7 @@ pub const State = struct {
     folder: folders.Editor = .{},
     lock: chatlock.Lock = .{},
     exporter: exporter.Export = .{},
+    bots: bots.Bots = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -548,6 +564,11 @@ pub const Op = union(enum) {
     export_info: u32,
     export_chunk: struct { seq: u32, index: u32 },
     export_plain: u32,
+    bots_mine,
+    bots_discover,
+    bots_models,
+    bots_saved,
+    bots_deleted,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -909,6 +930,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (folders.onAnswer(s, op, r)) return;
             if (chatlock.onAnswer(s, op, r)) return;
             if (exporter.onAnswer(s, op, r)) return;
+            if (bots.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

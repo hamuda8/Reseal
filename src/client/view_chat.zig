@@ -799,6 +799,7 @@ fn composeMenu(cx: Cx) void {
     views.menuItem(cx, icons.users, t("New group"), .{ .push_pane = .{ .picker = .new_group } }, false);
     views.menuItem(cx, icons.megaphone, t("New channel"), .{ .push_pane = .{ .group_details = .channel } }, false);
     views.menuItem(cx, icons.bookmark, t("New saved chat"), .{ .push_pane = .{ .saved_edit = .{} } }, false);
+    if (cx.s.mode == .app) views.menuItem(cx, icons.sparkles, t("Chat with AI"), .{ .bots = .open_list }, false);
     views.endSheet(cx);
 }
 
