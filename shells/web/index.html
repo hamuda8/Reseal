@@ -2,26 +2,153 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2563eb">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#6c5cff">
+  <meta name="description" content="Reseal: private, end-to-end encrypted messaging, calls and AI chat by Wufour.">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/icons/apple-touch-icon.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Reseal">
   <title>Reseal</title>
   <style>
-    /* Fonts zui uses for text (the same stack as Maps-js). Everything else is drawn by zui. */
+    /* Fonts zui uses for text (Reseal-js's stack). Everything else is drawn by zui. */
     :root {
-      --zui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans Arabic", Tahoma, sans-serif;
-      --zui-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      --zui-font: "Inter", system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+      --zui-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
     }
-    html, body { margin: 0; height: 100%; }
-    body { font-family: var(--zui-font); -webkit-text-size-adjust: 100%; }
+    html, body { margin: 0; height: 100%; background: #ffffff; }
+    body { font-family: var(--zui-font); -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; overflow: hidden; }
+    @media (prefers-color-scheme: dark) { html, body { background: #11131b; } }
+    #app { position: fixed; inset: 0; }
+    /* Thin, quiet scrollbars like the web app's. */
+    * { scrollbar-width: thin; scrollbar-color: rgba(127,127,140,.35) transparent; }
   </style>
 </head>
 <body>
+  <div id="app"></div>
   <script type="module">
+    // The Reseal web shell: starts the Zig app (app.wasm on zui.js) and carries what zui's web
+    // host does not: secure random bytes and the clock (the app's own CSPRNG is seeded from
+    // crypto.getRandomValues), file picking and saving, Web Push, and the embedded widget's
+    // conversation with the page around it (/sdk/reseal.js), with origin checks.
     import { start } from '/zui.js';
-    start('/app.wasm');
+
+    const embedded = location.pathname.startsWith('/embed');
+    const inFrame = window.parent !== window;
+    let app = null;
+    let allowed = [];
+    let hostOrigin = null;
+    const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+    const send = (obj) => app && setTimeout(() => app.send(JSON.stringify(obj)), 0);
+    const env = (t) => ({ t, seed: b64(crypto.getRandomValues(new Uint8Array(32))), now: Date.now(), tz: -new Date().getTimezoneOffset(), visible: document.visibilityState === 'visible' });
+
+    // ---- Files: Attach and Download ----
+    async function pick() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.onchange = async () => {
+        for (const file of input.files) {
+          const data = b64(new Uint8Array(await file.arrayBuffer()));
+          const msg = { t: 'file', name: file.name, type: file.type || 'application/octet-stream', size: file.size, data };
+          // Pictures: size and a tiny preview (as Reseal-js preparePhoto does).
+          if (/^image\//.test(file.type)) {
+            try {
+              const bmp = await createImageBitmap(file);
+              msg.w = bmp.width; msg.h = bmp.height;
+              const scale = 40 / Math.max(bmp.width, bmp.height);
+              const c = document.createElement('canvas');
+              c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
+              c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+              msg.thumb = c.toDataURL('image/jpeg', 0.6);
+            } catch {}
+          }
+          send(msg);
+        }
+      };
+      input.click();
+    }
+    function save(name, url) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name || 'file';
+      document.body.append(a);
+      a.click();
+      a.remove();
+    }
+
+    // ---- Web Push: subscribe this browser once notifications are allowed ----
+    async function pushSetup(key) {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !key) return;
+      const subscribe = async () => {
+        if (Notification.permission !== 'granted') return;
+        const reg = await navigator.serviceWorker.ready;
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          const raw = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice((key.length + 2) % 4 || 4)), (c) => c.charCodeAt(0));
+          sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw });
+        }
+        await fetch('/api/push/subscribe', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Reseal-Client': 'web' }, body: JSON.stringify(sub.toJSON()) });
+      };
+      if (Notification.permission === 'granted') return subscribe().catch(() => {});
+      if (Notification.permission === 'default') {
+        // Browsers want a tap before asking.
+        addEventListener('pointerdown', () => Notification.requestPermission().then(subscribe).catch(() => {}), { once: true });
+      }
+    }
+
+    // ---- Messages from the app ----
+    function onPost(text) {
+      let msg;
+      try { msg = JSON.parse(text); } catch { return; }
+      switch (msg.t) {
+        case 'pick': return pick();
+        case 'save': return save(msg.name, msg.url);
+        case 'push': return pushSetup(msg.key);
+        case 'origins': allowed = Array.isArray(msg.origins) ? msg.origins : []; return;
+      }
+      // Anything else is for the page that embeds the widget.
+      if (inFrame) window.parent.postMessage(msg, hostOrigin || '*');
+    }
+
+    // ---- The embedding page (embed.js's handshake, with its origin checks) ----
+    const allowedOrigin = (o) => o === location.origin || allowed.includes(o);
+    addEventListener('message', (e) => {
+      if (e.source === window.parent && inFrame) {
+        if (!allowedOrigin(e.origin)) return;
+        if (e.data?.type === 'reseal:init') hostOrigin = e.origin;
+        send(e.data);
+      }
+    });
+
+    // ---- Rotated scroll views (the chat's message list) scroll the right way with a wheel ----
+    addEventListener('wheel', (e) => {
+      for (let el = e.target; el && el !== document.body; el = el.parentElement) {
+        if (el.style && el.style.transform.includes('rotate(180deg)') && el.scrollHeight > el.clientHeight) {
+          e.preventDefault();
+          el.scrollTop -= e.deltaY;
+          return;
+        }
+      }
+    }, { passive: false, capture: true });
+
+    // The widget mounts into an element so zui.js does not take the parent page's messages itself
+    // (the shell checks their origin first); the app fills the window and keeps its address.
+    const mount = embedded ? document.getElementById('app') : document.body;
+    app = await start('/app.wasm', mount, { onPost, link: location.pathname + location.search + location.hash });
+    send(env('env'));
+    setInterval(() => send(env('clock')), 20000);
+    const visible = () => send({ t: 'visible', visible: document.visibilityState === 'visible' && document.hasFocus() });
+    document.addEventListener('visibilitychange', visible);
+    addEventListener('focus', visible);
+    addEventListener('blur', visible);
+    // A notification was tapped (service worker): open that chat.
+    navigator.serviceWorker?.addEventListener('message', (e) => {
+      if (e.data?.type === 'open-chat' && e.data.chatId && !embedded) location.href = `/c/${e.data.chatId}`;
+    });
+    if ('serviceWorker' in navigator && !embedded) navigator.serviceWorker.register('/sw.js').catch(() => {});
   </script>
 </body>
 </html>

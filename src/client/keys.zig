@@ -185,8 +185,16 @@ pub fn unlockSubmit(s: *State) void {
 }
 
 fn boxOf(v: ?j.Value, key: []const u8) ?crypto.Box {
+    // Read field by field: the server's boxes may carry nulls or extra fields.
     const b = j.obj(v, key) orelse return null;
-    return std.json.parseFromValueLeaky(crypto.Box, tmp(), b, .{ .ignore_unknown_fields = true }) catch null;
+    return .{
+        .v = j.intOr(b, "v", 1),
+        .kdf = j.strOr(b, "kdf", ""),
+        .iter = @intCast(std.math.clamp(j.intOr(b, "iter", crypto.pbkdf2_iterations), 1, 10_000_000)),
+        .salt = j.strOr(b, "salt", ""),
+        .iv = j.str(b, "iv") orelse return null,
+        .ct = j.str(b, "ct") orelse return null,
+    };
 }
 
 fn identityB64(id: crypto.Identity) struct { enc: []const u8, sig: []const u8 } {
@@ -214,20 +222,27 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
         },
         .keys_restore => {
             if (!r.ok()) {
+                zui.log("key restore failed: {d} {s}", .{ r.status, r.body[0..@min(r.body.len, 200)] });
                 s.phase = .locked;
                 return true;
             }
             const box = boxOf(v, "escrow") orelse {
+                zui.log("key restore: no backup in the answer", .{});
                 s.phase = .locked;
                 return true;
             };
-            const id = crypto.unlockWithEscrow(a, box, j.strOr(v, "escrowKey", "")) catch {
-                if (s.mode == .embed) return setupAutomatic(s, true) == {};
+            const id = crypto.unlockWithEscrow(a, box, j.strOr(v, "escrowKey", "")) catch |e| {
+                zui.log("key restore: backup did not open: {s}", .{@errorName(e)});
+                if (s.mode == .embed) {
+                    setupAutomatic(s, true);
+                    return true;
+                }
                 s.phase = .locked;
                 return true;
             };
             const b = identityB64(id);
             if (!std.mem.eql(u8, b.enc, j.strOr(v, "enc", ""))) {
+                zui.log("key restore: the backup holds other keys ({s} vs {s})", .{ b.enc, j.strOr(v, "enc", "") });
                 s.phase = .locked;
                 return true;
             }
@@ -425,7 +440,9 @@ pub fn advancedSubmit(s: *State) void {
 // Users we need (wrappers' and senders' public keys), looked up in batches
 
 pub fn want(s: *State, user_id: []const u8) void {
-    if (user_id.len == 0 or s.store.user(user_id) != null) return;
+    if (user_id.len == 0) return;
+    // Known with keys: nothing to ask. (Known without keys: ask once, they may have set them up.)
+    if (s.store.user(user_id)) |u| if (u.get("keys") != null) return;
     if (s.keys.asked.contains(user_id) or s.keys.wanted.contains(user_id)) return;
     s.keys.wanted.put(gpa, gpa.dupe(u8, user_id) catch return, {}) catch {};
 }

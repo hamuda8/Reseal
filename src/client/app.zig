@@ -349,6 +349,9 @@ pub const State = struct {
     read_pending: std.ArrayList(struct { chat: Id, seq: i64 }) = .empty,
     embed: Embed = .{},
     widget_sig: u64 = 0,
+    /// Opened at /c/<id> or /@name: the chat to show once the list is in.
+    pending_open: Id = .{},
+    pending_username: Id = .{},
     call_ticking: bool = false,
 };
 
@@ -400,6 +403,7 @@ pub const Op = union(enum) {
     msg_search: u32,
     picker_search: u32,
     open_private,
+    open_username,
     open_wufour,
     create_group,
     contacts,
@@ -560,6 +564,10 @@ fn start(s: *State) void {
         api(s, .GET, std.fmt.allocPrint(tmp(), "/embed/config?pk={s}", .{j.urlEncode(tmp(), s.embed.pk.get()) catch ""}) catch return, null, .embed_config);
         return;
     }
+    // Addresses: /c/<chat id>, /@username (router.js).
+    const path_only = link[0 .. std.mem.indexOfAny(u8, link, "?#") orelse link.len];
+    if (std.mem.startsWith(u8, path_only, "/c/") and path_only.len >= 27) s.pending_open = Id.of(path_only[3..27]);
+    if (std.mem.startsWith(u8, path_only, "/@") and path_only.len > 2) s.pending_username = Id.of(std.mem.trimEnd(u8, path_only[2..], "/"));
     if (native_auth) {
         const token = zui.storage.get(tmp(), "token", .{ .secure = true }) orelse {
             s.phase = .login;
@@ -683,6 +691,9 @@ pub fn keysReady(s: *State) void {
     api(s, .GET, "/chats", null, .chats);
     api(s, .GET, "/folders", null, .folders);
     connect(s);
+    // Web Push (the shell subscribes this browser once notifications are allowed).
+    if (zui.platform == .web and s.mode == .app) if (s.store.config) |cfg| if (cfg.s("push.vapidPublicKey")) |k|
+        post(std.fmt.allocPrint(tmp(), "{{\"t\":\"push\",\"key\":{s}}}", .{j.quote(tmp(), k) catch return}) catch return);
 }
 
 // ---------------------------------------------------------------------------------------------

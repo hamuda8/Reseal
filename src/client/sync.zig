@@ -45,6 +45,16 @@ pub fn onChats(s: *State, r: zui.Response) void {
     s.store.chats_loaded = true;
     // An embedded widget may open a chat right away.
     if (s.mode == .embed) @import("views.zig").embedAfterChats(s);
+    if (s.pending_open.isSet()) {
+        const id = s.pending_open;
+        s.pending_open = .{};
+        @import("views.zig").openChat(s, id.str());
+    }
+    if (s.pending_username.isSet()) {
+        const name = s.pending_username;
+        s.pending_username = .{};
+        app.api(s, .GET, std.fmt.allocPrint(tmp(), "/chats/by-username/{s}", .{j.urlEncode(tmp(), name.str()) catch return}) catch return, null, .open_username);
+    }
     if (s.open_chat.isSet()) {
         if (s.store.chat(s.open_chat.str()) == null) s.open_chat = .{};
     }

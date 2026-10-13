@@ -223,6 +223,7 @@ pub fn openChat(s: *State, id: []const u8) void {
         s.show_count = 60;
     }
     s.open_chat = Id.of(id);
+    if (s.mode == .app) app.fx.setLink(path("/c/{s}", .{id}));
     s.searching = false;
     s.info = .{};
     s.user_info = .{};
@@ -243,6 +244,7 @@ pub fn openChat(s: *State, id: []const u8) void {
 
 fn closeChat(s: *State) void {
     sync.cancelTyping(s);
+    if (s.mode == .app and s.open_chat.isSet()) app.fx.setLink("/");
     s.open_chat = .{};
     s.info = .{};
     s.user_info = .{};
@@ -640,6 +642,14 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) void {
             if (c.last) |m| keys.hydrate(s, c.id(), m);
             s.panes.clearRetainingCapacity();
             openChat(s, c.id());
+        },
+        .open_username => {
+            if (j.obj(v, "user")) |u| {
+                app.api(s, .POST, "/chats/private", path("{{\"userId\":\"{s}\"}}", .{j.strOr(u, "id", "")}), .open_private);
+            } else if (j.obj(v, "chat")) |raw| {
+                const c = s.store.putChat(raw) catch return;
+                openChat(s, c.id());
+            }
         },
         .open_wufour => {
             // /embed/resolve: {userId} or {chatId}

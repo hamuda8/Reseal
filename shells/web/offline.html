@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#6c5cff">
+  <title>Reseal</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.json">
+  <!-- Shown by the service worker when a page that was never opened on this device is requested offline. -->
+  <style>
+    :root { color-scheme: light dark; }
+    html, body { margin: 0; height: 100%; }
+    body { display: flex; align-items: center; justify-content: center; padding: 28px 24px; box-sizing: border-box;
+      font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Arabic", Tahoma, sans-serif; background: #e9ebf3; color: #12141c; }
+    @media (prefers-color-scheme: dark) { body { background: #07080d; color: #eceef5; } p { color: #9097a8 !important; } }
+    .card { max-width: 360px; text-align: center; }
+    img { width: 64px; height: 64px; margin-bottom: 22px; }
+    h1 { margin: 0 0 10px; font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
+    p { margin: 0 0 26px; color: #5f6678; }
+    a { display: inline-flex; align-items: center; justify-content: center; height: 52px; padding: 0 28px; border-radius: 16px;
+      background: #5e74ff; color: #fff; font-weight: 650; text-decoration: none; width: 100%; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/icon.svg" alt="">
+    <h1 data-ar="أنت غير متصل">You are offline</h1>
+    <p data-ar="تعذّر فتح هذه الصفحة بدون اتصال. ستفتح تلقائيًا عند عودة الاتصال.">This page cannot open without a connection. It will open by itself when you are back online.</p>
+    <a href="" data-ar="إعادة المحاولة">Try again</a>
+  </div>
+  <script>
+    if ((navigator.language || '').startsWith('ar')) {
+      document.documentElement.dir = 'rtl';
+      document.documentElement.lang = 'ar';
+      for (const el of document.querySelectorAll('[data-ar]')) el.textContent = el.dataset.ar;
+    }
+    addEventListener('online', () => location.reload());
+  </script>
+</body>
+</html>

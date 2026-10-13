@@ -258,12 +258,20 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
             const v = j.parse(tmp(), r.body);
             const tl = s.store.timeline(chat) catch return true;
             if (j.obj(v, "message")) |raw| {
+                // The socket may have delivered it first (and replaced the pending copy).
+                if (tl.findPending(x.local) == null and tl.find(j.strOr(raw, "id", "")) != null) {
+                    removeOut(s, x.local);
+                    pump(s, chat);
+                    return true;
+                }
                 const m = data.newMessage(raw) catch return true;
                 if (tl.findPending(x.local)) |local| {
                     if (local.content) |c| m.content = j.clone(m.o.alloc(), c) catch null;
                 }
-                m.decrypt = .ok;
-                m.verified = true;
+                if (m.content != null) {
+                    m.decrypt = .ok;
+                    m.verified = true;
+                } else @import("keys.zig").hydrate(s, chat, m);
                 if (m.seq() != null) {
                     if (s.store.chat(chat)) |c| {
                         if (c.last == null or (m.seq() orelse 0) >= (c.last.?.seq() orelse 0)) {
