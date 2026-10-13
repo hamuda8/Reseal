@@ -458,11 +458,16 @@ fn filterChips(cx: Cx) void {
     if (any_ai) chip(cx, t("AI"), counts[5], s.filter == .ai, .{ .filter = .ai });
     if (s.store.folders) |f| for (j.arr(f.v, "folders")) |x| {
         const id = j.strOr(x, "id", "");
-        const emoji = j.strOr(x, "emoji", "");
-        const label = if (emoji.len > 0) std.fmt.allocPrint(cx.a(), "{s} {s}", .{ emoji, j.strOr(x, "name", "") }) catch "" else j.strOr(x, "name", "");
+        // The folder's name only: the app's chrome shows no emoji.
+        const label = j.strOr(x, "name", "");
         const active = s.filter == .folder and s.filter.folder.eql(id);
         chip(cx, label, 0, active, .{ .filter = .{ .folder = Id.of(id) } });
     };
+    if (s.mode == .app) {
+        ui.begin(.{ .width = .{ .px = 32 }, .height = .{ .px = 32 }, .radius = 11, .background = cx.c.surface_2, .align_items = .center, .justify = .center }, .{ .on_press = .{ .push_pane = .folders }, .key = key(.{"chip-folders"}) });
+        ui.icon(icons.plus, 16, cx.c.text_2, .{}, 0);
+        ui.end();
+    }
     ui.end();
 }
 

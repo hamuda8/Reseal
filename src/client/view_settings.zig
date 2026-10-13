@@ -54,6 +54,7 @@ pub fn settingsRoot(cx: Cx) void {
     kit.row(cx, t("Notifications and sounds"), .{ .icon = icons.bell, .on = .{ .push_pane = .notifications } });
     kit.row(cx, t("Privacy and security"), .{ .icon = icons.lock, .on = .{ .push_pane = .privacy } });
     kit.row(cx, t("Appearance"), .{ .icon = icons.palette, .on = .{ .push_pane = .appearance } });
+    kit.row(cx, t("Chat folders"), .{ .icon = icons.folder, .on = .{ .push_pane = .folders } });
     kit.row(cx, t("Language"), .{ .icon = icons.globe, .value = if (s.lang == .ar) "العربية" else "English", .on = .{ .push_pane = .language } });
     ui.end();
     kit.divider(cx);
@@ -78,6 +79,7 @@ pub fn pane(cx: Cx, p: app.Pane) void {
         .picker => |k| picker(cx, k),
         .group_details => |k| groupDetails(cx, k == .channel),
         .saved_edit => |id| savedEdit(cx, id),
+        .folders => foldersPane(cx),
         .archive => {},
     }
 }
@@ -97,6 +99,17 @@ fn profile(cx: Cx) void {
     kit.field(cx, .profile_bio, .{ .label = t("Bio"), .hint = t("Any details such as age, occupation or city.") });
     if (me.s("appId") == null) kit.field(cx, .profile_username, .{ .label = t("Username"), .placeholder = "username" });
     kit.button(cx, t("Save"), .save_profile, .{ .block = true, .busy = s.busy });
+    ui.end();
+    ui.end();
+}
+
+fn foldersPane(cx: Cx) void {
+    const ui = cx.ui;
+    ui.begin(.{ .width = .fill, .height = .fill }, .{});
+    vlist.paneHeader(cx, t("Chat folders"), true, false);
+    vlist.endHeader(cx);
+    body(cx, "folders");
+    @import("folders.zig").pane(cx);
     ui.end();
     ui.end();
 }

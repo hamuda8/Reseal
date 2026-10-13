@@ -778,6 +778,7 @@ pub fn menu(cx: Cx, kind: app.MenuKind, target: Id, item: Id) void {
         .member => vgroup.memberMenu(cx, target, item),
         .slow_mode => vgroup.slowModeMenu(cx),
         .reactions_setting => vgroup.reactionsMenu(cx),
+        .folder_pick => @import("folders.zig").pickSheet(cx, target),
         .embed, .call_devices => {},
     }
 }
@@ -819,6 +820,7 @@ fn chatMenu(cx: Cx, target: Id) void {
         views.menuItem(cx, if (c.archived()) icons.unarchive else icons.archive, if (c.archived()) t("Unarchive") else t("Archive"), act(if (c.archived()) .unarchive else .archive, id), false);
     }
     views.menuItem(cx, if (unread) icons.checks else icons.chat, if (unread) t("Mark as read") else t("Mark as unread"), act(if (unread) .mark_read else .mark_unread, id), false);
+    if (s.mode == .app) views.menuItem(cx, icons.folder, t("Add to folder"), act(.add_to_folder, id), false);
     if (c.is("saved")) views.menuItem(cx, icons.edit, t("Edit"), act(.saved_edit, id), false);
     if (c.is("private")) {
         if (s.store.peer(c)) |p| {

@@ -263,3 +263,26 @@ test "group admin: members, admin rights, permissions, join requests" {
     try D.press("Add");
     try testing.expect(std.mem.indexOf(u8, lastPost("/chats/g1/requests/u7"), "\"approve\":true") != null);
 }
+
+test "folders: create one with groups and a chat, then filter by it" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}},{\"id\":\"p1\",\"type\":\"private\",\"peer\":{\"id\":\"u3\",\"displayName\":\"Carol Nasser\"},\"me\":{\"role\":\"member\",\"status\":\"active\",\"unread\":0}}]}"));
+    D.R.dispatch(.{ .folder = .create });
+    try D.typeInto("Folder name", "Work");
+    // ("Groups" is also a chip of the chat list behind the sheet.)
+    D.R.dispatch(.{ .folder = .{ .kind = 2 } });
+    D.R.dispatch(.{ .folder = .{ .toggle_chat = app.Id.of("p1") } });
+    try D.press("Save");
+    const body = lastPost("/api/folders");
+    try testing.expect(std.mem.indexOf(u8, body, "\"name\":\"Work\"") != null);
+    try testing.expect(std.mem.indexOf(u8, body, "\"include\":[\"groups\"]") != null);
+    try testing.expect(std.mem.indexOf(u8, body, "\"chatIds\":[\"p1\"]") != null);
+    // The list asked at boot, the new folder, then the list again.
+    try testing.expect(D.respond("/api/folders", 200, "{\"folders\":[]}"));
+    try testing.expect(D.respond("/api/folders", 200, "{\"folder\":{\"id\":\"f1\"}}"));
+    try testing.expect(D.respond("/api/folders", 200, "{\"folders\":[{\"id\":\"f1\",\"name\":\"Work\",\"include\":[\"groups\"],\"chatIds\":[\"p1\"],\"excludeChatIds\":[]}]}"));
+    try testing.expect(D.findText("Work") != 0);
+}

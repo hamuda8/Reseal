@@ -132,6 +132,7 @@ pub fn onUi(s: *State, msg: Msg) void {
         .attach => s.modal = .{ .compose = .attach },
         .compose => |a| compose.act(s, a),
         .group => |a| group.act(s, a),
+        .folder => |a| @import("folders.zig").act(s, a),
         .located => |l| compose.onLocation(s, l),
         .cancel_reply => {
             if (s.editing.isSet()) s.fields.getPtr(.composer).clear();
@@ -352,6 +353,7 @@ fn chatAction(s: *State, what: app.ChatAction, chat: []const u8) void {
         .mark_unread => setChatState(s, chat, "{\"markedUnread\":true}"),
         .delete => s.modal = .{ .confirm = .{ .kind = if (c.is("saved") and !c.o.b("primary")) .delete_saved else if (c.is("saved")) .clear_history else .delete_chat, .target = Id.of(chat) } },
         .leave => s.modal = .{ .confirm = .{ .kind = .leave_chat, .target = Id.of(chat) } },
+        .add_to_folder => s.modal = .{ .menu = .{ .kind = .folder_pick, .target = Id.of(chat) } },
         .clear => s.modal = .{ .confirm = .{ .kind = .clear_history, .target = Id.of(chat) } },
         .block => s.modal = .{ .confirm = .{ .kind = .block, .target = Id.of(chat) } },
         .unblock => if (c.peerId()) |pid| {
@@ -1127,6 +1129,7 @@ fn modal(cx: Cx) void {
         .compose => |which| vcompose.sheet(cx, which),
         .admin_rights => vgroup.adminRights(cx),
         .invite_new => vgroup.inviteNew(cx),
+        .folder_edit => @import("folders.zig").editor(cx),
     }
 }
 

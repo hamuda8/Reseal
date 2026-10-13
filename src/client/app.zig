@@ -23,6 +23,7 @@ const crypto = @import("crypto.zig");
 const fmt = @import("fmt.zig");
 pub const compose = @import("compose.zig");
 pub const group = @import("group.zig");
+pub const folders = @import("folders.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
 
@@ -119,6 +120,7 @@ pub const Field = enum {
     chat_username,
     admin_title,
     invite_name,
+    folder_name,
 };
 
 pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
@@ -146,11 +148,12 @@ pub const Pane = union(enum) {
     picker: Picker,
     group_details: enum { group, channel },
     saved_edit: Id,
+    folders,
 };
 
 pub const Picker = enum { new_message, new_group, add_contact, add_members, block };
 
-pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices, member, slow_mode, reactions_setting };
+pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices, member, slow_mode, reactions_setting, folder_pick };
 
 pub const ConfirmKind = enum { logout, delete_chat, leave_chat, clear_history, delete_messages, start_fresh, block, unblock, delete_saved, remove_contact, ban_member, transfer_owner };
 
@@ -170,6 +173,7 @@ pub const Modal = union(enum) {
     compose: compose.Sheet,
     admin_rights: Id,
     invite_new,
+    folder_edit,
 };
 
 pub const Msg = union(enum) {
@@ -223,6 +227,7 @@ pub const Msg = union(enum) {
     attach,
     compose: compose.Act,
     group: group.Act,
+    folder: folders.Act,
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
@@ -274,7 +279,7 @@ pub const Msg = union(enum) {
 };
 
 pub const Filter = union(enum) { all, unread, people, groups, channels, ai, folder: Id };
-pub const ChatAction = enum { pin, unpin, archive, unarchive, mute, unmute, mark_read, mark_unread, delete, leave, clear, block, unblock, add_contact, info, call_voice, call_video, saved_edit, search, show_safety };
+pub const ChatAction = enum { add_to_folder, pin, unpin, archive, unarchive, mute, unmute, mark_read, mark_unread, delete, leave, clear, block, unblock, add_contact, info, call_voice, call_video, saved_edit, search, show_safety };
 pub const MessageAction = enum { reply, edit, copy, pin, unpin, delete, delete_everyone, save, select, details, forward, retract_vote, close_poll, open_map, open_link, reveal };
 pub const Theme = enum { auto, light, dark };
 pub const Lang = enum { en, ar };
@@ -393,6 +398,7 @@ pub const State = struct {
     scheduled_count: u32 = 0,
     compose: compose.Compose = .{},
     group: group.Group = .{},
+    folder: folders.Editor = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -504,6 +510,7 @@ pub const Op = union(enum) {
     group_changed: Id,
     chat_patch: Id,
     invite_created,
+    folders_changed,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -842,6 +849,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (media.onAnswer(s, op, r)) return;
             if (compose.onAnswer(s, op, r)) return;
             if (group.onAnswer(s, op, r)) return;
+            if (folders.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }
