@@ -1026,10 +1026,10 @@ pub fn useBearer(s: *State, token: []const u8) void {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Home-screen widget (Android): who has unread messages, names only
+// Home-screen widget (Android, iOS): who has unread messages, names only
 
 fn updateWidget(s: *State) void {
-    if (zui.platform != .android or s.phase != .ready) return;
+    if ((zui.platform != .android and zui.platform != .ios) or s.phase != .ready) return;
     const a = tmp();
     var lines: std.ArrayList([]const u8) = .empty;
     var h = std.hash.Wyhash.init(0);

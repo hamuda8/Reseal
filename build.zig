@@ -22,6 +22,8 @@ pub fn build(b: *std.Build) void {
         .android_res = b.path("shells/android/res"),
         .android_res_files = &.{"mipmap-xxxhdpi/ic_launcher.png"},
         .ios_info_plist = b.path("shells/ios/Info.plist"),
+        // The unread-chats widget on iOS too (WidgetKit, through the app group group.<bundle id>).
+        .ios_widget = true,
         .optimize = b.standardOptimizeOption(.{}),
     });
 }
