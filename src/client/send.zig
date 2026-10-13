@@ -495,24 +495,47 @@ pub fn edit(s: *State, chat_id: []const u8, msg_id: []const u8, text: []const u8
 /// "thumb"?,"w"?,"h"?}. It goes out in its own message in the open chat.
 pub fn onPickedFile(s: *State, v: j.Value) void {
     if (!s.open_chat.isSet()) return;
-    const chat = s.open_chat;
-    const c = s.store.chat(chat.str()) orelse return;
     const bytes = crypto.fromB64(gpa, j.strOr(v, "data", "")) catch return app.toastError(s, t("Could not read that file"));
-    const local = queue(s, chat.str(), "", s.reply_to) orelse {
-        gpa.free(bytes);
-        return;
-    };
-    s.reply_to = .{};
-    const o = find(s, local) orelse return;
-    const up = media.startUpload(s, local, bytes, .{
+    attach(s, bytes, .{
         .name = j.strOr(v, "name", "file"),
         .mime = j.strOr(v, "type", "application/octet-stream"),
         .thumb = j.str(v, "thumb"),
         .w = j.int(v, "w"),
         .h = j.int(v, "h"),
         .duration = j.float(v, "duration"),
-        .encrypted = c.encrypted(),
-    }) orelse return;
+        .encrypted = false,
+    });
+}
+
+/// A photo or file zui's picker gave (phones): its bytes are only valid now, so copied.
+pub fn onPicked(s: *State, f: zui.File) void {
+    if (!s.open_chat.isSet()) return;
+    const bytes = gpa.dupe(u8, f.data) catch return app.toastError(s, t("Could not read that file"));
+    attach(s, bytes, .{
+        .name = if (f.name.len > 0) f.name else "photo.jpg",
+        .mime = if (f.mime.len > 0) f.mime else "application/octet-stream",
+        .w = if (f.width > 0) @as(i64, f.width) else null,
+        .h = if (f.height > 0) @as(i64, f.height) else null,
+        .encrypted = false,
+    });
+}
+
+/// Sends `bytes` (owned) as a new message's attachment in the open chat.
+fn attach(s: *State, bytes: []u8, meta_in: media.Meta) void {
+    const chat = s.open_chat;
+    const c = s.store.chat(chat.str()) orelse {
+        gpa.free(bytes);
+        return;
+    };
+    var meta = meta_in;
+    meta.encrypted = c.encrypted();
+    const local = queue(s, chat.str(), "", s.reply_to) orelse {
+        gpa.free(bytes);
+        return;
+    };
+    s.reply_to = .{};
+    const o = find(s, local) orelse return;
+    const up = media.startUpload(s, local, bytes, meta) orelse return;
     o.uploads.append(gpa, up) catch {};
 }
 

@@ -276,12 +276,20 @@ fn onChunk(s: *State, id: []const u8, index: u32, r: zui.Response) void {
     if (f.save) saveFile(f);
 }
 
-/// Saves a file on the device. The web shell downloads it; phones have no way yet (zui has no
-/// "save file" effect), so they open plain links in the browser.
+/// Saves a file on the device: decrypted bytes through zui's saveFile (a download on the web,
+/// Downloads on Android, the share sheet on iOS); a plain file's signed link downloads on the web
+/// and opens in the browser on phones.
 fn saveFile(f: *File) void {
     f.save = false;
-    if (zui.platform == .web) {
+    if (std.mem.startsWith(u8, f.url, "data:")) {
+        const comma = std.mem.indexOfScalar(u8, f.url, ',') orelse return;
+        const b64 = f.url[comma + 1 ..];
+        const dec = std.base64.standard.Decoder;
+        const bytes = tmp().alloc(u8, dec.calcSizeForSlice(b64) catch return) catch return;
+        dec.decode(bytes, b64) catch return;
+        app.fx.saveFile(.{ .name = f.name, .mime = f.mime, .data = bytes });
+    } else if (zui.platform == .web) {
         const a = tmp();
         app.post(std.fmt.allocPrint(a, "{{\"t\":\"save\",\"name\":{s},\"url\":{s}}}", .{ j.quote(a, f.name) catch "\"file\"", j.quote(a, f.url) catch "\"\"" }) catch return);
-    } else if (!std.mem.startsWith(u8, f.url, "data:")) app.fx.openUrl(f.url, true);
+    } else app.fx.openUrl(f.url, true);
 }

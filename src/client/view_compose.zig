@@ -47,16 +47,16 @@ fn openChat(cx: Cx) ?*const data.Chat {
 fn attachSheet(cx: Cx) void {
     const s = cx.s;
     views.sheet(cx, t("Attach"));
-    if (zui.platform == .web) {
-        if (vchat.feature(s, "photos") or vchat.feature(s, "files")) views.menuItem(cx, icons.image, t("Photo or video"), act(.pick_media), false);
-        if (vchat.feature(s, "files")) views.menuItem(cx, icons.file, t("File"), act(.pick_file), false);
+    if (vchat.feature(s, "photos") or vchat.feature(s, "files")) {
+        if (zui.platform != .web) views.menuItem(cx, icons.camera, t("Camera"), act(.take_photo), false);
+        views.menuItem(cx, icons.image, if (zui.platform == .web) t("Photo or video") else t("Photo"), act(.pick_media), false);
     }
+    if (vchat.feature(s, "files")) views.menuItem(cx, icons.file, t("File"), act(.pick_file), false);
     if (vchat.feature(s, "polls")) views.menuItem(cx, icons.poll, t("Poll"), act(.{ .open = .poll }), false);
     if (vchat.feature(s, "location")) views.menuItem(cx, icons.location, t("Location"), act(.location), false);
     views.menuItem(cx, icons.smile, t("Emoji"), act(.{ .open = .emoji }), false);
     views.menuItem(cx, icons.sticker, t("Stickers"), act(.{ .open = .sticker }), false);
     if (vchat.feature(s, "scheduled")) views.menuItem(cx, icons.calendar, t("Scheduled messages"), act(.{ .open = .scheduled }), false);
-    if (zui.platform != .web) kit.sectionNote(cx, t("Sending photos and files from this device is coming soon."));
     views.endSheet(cx);
 }
 
@@ -75,16 +75,30 @@ fn optionsSheet(cx: Cx) void {
 }
 
 fn scheduleSheet(cx: Cx) void {
+    const s = cx.s;
     const c = openChat(cx) orelse return;
     const reminder = c.is("saved");
     views.sheet(cx, if (reminder) t("Set a reminder") else t("Schedule message"));
     for (compose.schedule_presets, 0..) |p, i| views.menuItem(cx, icons.clock, t(p.label), act(.{ .schedule_in = @intCast(i) }), false);
     kit.sectionTitle(cx, if (reminder) t("Remind me at") else t("Send at"));
     cx.ui.begin(.{ .padding = .xy(12, 0) }, .{});
-    kit.field(cx, .schedule_at, .{ .placeholder = "2026-01-31 18:30", .hint = t("Year-month-day hours:minutes, your local time"), .submit = act(.schedule_custom) });
+    // The platform's own date and time pickers.
+    const parts = compose.scheduleParts(s);
+    cx.ui.begin(.{ .direction = .row, .gap = 8, .padding = .{ .bottom = 12 } }, .{});
+    pickerButton(cx, icons.calendar, if (parts.date.len > 0) fmt.shortDate(cx.a(), compose.parseLocal(std.fmt.allocPrint(cx.a(), "{s} 12:00", .{parts.date}) catch "") orelse 0) else t("Date"), act(.pick_date));
+    pickerButton(cx, icons.clock, if (parts.time.len > 0) parts.time else t("Time"), act(.pick_time));
+    cx.ui.end();
     kit.button(cx, if (reminder) t("Set reminder") else t("Schedule"), act(.schedule_custom), .{ .block = true });
     cx.ui.end();
     views.endSheet(cx);
+}
+
+pub fn pickerButton(cx: Cx, ic: zui.Icon, label: []const u8, m: Msg) void {
+    const ui = cx.ui;
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .grow = 1, .width = .fill, .height = .{ .px = 46 }, .padding = .xy(14, 0), .radius = theme.radius, .border_width = 1, .border_color = cx.c.border_strong, .background = cx.c.surface_2, .pressed_background = cx.c.active }, .{ .on_press = m });
+    ui.icon(ic, 18, cx.c.text_2, .{}, 0);
+    ui.text(label, .{ .font_size = 15, .color = cx.c.text, .max_lines = 1 });
+    ui.end();
 }
 
 fn ttlSheet(cx: Cx) void {

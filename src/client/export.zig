@@ -19,6 +19,7 @@ const icons = @import("icons.zig");
 const theme = @import("theme.zig");
 const kit = @import("ui.zig");
 const views = @import("views.zig");
+const vcompose = @import("view_compose.zig");
 
 const State = app.State;
 const Id = app.Id;
@@ -56,6 +57,10 @@ pub const Act = union(enum) {
     period: Period,
     start,
     cancel,
+    pick_from,
+    pick_to,
+    set_from: Id,
+    set_to: Id,
 };
 
 const Item = struct { msg: usize, index: usize };
@@ -121,7 +126,19 @@ pub fn act(s: *State, a: Act) void {
             stop(s);
             s.modal = null;
         },
+        .pick_from => app.fx.pickDate(.{ .value = s.fields.get(.export_from).get() }, onFrom),
+        .pick_to => app.fx.pickDate(.{ .value = s.fields.get(.export_to).get() }, onTo),
+        .set_from => |d| s.fields.getPtr(.export_from).set(d.str()),
+        .set_to => |d| s.fields.getPtr(.export_to).set(d.str()),
     }
+}
+
+fn onFrom(d: []const u8) Msg {
+    return .{ .export_chat = .{ .set_from = Id.of(d) } };
+}
+
+fn onTo(d: []const u8) Msg {
+    return .{ .export_chat = .{ .set_to = Id.of(d) } };
 }
 
 fn start(s: *State) void {
@@ -923,12 +940,10 @@ pub fn optionsSheet(cx: Cx) void {
     radio(cx, t("Choose dates"), o.period == .custom, msg(.{ .period = .custom }), key(.{ "per", 3 }));
     if (o.period == .custom) {
         cx.ui.begin(.{ .direction = .row, .gap = 10, .padding = .xy(12, 4) }, .{});
-        cx.ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        kit.field(cx, .export_from, .{ .label = t("From"), .placeholder = "2026-01-31" });
-        cx.ui.end();
-        cx.ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        kit.field(cx, .export_to, .{ .label = t("To"), .placeholder = "2026-12-31" });
-        cx.ui.end();
+        const from = s.fields.get(.export_from).get();
+        const to = s.fields.get(.export_to).get();
+        vcompose.pickerButton(cx, icons.calendar, if (from.len > 0) from else t("From"), msg(.pick_from));
+        vcompose.pickerButton(cx, icons.calendar, if (to.len > 0) to else t("To"), msg(.pick_to));
         cx.ui.end();
     }
     cx.ui.begin(.{ .direction = .row, .justify = .end, .gap = 8, .padding = .{ .top = 8, .bottom = 8, .end = 8 } }, .{});

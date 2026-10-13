@@ -888,11 +888,30 @@ pub fn colorsFor(s: *const State, env_dark: bool) theme.Colors {
     return theme.colors(dark, accent[0], accent[1]);
 }
 
+/// What Back (Android's button, the iOS edge swipe, the browser's) closes first; null lets the
+/// system have it (leaving the app).
+fn backMsg(s: *const State, phone: bool) ?Msg {
+    if (s.phase != .ready) return null;
+    if (s.modal != null) return .close_modal;
+    if (s.viewer != null) return .close_viewer;
+    if (s.selecting) return .select_cancel;
+    if (s.info.isSet() or s.user_info.isSet()) {
+        if (s.group.page != .main and !s.user_info.isSet()) return .{ .group = .{ .page = if (s.group.page == .admins or s.group.page == .banned) .edit else .main } };
+        return .close_info;
+    }
+    if (s.panes.items.len > 0) return .pop_pane;
+    if (s.searching) return .{ .toggle_search = false };
+    if (phone and s.open_chat.isSet()) return .close_chat;
+    if (s.section != .chats) return .{ .nav = .chats };
+    return null;
+}
+
 pub fn root(s: *const State, ui: *ui_kit.Ui) void {
     const env = ui.env;
     const c = colorsFor(s, env.dark);
     const cx: Cx = .{ .ui = ui, .s = s, .c = c, .phone = env.width <= theme.phone_max, .w = env.width, .h = env.height, .fs = s.prefs.font };
     ui.setBackground(if (cx.phone or s.phase != .ready) c.surface else c.canvas);
+    if (backMsg(s, cx.phone)) |m| ui.onBack(m);
     ui.begin(.{ .width = .fill, .height = .fill }, .{});
     switch (s.phase) {
         .loading => splash(cx),

@@ -33,6 +33,10 @@ pub const Act = union(enum) {
     /// Index into `schedule_presets`.
     schedule_in: u8,
     schedule_custom,
+    pick_date,
+    pick_time,
+    set_date: Id,
+    set_time: Id,
     ttl: u32,
     poll_toggle: PollFlag,
     poll_correct: u8,
@@ -48,6 +52,7 @@ pub const Act = union(enum) {
     dismiss_preview,
     preview_due: u32,
     pick_media,
+    take_photo,
     pick_file,
     scheduled_send: Id,
     scheduled_delete: Id,
@@ -88,6 +93,32 @@ pub const ttl_presets = [_]struct { seconds: u32, label: []const u8 }{
     .{ .seconds = 604800, .label = "1 w" },
 };
 
+fn onDate(d: []const u8) app.Msg {
+    return .{ .compose = .{ .set_date = Id.of(d) } };
+}
+
+fn onTime(tm: []const u8) app.Msg {
+    return .{ .compose = .{ .set_time = Id.of(tm) } };
+}
+
+/// The custom schedule time as its date and time parts ("YYYY-MM-DD", "HH:MM").
+pub fn scheduleParts(s: *const State) struct { date: []const u8, time: []const u8 } {
+    const v = s.fields.get(.schedule_at).get();
+    if (v.len < 16) return .{ .date = "", .time = "" };
+    return .{ .date = v[0..10], .time = v[11..16] };
+}
+
+fn setPart(s: *State, date: bool, part: []const u8) void {
+    const cur = scheduleParts(s);
+    const d = if (date) part else cur.date;
+    const tm = if (date) cur.time else part;
+    s.fields.getPtr(.schedule_at).set(std.fmt.allocPrint(tmp(), "{s} {s}", .{ d, tm }) catch return);
+}
+
+fn onPicked(f: zui.File) app.Msg {
+    return .{ .picked = f };
+}
+
 fn onLocated(l: zui.Location) app.Msg {
     return .{ .located = l };
 }
@@ -121,6 +152,14 @@ pub fn act(s: *State, a: Act) void {
             const at = presetTime(schedule_presets[i].minutes);
             scheduleAt(s, at);
         },
+        .pick_date => {
+            const p = scheduleParts(s);
+            const today = sys.local(sys.now());
+            app.fx.pickDate(.{ .value = p.date, .min = std.fmt.allocPrint(tmp(), "{d:0>4}-{d:0>2}-{d:0>2}", .{ @as(u32, @intCast(today.year)), today.month, today.day }) catch "" }, onDate);
+        },
+        .pick_time => app.fx.pickTime(.{ .value = scheduleParts(s).time }, onTime),
+        .set_date => |d| setPart(s, true, d.str()),
+        .set_time => |tm| setPart(s, false, tm.str()),
         .schedule_custom => {
             const at = parseLocal(s.fields.get(.schedule_at).trimmed()) orelse return app.toastError(s, t("Pick a time in the future."));
             scheduleAt(s, at);
@@ -165,13 +204,18 @@ pub fn act(s: *State, a: Act) void {
             c.preview = null;
         },
         .preview_due => |seq| if (seq == c.preview_seq) fetchPreview(s),
+        // The web shell's picker also makes a tiny preview for the receivers' placeholders.
         .pick_media => {
             s.modal = null;
-            app.post("{\"t\":\"pick\",\"accept\":\"image/*,video/*\"}");
+            if (zui.platform == .web) app.post("{\"t\":\"pick\",\"accept\":\"image/*,video/*\"}") else app.fx.pickPhoto(.{ .max_size = 2560, .quality = 85 }, onPicked);
+        },
+        .take_photo => {
+            s.modal = null;
+            app.fx.pickPhoto(.{ .camera = true, .max_size = 2560, .quality = 85 }, onPicked);
         },
         .pick_file => {
             s.modal = null;
-            app.post("{\"t\":\"pick\"}");
+            if (zui.platform == .web) app.post("{\"t\":\"pick\"}") else app.fx.pickFile(.{}, onPicked);
         },
         .scheduled_send => |id| app.api(s, .POST, std.fmt.allocPrint(tmp(), "/chats/{s}/messages/scheduled/{s}/send", .{ s.open_chat.str(), id.str() }) catch return, "{}", .scheduled_changed),
         .scheduled_delete => |id| app.api(s, .POST, std.fmt.allocPrint(tmp(), "/chats/{s}/messages/delete", .{s.open_chat.str()}) catch return, std.fmt.allocPrint(tmp(), "{{\"ids\":[\"{s}\"],\"forEveryone\":true}}", .{id.str()}) catch return, .scheduled_changed),

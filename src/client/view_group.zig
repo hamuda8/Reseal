@@ -232,7 +232,7 @@ fn edit(cx: Cx, c: *const data.Chat) void {
     if (can(c, "changeInfo")) {
         ui.begin(.{ .padding = .{ .start = 12, .end = 12, .top = 8 } }, .{});
         kit.field(cx, .info_title, .{ .label = if (channel) t("Channel name") else t("Group name") });
-        kit.field(cx, .info_about, .{ .label = t("Description") });
+        kit.field(cx, .info_about, .{ .label = t("Description"), .multiline = true });
         kit.button(cx, t("Save"), act(.save_info), .{ .block = true });
         ui.end();
     }

@@ -262,7 +262,17 @@ pub const FieldOpts = struct {
     k: u64 = 0,
     mono: bool = false,
     submit: ?Msg = null,
+    /// Several lines (a description, a bio).
+    multiline: bool = false,
 };
+
+/// Fields whose text is hidden (passwords, passcodes, chat lock codes).
+fn isSecret(f: app.Field) bool {
+    return switch (f) {
+        .login_password, .passcode, .passcode_2, .passcode_3, .lock_code, .lock_code_2, .lock_current => true,
+        else => false,
+    };
+}
 
 /// A labelled text input (.field / .input).
 pub fn field(cx: Cx, comptime f: app.Field, o: FieldOpts) void {
@@ -270,8 +280,18 @@ pub fn field(cx: Cx, comptime f: app.Field, o: FieldOpts) void {
     const c = cx.c;
     ui.begin(.{ .gap = 7, .padding = .{ .bottom = 16 }, .width = .fill }, .{});
     if (o.label) |l| ui.text(l, .{ .font_size = 13, .weight = 600, .color = c.text_2 });
-    ui.begin(.{ .height = .{ .px = 46 }, .padding = .xy(14, 0), .radius = theme.radius, .border_width = 1, .border_color = if (o.err != null) c.danger else c.border_strong, .background = c.surface_2, .justify = .center, .width = .fill }, .{});
-    ui.input(.{ .key = if (o.k != 0) o.k else zui.key(@tagName(f)), .value = cx.s.fields.get(f).get(), .placeholder = o.placeholder, .on_change = app.onField(f), .on_submit = o.submit orelse .{ .submit = f }, .style = .{ .width = .fill, .font_size = 15, .color = c.text, .mono = o.mono } });
+    ui.begin(.{ .height = if (o.multiline) .auto else .{ .px = 46 }, .min_height = 46, .padding = if (o.multiline) .xy(14, 11) else .xy(14, 0), .radius = theme.radius, .border_width = 1, .border_color = if (o.err != null) c.danger else c.border_strong, .background = c.surface_2, .justify = .center, .width = .fill }, .{});
+    ui.input(.{
+        .key = if (o.k != 0) o.k else zui.key(@tagName(f)),
+        .value = cx.s.fields.get(f).get(),
+        .placeholder = o.placeholder,
+        .on_change = app.onField(f),
+        .on_submit = o.submit orelse .{ .submit = f },
+        .secure = comptime isSecret(f),
+        .keyboard = if (f == .login_email) .email else .text,
+        .multiline = o.multiline,
+        .style = .{ .width = .fill, .font_size = 15, .color = c.text, .mono = o.mono, .max_height = if (o.multiline) 160 else std.math.inf(f32) },
+    });
     ui.end();
     if (o.err) |e| ui.text(e, .{ .font_size = 12.5, .color = c.danger });
     if (o.hint) |h| ui.text(h, .{ .font_size = 12.5, .color = c.text_3, .line_height = 1.45 });

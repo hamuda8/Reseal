@@ -194,6 +194,8 @@ pub const Msg = union(enum) {
     http: zui.Response,
     socket: zui.SocketEvent,
     host: []const u8,
+    device: zui.DeviceEvent,
+    picked: zui.File,
     reconnect: u32,
     tick,
     typing_check,
@@ -314,6 +316,11 @@ fn onSocket(e: zui.SocketEvent) Msg {
 /// The phone's call screen: answered, declined or hung up there (Bluetooth, the car...).
 pub fn callEvent(e: zui.CallEvent) ?Msg {
     return .{ .call_event = .{ .kind = e.kind, .id = Id.of(e.id) } };
+}
+
+/// The device came online or went offline, or the app was shown or hidden.
+pub fn deviceEvent(e: zui.DeviceEvent) ?Msg {
+    return .{ .device = e };
 }
 
 /// Messages from the page around the app (web shell, embedding site).
@@ -617,6 +624,13 @@ fn handle(s: *State, msg: Msg) void {
     switch (msg) {
         .boot => start(s),
         .http => |r| onAnswer(s, r),
+        .picked => |f| send.onPicked(s, f),
+        .device => |e| switch (e) {
+            .visible => setVisible(s, true),
+            .hidden => setVisible(s, false),
+            .online => if (s.ws.socket == 0 and !s.ws.stopped and s.phase == .ready) connect(s),
+            .offline => {},
+        },
         .socket => |ev| onSocketEvent(s, ev),
         .host => |json| onHost(s, json),
         .reconnect => |attempt| if (attempt == s.ws.attempt and s.ws.socket == 0 and !s.ws.stopped) connect(s),

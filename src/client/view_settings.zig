@@ -97,7 +97,7 @@ fn profile(cx: Cx) void {
     kit.avatar(cx, .{ .name = me.s("displayName") orelse "", .color = me.i("color") orelse 0, .image = me.s("avatar"), .size = 120 }, key(.{"prof-av"}));
     ui.end();
     kit.field(cx, .profile_name, .{ .label = t("Name") });
-    kit.field(cx, .profile_bio, .{ .label = t("Bio"), .hint = t("Any details such as age, occupation or city.") });
+    kit.field(cx, .profile_bio, .{ .multiline = true, .label = t("Bio"), .hint = t("Any details such as age, occupation or city.") });
     if (me.s("appId") == null) kit.field(cx, .profile_username, .{ .label = t("Username"), .placeholder = "username" });
     kit.button(cx, t("Save"), .save_profile, .{ .block = true, .busy = s.busy });
     ui.end();
@@ -388,7 +388,7 @@ fn groupDetails(cx: Cx, channel: bool) void {
     kit.avatar(cx, .{ .icon = if (channel) icons.megaphone else icons.users, .color = 2, .size = 120 }, 0);
     ui.end();
     kit.field(cx, .group_name, .{ .placeholder = if (channel) t("Channel name") else t("Group name") });
-    kit.field(cx, .group_about, .{ .placeholder = t("Description (optional)") });
+    kit.field(cx, .group_about, .{ .multiline = true, .placeholder = t("Description (optional)") });
     if (!channel) {
         kit.row(cx, t("End-to-end encrypted"), .{ .icon = icons.lock, .subtitle = t("Turn off for large public groups or to add AI assistants"), .switch_on = s.new_group_encrypted, .on = .toggle_encrypted });
         if (s.picked.items.len > 0) kit.sectionNote(cx, fmt.tn(cx.a(), @intCast(s.picked.items.len), "{n} member will be added", "{n} members will be added"));
@@ -410,7 +410,7 @@ fn savedEdit(cx: Cx, id: Id) void {
     vlist.endHeader(cx);
     padded(cx, "savededit");
     if (!primary) kit.field(cx, .saved_title, .{ .label = t("Name"), .placeholder = t("For example: Work, Recipes, Ideas") });
-    kit.field(cx, .saved_about, .{ .label = t("Purpose"), .placeholder = t("What will you keep here?"), .hint = t("Shown under the name, so you remember what goes here.") });
+    kit.field(cx, .saved_about, .{ .multiline = true, .label = t("Purpose"), .placeholder = t("What will you keep here?"), .hint = t("Shown under the name, so you remember what goes here.") });
     kit.button(cx, if (c != null) t("Save") else t("Create"), .save_saved, .{ .block = true });
     ui.end();
     ui.end();

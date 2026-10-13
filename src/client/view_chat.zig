@@ -711,7 +711,19 @@ fn composer(cx: Cx, c: *const data.Chat) void {
         if (s.reply_to.isSet() or s.editing.isSet()) replyBar(cx, c);
         vcompose.bars(cx, c);
         ui.begin(.{ .direction = .row, .align_items = .center, .min_height = 50, .padding = .{ .start = 14, .end = 4, .top = 3, .bottom = 3 } }, .{});
-        ui.input(.{ .key = zui.key("composer"), .value = s.fields.get(.composer).get(), .placeholder = t("Message"), .on_change = app.onField(.composer), .on_submit = .{ .submit = .composer }, .style = .{ .grow = 1, .width = .fill, .font_size = cx.fs + 0.5, .color = col.text } });
+        // Enter sends when "Send with Enter" is on (a keyboard); otherwise, and on phones, it
+        // starts a new line and the send button sends.
+        const lines = cx.phone or zui.platform != .web or !s.prefs.send_with_enter;
+        ui.input(.{
+            .key = zui.key("composer"),
+            .value = s.fields.get(.composer).get(),
+            .placeholder = t("Message"),
+            .on_change = app.onField(.composer),
+            .on_submit = .{ .submit = .composer },
+            .multiline = lines,
+            .return_key = if (lines) .default else .send,
+            .style = .{ .grow = 1, .width = .fill, .font_size = cx.fs + 0.5, .color = col.text, .max_height = 180 },
+        });
         kit.iconButton(cx, icons.smile, .{ .compose = .{ .open = .emoji } }, .{ .size = 40 });
         // Send options (silent, scheduled, when online, disappearing): Reseal-js opens them with a
         // right click or long press on Send; zui has neither yet, so a button beside it.
