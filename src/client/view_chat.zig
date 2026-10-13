@@ -443,7 +443,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
             if (big_emoji) {
                 ui.text(txt, .{ .font_size = 42, .color = fg, .line_height = 1.15 });
             } else {
-                rich.text(cx, txt, markdown.fromJson(a, j.field(m.content, "entities")), fg, s.isRevealed(m.id()));
+                rich.text(cx, txt, markdown.fromJson(a, j.field(m.content, "entities")), .{ .fg = fg, .link = if (out) fg else col.accent, .revealed = s.isRevealed(m.id()), .msg = if (m.local_id == 0) m.id() else "", .font_size = cx.fs + 0.5 });
             }
         }
         if (j.obj(m.content, "preview")) |pv| if (j.str(pv, "title") != null or j.str(pv, "description") != null) linkCard(cx, pv, fg);

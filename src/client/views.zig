@@ -144,6 +144,17 @@ pub fn onUi(s: *State, msg: Msg) void {
         .message_tap => |id| if (s.selecting) toggleSelected(s, id) else {
             s.modal = .{ .menu = .{ .kind = .message, .target = s.open_chat, .item = id } };
         },
+        .rich_link => |x| if (s.store.existingTimeline(s.open_chat.str())) |tl| if (tl.find(x.msg.str())) |m| {
+            const ents = markdown.fromJson(tmp(), j.field(m.content, "entities"));
+            const txt = if (s.isRevealed(m.id())) m.text() else @import("rich.zig").hideSpoilers(tmp(), m.text(), ents);
+            switch (@import("rich.zig").linkAt(txt, ents, x.at)) {
+                .url => |u| app.fx.openUrl(u, true),
+                .username => |name| {
+                    app.api(s, .GET, path("/chats/by-username/{s}", .{j.urlEncode(tmp(), name) catch return}), null, .open_username);
+                },
+                .none => {},
+            }
+        },
         .select_cancel => endSelection(s),
         .select_forward => if (s.selected.items.len > 0) {
             s.modal = .{ .forward = .{} };

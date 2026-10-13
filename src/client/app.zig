@@ -248,6 +248,8 @@ pub const Msg = union(enum) {
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
+    /// A link in a message's text (rich.zig): the message and the byte the link starts at.
+    rich_link: struct { msg: Id, at: u32 },
     select_cancel,
     select_forward,
     select_delete,
