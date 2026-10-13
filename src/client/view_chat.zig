@@ -810,6 +810,35 @@ fn messageMenu(cx: Cx, chat_id: Id, item: Id) void {
     views.endSheet(cx);
 }
 
+/// An invite link's group or channel, before joining (main.js joinFlow).
+pub fn joinSheet(cx: Cx) void {
+    const s = cx.s;
+    const ui = cx.ui;
+    const inv = s.invite orelse return;
+    const c = j.obj(inv.v, "chat") orelse return;
+    const approval = j.truthy(inv.v, "requestApproval");
+    const channel = j.eqlStr(c, "type", "channel");
+    views.sheet(cx, if (approval) t("Request to join") else t("Join"));
+    ui.begin(.{ .align_items = .center, .gap = 6, .padding = .{ .top = 8, .bottom = 12, .start = 12, .end = 12 } }, .{});
+    kit.avatar(cx, .{ .name = j.strOr(c, "title", ""), .color = j.intOr(c, "color", 0), .image = j.str(c, "avatar"), .size = 96 }, 0);
+    ui.text(j.strOr(c, "title", ""), .{ .font_size = 20, .weight = 700, .color = cx.c.text, .text_align = .center });
+    const n = j.intOr(c, "memberCount", 0);
+    ui.text(if (channel) fmt.tn(cx.a(), n, "{n} subscriber", "{n} subscribers") else fmt.tn(cx.a(), n, "{n} member", "{n} members"), .{ .font_size = 14, .color = cx.c.text_2 });
+    if (j.str(c, "about")) |ab| if (ab.len > 0) ui.text(ab, .{ .font_size = 14, .color = cx.c.text_2, .text_align = .center });
+    if (j.truthy(c, "encrypted")) {
+        ui.begin(.{ .direction = .row, .gap = 6, .align_items = .center }, .{});
+        ui.icon(icons.lock, 14, cx.c.text_2, .{}, 0);
+        ui.text(t("End-to-end encrypted"), .{ .font_size = 14, .color = cx.c.text_2 });
+        ui.end();
+    }
+    ui.end();
+    ui.begin(.{ .direction = .row, .justify = .end, .gap = 8, .padding = .{ .start = 12, .end = 12, .bottom = 8 } }, .{});
+    kit.button(cx, t("Cancel"), .close_modal, .{ .kind = .ghost });
+    kit.button(cx, if (approval) t("Request to join") else if (channel) t("Join channel") else t("Join group"), .join_invite, .{});
+    ui.end();
+    views.endSheet(cx);
+}
+
 pub fn forwardSheet(cx: Cx) void {
     const s = cx.s;
     views.sheet(cx, t("Forward to…"));

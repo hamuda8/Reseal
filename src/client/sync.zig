@@ -50,6 +50,12 @@ pub fn onChats(s: *State, r: zui.Response) void {
         s.pending_open = .{};
         @import("views.zig").openChat(s, id.str());
     }
+    if (s.pending_join.isSet()) {
+        const code = s.pending_join;
+        s.pending_join = .{};
+        app.api(s, .GET, std.fmt.allocPrint(tmp(), "/invites/{s}", .{j.urlEncode(tmp(), code.str()) catch return}) catch return, null, .invite);
+        s.invite_code = code;
+    }
     if (s.pending_username.isSet()) {
         const name = s.pending_username;
         s.pending_username = .{};

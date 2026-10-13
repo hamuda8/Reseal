@@ -212,6 +212,10 @@ pub fn onUi(s: *State, msg: Msg) void {
         },
         .embed_open => |target| embedTarget(s, target),
         .forward_to => |to| forwardTo(s, to.str()),
+        .join_invite => {
+            s.modal = null;
+            app.api(s, .POST, path("/invites/{s}/join", .{j.urlEncode(tmp(), s.invite_code.str()) catch return}), "{}", .invite_join);
+        },
         else => {},
     }
 }
@@ -678,6 +682,22 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) void {
             s.panes.clearRetainingCapacity();
             openChat(s, c.id());
         },
+        .invite => {
+            if (j.truthy(v, "member")) {
+                if (j.str(v, "chat.id")) |id| openChat(s, id);
+                return;
+            }
+            replaceObj(&s.invite, v);
+            app.fx.setLink("/");
+            s.modal = .{ .join = .{} };
+        },
+        .invite_join => {
+            if (j.truthy(v, "requested")) return app.toast(s, t("Request sent. An admin will review it."));
+            if (j.obj(v, "chat")) |raw| {
+                const c = s.store.putChat(raw) catch return;
+                openChat(s, c.id());
+            }
+        },
         .open_username => {
             if (j.obj(v, "user")) |u| {
                 app.api(s, .POST, "/chats/private", path("{{\"userId\":\"{s}\"}}", .{j.strOr(u, "id", "")}), .open_private);
@@ -1025,7 +1045,7 @@ fn modal(cx: Cx) void {
         .safety => |uid| vset.safety(cx, uid.str()),
         .reactions => vchat.reactionsSheet(cx),
         .forward => vchat.forwardSheet(cx),
-        .join => {},
+        .join => vchat.joinSheet(cx),
     }
 }
 

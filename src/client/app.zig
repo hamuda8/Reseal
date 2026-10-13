@@ -210,6 +210,7 @@ pub const Msg = union(enum) {
     create_group,
     toggle_encrypted,
     join_chat: Id,
+    join_invite,
     start_global: Id,
     open_wufour: Id,
 
@@ -355,6 +356,10 @@ pub const State = struct {
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
     pending_open: Id = .{},
     pending_username: Id = .{},
+    pending_join: Id = .{},
+    invite_code: Id = .{},
+    /// The invite being looked at (GET /invites/<code>).
+    invite: ?*data.Obj = null,
     call_ticking: bool = false,
     fast_clock: bool = false,
 };
@@ -408,6 +413,8 @@ pub const Op = union(enum) {
     picker_search: u32,
     open_private,
     open_username,
+    invite,
+    invite_join,
     open_wufour,
     create_group,
     contacts,
@@ -590,6 +597,7 @@ fn start(s: *State) void {
     // Addresses: /c/<chat id>, /@username (router.js).
     const path_only = link[0 .. std.mem.indexOfAny(u8, link, "?#") orelse link.len];
     if (std.mem.startsWith(u8, path_only, "/c/") and path_only.len >= 27) s.pending_open = Id.of(path_only[3..27]);
+    if (std.mem.startsWith(u8, path_only, "/join/") and path_only.len > 6) s.pending_join = Id.of(std.mem.trimEnd(u8, path_only[6..], "/"));
     if (std.mem.startsWith(u8, path_only, "/@") and path_only.len > 2) s.pending_username = Id.of(std.mem.trimEnd(u8, path_only[2..], "/"));
     if (native_auth) {
         const token = zui.storage.get(tmp(), "token", .{ .secure = true }) orelse {

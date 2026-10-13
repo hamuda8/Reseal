@@ -1397,5 +1397,6 @@
   "{n} unread messages|two": "رسالتان غير مقروءتين",
   "{n} unread messages|few": "{n} رسائل غير مقروءة",
   "{n} unread messages|many": "{n} رسالة غير مقروءة",
-  "{n} unread messages|other": "{n} رسالة غير مقروءة"
+  "{n} unread messages|other": "{n} رسالة غير مقروءة",
+  "Forwarded": "تمت إعادة التوجيه"
 }
