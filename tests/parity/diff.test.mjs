@@ -24,7 +24,7 @@ const people = {
   'tok-carm': { userId: 'w-carm', username: 'Carm_Diff', role: 'admin' },
 };
 
-let wufour, models, site, servers = [];
+let wufour, models, site, moderation, servers = [];
 
 before(async () => {
   wufour = await recorder((req, res, entry) => {
@@ -44,6 +44,16 @@ before(async () => {
       { id: 'a/free', name: 'Alpha', context_length: 4000, architecture: { input_modalities: ['text'] }, pricing: { prompt: '0', completion: '0' } },
     ] }));
   });
+  // A fake Wufour Moderation: "badword" is blocked, "meh" restricted, "down" makes it fail.
+  moderation = await recorder((req, res, entry) => {
+    const { items = [] } = JSON.parse(entry.body || '{}');
+    const all = items.map(i => i.text || '').join(' ');
+    if (all.includes('down')) return res.writeHead(500, { 'Content-Type': 'application/json' }).end('{"success":false}');
+    const layerOf = (t) => (t.includes('badword') ? 1 : t.includes('meh') ? 2 : 3);
+    const results = items.map(i => ({ id: i.id, kind: i.kind, layer: layerOf(i.text || ''), verdict: 'x', reasons: layerOf(i.text || '') < 3 ? ['spam'] : [] }));
+    const layer = Math.min(3, ...results.map(i => i.layer));
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ success: true, layer, items: results, warning: layer < 3 ? { en: 'Not allowed here', ar: 'غير مسموح' } : null }));
+  });
   site = await recorder((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end('<html><head><title>Ignored</title><meta property="og:title" content="A &amp; B"><meta name="description" content="  Two   words "><meta property="og:image" content="/img/x.png"></head><body></body></html>');
   });
@@ -55,6 +65,7 @@ after(async () => {
   await wufour?.close();
   await models?.close();
   await site?.close();
+  await moderation?.close();
 });
 
 /** Replaces what is random by nature with placeholders, numbered in order of appearance. */
@@ -343,6 +354,33 @@ async function script(srv, storage) {
   await call('delete me', 'DELETE', '/api/me', { confirm: 'DELETE' }, { token: C });
   await call('logout json', 'POST', '/logout', undefined, { headers: { Accept: 'application/json', Cookie: 'wufour_token=tok-carm' } });
 
+  // Moderation (what the server can read is checked; layer 1 blocks, layer 2 is recorded).
+  const mg = (await call('mod group', 'POST', '/api/chats', { type: 'group', title: 'Checked', encrypted: false, members: [amal.id] }, { token: B })).chat;
+  await call('mod blocked', 'POST', `/api/chats/${mg.id}/messages`, { text: 'a badword here' }, { token: B });
+  await call('mod restricted', 'POST', `/api/chats/${mg.id}/messages`, { text: 'meh text' }, { token: B });
+  await call('mod down', 'POST', `/api/chats/${mg.id}/messages`, { text: 'moderation down' }, { token: B });
+  await call('mod title', 'PATCH', `/api/chats/${mg.id}`, { title: 'badword title' }, { token: B });
+  await call('mod profile', 'PATCH', '/api/me', { bio: 'badword bio' }, { token: B });
+  await call('mod app user', 'POST', '/api/v1/users', { externalId: 'u9', name: 'badword' }, { token: sk });
+
+  // Join requests, approvals, ownership, forwarding, quizzes, handoff.
+  await call('approval on', 'PATCH', `/api/chats/${ch.id}`, { joinApproval: true }, { token: A });
+  await call('join request', 'POST', `/api/chats/${ch.id}/join`, undefined, { token: C });
+  await call('requests', 'GET', `/api/chats/${ch.id}/members?filter=requests`, undefined, { token: A });
+  const fwd = (await call('forward', 'POST', `/api/chats/${mg.id}/messages`, { fwd: { messageId: (await call('channel history', 'GET', `/api/chats/${ch.id}/messages`, undefined, { token: A })).messages.at(-1).id, chatId: ch.id } }, { token: A })).message;
+  await call('forwarded edit', 'PATCH', `/api/chats/${mg.id}/messages/${fwd?.id}`, { text: 'x' }, { token: A });
+  const quiz = (await call('quiz', 'POST', `/api/chats/${mg.id}/messages`, { poll: { question: 'Two plus two?', options: ['3', '4'], quiz: true, correct: 1, explanation: 'Math' } }, { token: A })).message;
+  await call('quiz answer', 'POST', `/api/chats/${mg.id}/messages/${quiz.id}/vote`, { options: [0] }, { token: B });
+  await call('quiz again', 'POST', `/api/chats/${mg.id}/messages/${quiz.id}/vote`, { options: [1] }, { token: B });
+  await call('quiz take back', 'POST', `/api/chats/${mg.id}/messages/${quiz.id}/vote`, { options: [] }, { token: B });
+  await call('transfer', 'POST', `/api/chats/${mg.id}/members/${amal.id}/owner`, undefined, { token: B });
+  await call('admin first', 'POST', `/api/chats/${mg.id}/members/${amal.id}/admin`, {}, { token: B });
+  await call('transfer now', 'POST', `/api/chats/${mg.id}/members/${amal.id}/owner`, undefined, { token: B });
+  await call('mod chat after', 'GET', `/api/chats/${mg.id}`, undefined, { token: A });
+  await call('handoff not support', 'POST', `/api/chats/${mg.id}/handoff`, undefined, { token: A });
+  await call('clear for me', 'POST', `/api/chats/${mg.id}/clear`, {}, { token: B });
+  await call('cleared history', 'GET', `/api/chats/${mg.id}/messages`, undefined, { token: B });
+
   // Pages
   for (const p of ['/developers', '/sdk/reseal.js', '/c/x', '/nothing.js', '/m/ffffffffffffffffffffffff', '/login']) {
     const res = await fetch(base + p, { redirect: 'manual' });
@@ -358,7 +396,7 @@ test('the same calls get the same answers from Reseal-js and the Zig server', as
       const { status, json } = await answer(store, storage.secret, entry.body, entry.headers['reseal-signature']);
       res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(json));
     });
-    const srv = await startServer({ AUTH_HOST: wufour.url, WUFOUR_INTERNAL_KEY: INTERNAL_KEY, OPENROUTER_BASE_URL: models.url, TURN_URLS: 'turn:t.example', TURN_SECRET: 's' }, { zig });
+    const srv = await startServer({ AUTH_HOST: wufour.url, WUFOUR_INTERNAL_KEY: INTERNAL_KEY, OPENROUTER_BASE_URL: models.url, MODERATION_HOST: moderation.url, MODERATION_API_KEY: "mk", TURN_URLS: 'turn:t.example', TURN_SECRET: 's' }, { zig });
     servers.push({ srv, storage, zig });
   }
   const [node, zig] = await Promise.all(servers.map(s => script(s.srv, s.storage)));
@@ -370,4 +408,27 @@ test('the same calls get the same answers from Reseal-js and the Zig server', as
     try { assert.deepStrictEqual(b[i], a[i]); } catch { diffs.push(`${a[i].label}\n  node: ${JSON.stringify(a[i])}\n  zig:  ${JSON.stringify(b[i])}`); }
   }
   assert.equal(diffs.length, 0, `${diffs.length} answers differ:\n${diffs.join('\n')}`);
+
+  // The documents both servers stored, collection by collection in insertion order: what
+  // Control and the other apps read must have the same shape.
+  await sleep(500);
+  const secretKeys = new Set(['salt', 'hash', 'keySealed', 'secretSealed', 'apiKeySealed', 'code', 'credential']);
+  const docDiffs = [];
+  for (const name of ['users', 'sessions', 'chats', 'members', 'messages', 'contacts', 'blocks', 'folders', 'invites', 'media', 'bots', 'apps', 'teams', 'keyEscrow', 'calls', 'pushSubs', 'chatKeys']) {
+    const dumps = await Promise.all(servers.map(async (s) => {
+      const norm = normalizer();
+      // Insertion order ($natural): upserted documents get their _id from mongod, so _id order
+      // is not the order things happened in. Keys are sorted: field order inside a document is
+      // not part of its shape for any reader.
+      const rows = await s.srv.db.collection(name).find({}).sort({ $natural: 1 }).toArray();
+      const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sortKeys(v[k])])) : v);
+      return rows.map(d => norm(sortKeys(JSON.parse(JSON.stringify(d, (k, v) => (secretKeys.has(k) && typeof v === 'string' ? `<${k}>` : v))))));
+    }));
+    const [dn, dz] = dumps;
+    if (dn.length !== dz.length) { docDiffs.push(`${name}: ${dn.length} documents in Node, ${dz.length} in Zig`); continue; }
+    for (let i = 0; i < dn.length; i++) {
+      try { assert.deepStrictEqual(dz[i], dn[i]); } catch { docDiffs.push(`${name}[${i}]\n  node: ${JSON.stringify(dn[i])}\n  zig:  ${JSON.stringify(dz[i])}`); }
+    }
+  }
+  assert.equal(docDiffs.length, 0, `${docDiffs.length} stored documents differ:\n${docDiffs.join('\n')}`);
 });

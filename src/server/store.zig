@@ -279,7 +279,6 @@ pub fn callApp(r: *Rq, app_id: Val, op: []const u8, body: Val, override: ?Overri
     const full = try val.from(a, .{ .op = op, .appId = try r.sn(app_id) });
     for (body.keys()) |kv| try full.put(a, kv.k, kv.v);
     const payload = try val.stringify(a, full);
-    std.log.debug("storage {s}: {s}", .{ op, payload[0..@min(payload.len, 300)] });
     fetch.assertPublicUrl(url) catch |e| return r.fail(502, try r.fmt("The app's message storage did not answer ({s})", .{fetch.urlErrorMessage(e)}), "storage_unavailable");
     const res = fetch.fetch(a, url, .{
         .method = .POST,
