@@ -4,7 +4,7 @@
 const std = @import("std");
 const Io = std.Io;
 const A = @import("app.zig");
-const fetch = @import("lib/fetch.zig");
+
 const auth = @import("auth.zig");
 const val = A.val;
 const Val = A.Val;
@@ -18,7 +18,7 @@ fn call(r: *Rq, path: []const u8, body: Val) ?Val {
     if (!directoryEnabled()) return null;
     const a = r.a;
     const url = std.fmt.allocPrint(a, "{s}/api{s}", .{ auth.backendHost(a) catch return null, path }) catch return null;
-    const res = fetch.fetch(a, url, .{
+    const res = A.app.fetch.fetch(a, url, .{
         .method = .POST,
         .body = val.stringify(a, body) catch return null,
         .content_type = "application/json",
@@ -72,5 +72,5 @@ pub fn findById(r: *Rq, id: []const u8) !?Val {
     if (res != .arr or res.len() == 0) return null;
     const u = res.items()[0];
     if (u.isNullish()) return null;
-    return try val.from(a, .{ .id = try val.str(a, u.get("_id")), .username = u.get("username") });
+    return try val.from(a, .{ .id = try val.toStr(a, u.get("_id")), .username = u.get("username") });
 }

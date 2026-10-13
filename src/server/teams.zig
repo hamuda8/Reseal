@@ -31,7 +31,7 @@ fn httpsUrl(s: []const u8) bool {
 /// What clients need to show a team as a chat counterpart.
 pub fn publicTeam(r: *Rq, team: ?Val) !Val {
     const t = team orelse return .null;
-    return val.from(r.a, .{ .id = try r.str(t.get("_id")), .externalId = t.get("externalId"), .name = t.get("name"), .avatarUrl = if (t.get("avatarUrl").truthy()) t.get("avatarUrl") else Val.null, .about = if (t.get("about").truthy()) t.get("about") else Val.s(""), .color = try ser.colorOf(r.a, t.get("_id")) });
+    return val.from(r.a, .{ .id = try r.str(t.get("_id")), .externalId = t.get("externalId"), .name = t.get("name"), .avatarUrl = if (t.get("avatarUrl").truthy()) t.get("avatarUrl") else Val.null, .about = if (t.get("about").truthy()) t.get("about") else Val.string(""), .color = try ser.colorOf(r.a, t.get("_id")) });
 }
 
 /// The developer API view, with the roster as the app's own ids.
@@ -40,13 +40,13 @@ pub fn describeTeam(r: *Rq, team: Val) !Val {
     const users = if (team.get("memberIds").len() > 0) try col().users.find(a, .{ ._id = .{ .@"$in" = team.get("memberIds") } }, .{ .projection = .{ .externalId = 1, .displayName = 1 } }) else val.none[0..];
     const n = try col().chats.count(a, .{ .teamId = team.get("_id"), .deletedAt = .{ .@"$exists" = false } }, .{});
     var members = try Val.array(a);
-    for (users) |u| try members.push(a, try val.from(a, .{ .id = try r.str(u.get("_id")), .externalId = u.get("externalId"), .name = u.get("displayName") }));
+    for (users) |u| try members.push(try val.from(a, .{ .id = try r.str(u.get("_id")), .externalId = u.get("externalId"), .name = u.get("displayName") }));
     return val.from(a, .{
         .id = try r.str(team.get("_id")),
         .externalId = team.get("externalId"),
         .name = team.get("name"),
         .avatarUrl = if (team.get("avatarUrl").truthy()) team.get("avatarUrl") else Val.null,
-        .about = if (team.get("about").truthy()) team.get("about") else Val.s(""),
+        .about = if (team.get("about").truthy()) team.get("about") else Val.string(""),
         .metadata = if (team.get("metadata").truthy()) team.get("metadata") else Val.null,
         .members = members,
         .chats = n,
@@ -62,8 +62,8 @@ pub fn teamRef(r: *Rq, app_doc: Val, ref: Val) !Val {
     const q = try val.from(a, .{ .appId = app_doc.get("_id") });
     if (std.mem.startsWith(u8, s, "id:")) {
         const id = v.oidStr(s[3..]) orelse return r.fail(404, "Team not found", "team_not_found");
-        try q.set(a, "_id", id);
-    } else try q.set(a, "externalId", s);
+        try q.set("_id", id);
+    } else try q.set("externalId", s);
     return (try col().teams.findOne(a, q, .{})) orelse r.fail(404, try r.fmt("Team \"{s}\" not found. Create it with POST /api/v1/teams first.", .{s}), "team_not_found");
 }
 
@@ -77,7 +77,7 @@ fn appUsers(r: *Rq, app_doc: Val, refs: Val, name: []const u8) ![]Val {
         for (wanted.items()) |y| if (std.mem.eql(u8, y.str, id)) {
             dup = true;
         };
-        if (!dup) try wanted.push(a, .{ .str = id });
+        if (!dup) try wanted.push(Val{ .str = id });
     }
     const users = if (wanted.len() > 0) try col().users.find(a, .{ .appId = app_doc.get("_id"), .externalId = .{ .@"$in" = wanted }, .deletedAt = .{ .@"$exists" = false } }, .{}) else val.none[0..];
     for (wanted.items()) |id| {
@@ -93,16 +93,16 @@ fn appUsers(r: *Rq, app_doc: Val, refs: Val, name: []const u8) ![]Val {
 fn cleanFields(r: *Rq, body: Val, partial: bool) !Val {
     const a = r.a;
     const set = try Val.object(a);
-    if (!partial or body.get("name") != .undef) try set.set(a, "name", try v.reqStr(r, body.get("name"), "name", .{ .min = 1, .max = 80 }));
-    if (body.get("avatarUrl") != .undef) try set.put(a, "avatarUrl", if (body.get("avatarUrl").truthy()) Val{ .str = try v.reqStr(r, body.get("avatarUrl"), "avatarUrl", .{ .max = 2048, .pattern = httpsUrl }) } else Val.null);
-    if (body.get("about") != .undef) try set.set(a, "about", try v.reqStr(r, body.get("about"), "about", .{ .max = 300 }));
-    if (body.get("metadata") != .undef) try set.put(a, "metadata", (try v.meta(r, body.get("metadata"))) orelse .undef);
+    if (!partial or body.get("name") != .undef) try set.set("name", try v.reqStr(r, body.get("name"), "name", .{ .min = 1, .max = 80 }));
+    if (body.get("avatarUrl") != .undef) try set.set("avatarUrl", if (body.get("avatarUrl").truthy()) Val{ .str = try v.reqStr(r, body.get("avatarUrl"), "avatarUrl", .{ .max = 2048, .pattern = httpsUrl }) } else Val.null);
+    if (body.get("about") != .undef) try set.set("about", try v.reqStr(r, body.get("about"), "about", .{ .max = 300 }));
+    if (body.get("metadata") != .undef) try set.set("metadata", (try v.meta(r, body.get("metadata"))) orelse .undef);
     return set;
 }
 
 fn ids(r: *Rq, users: []const Val) !Val {
     var out = try Val.array(r.a);
-    for (users) |u| try out.push(r.a, u.get("_id"));
+    for (users) |u| try out.push(u.get("_id"));
     return out;
 }
 
@@ -119,19 +119,19 @@ pub fn upsertTeam(r: *Rq, app_doc: Val, body: Val) !Val {
     const now = A.now();
     if (existing) |ex| {
         const s2 = try val.clone(a, set);
-        try s2.put(a, "updatedAt", now);
-        if (members) |m| try s2.put(a, "memberIds", try ids(r, m));
-        const team = (try col().teams.findOneAndUpdate(a, .{ ._id = ex.get("_id") }, .{ .@"$set" = s2 }, .{})) orelse ex;
+        try s2.set("updatedAt", now);
+        if (members) |m| try s2.set("memberIds", try ids(r, m));
+        const team = (try col().teams.findOneAndUpdate(a, .{ ._id = ex.get("_id") }, .{ .@"$set" = s2 }, .{ .returnDocument = .after })) orelse ex;
         try afterChange(r, team, ex, if (members) |m| try ids(r, m) else null, set);
         return team;
     }
     const doc = try val.from(a, .{ .appId = app_doc.get("_id"), .externalId = external_id });
-    for (set.keys()) |kv| try doc.put(a, kv.k, kv.v);
-    try doc.put(a, "avatarUrl", if (set.get("avatarUrl").isNullish()) Val.null else set.get("avatarUrl"));
-    try doc.put(a, "about", if (set.get("about").isNullish()) Val.s("") else set.get("about"));
-    try doc.put(a, "memberIds", if (members) |m| try ids(r, m) else try Val.array(a));
-    try doc.put(a, "createdAt", now);
-    try doc.put(a, "updatedAt", now);
+    for (set.keys(), set.vals()) |kv_k, kv_v| try doc.set(kv_k, kv_v);
+    try doc.set("avatarUrl", if (set.get("avatarUrl").isNullish()) Val.null else set.get("avatarUrl"));
+    try doc.set("about", if (set.get("about").isNullish()) Val.string("") else set.get("about"));
+    try doc.set("memberIds", if (members) |m| try ids(r, m) else try Val.array(a));
+    try doc.set("createdAt", now);
+    try doc.set("updatedAt", now);
     _ = col().teams.insertOne(a, doc) catch |e| {
         if (e == error.DuplicateKey) return upsertTeam(r, app_doc, body); // two requests raced
         return e;
@@ -144,9 +144,9 @@ pub fn updateTeam(r: *Rq, app_doc: Val, team: Val, body: Val) !Val {
     const set = try cleanFields(r, body, true);
     const members = if (body.get("members") != .undef) try appUsers(r, app_doc, body.get("members"), "members") else null;
     const s2 = try val.clone(a, set);
-    try s2.put(a, "updatedAt", A.now());
-    if (members) |m| try s2.put(a, "memberIds", try ids(r, m));
-    const fresh = (try col().teams.findOneAndUpdate(a, .{ ._id = team.get("_id") }, .{ .@"$set" = s2 }, .{})) orelse team;
+    try s2.set("updatedAt", A.now());
+    if (members) |m| try s2.set("memberIds", try ids(r, m));
+    const fresh = (try col().teams.findOneAndUpdate(a, .{ ._id = team.get("_id") }, .{ .@"$set" = s2 }, .{ .returnDocument = .after })) orelse team;
     try afterChange(r, fresh, team, if (members) |m| try ids(r, m) else null, set);
     return fresh;
 }
@@ -166,9 +166,9 @@ pub fn addTeamMembers(r: *Rq, app_doc: Val, team: Val, refs: Val) !struct { team
     var ext = try Val.array(a);
     if (added.items.len == 0) return .{ .team = team, .added = ext };
     const added_ids = try ids(r, added.items);
-    const fresh = (try col().teams.findOneAndUpdate(a, .{ ._id = team.get("_id") }, .{ .@"$addToSet" = .{ .memberIds = .{ .@"$each" = added_ids } }, .@"$set" = .{ .updatedAt = A.now() } }, .{})) orelse team;
+    const fresh = (try col().teams.findOneAndUpdate(a, .{ ._id = team.get("_id") }, .{ .@"$addToSet" = .{ .memberIds = .{ .@"$each" = added_ids } }, .@"$set" = .{ .updatedAt = A.now() } }, .{ .returnDocument = .after })) orelse team;
     try syncChats(r, fresh, added_ids.items(), &.{});
-    for (added.items) |u| try ext.push(a, u.get("externalId"));
+    for (added.items) |u| try ext.push(u.get("externalId"));
     return .{ .team = fresh, .added = ext };
 }
 
@@ -179,7 +179,7 @@ pub fn removeTeamMember(r: *Rq, team: Val, user: Val) !Val {
         have = true;
     };
     if (!have) return team;
-    const fresh = (try col().teams.findOneAndUpdate(a, .{ ._id = team.get("_id") }, .{ .@"$pull" = .{ .memberIds = user.get("_id") }, .@"$set" = .{ .updatedAt = A.now() } }, .{})) orelse team;
+    const fresh = (try col().teams.findOneAndUpdate(a, .{ ._id = team.get("_id") }, .{ .@"$pull" = .{ .memberIds = user.get("_id") }, .@"$set" = .{ .updatedAt = A.now() } }, .{ .returnDocument = .after })) orelse team;
     try syncChats(r, fresh, &.{}, &.{user.get("_id")});
     return fresh;
 }
@@ -204,12 +204,12 @@ fn afterChange(r: *Rq, team: Val, before: Val, members: ?Val, set: Val) !void {
     }
     const name_changed = set.get("name") != .undef and !Val.eql(set.get("name"), before.get("name"));
     const avatar_changed = set.get("avatarUrl") != .undef and !Val.eql(set.get("avatarUrl"), if (before.get("avatarUrl").truthy()) before.get("avatarUrl") else Val.null);
-    const about_changed = set.get("about") != .undef and !Val.eql(set.get("about"), if (before.get("about").truthy()) before.get("about") else Val.s(""));
+    const about_changed = set.get("about") != .undef and !Val.eql(set.get("about"), if (before.get("about").truthy()) before.get("about") else Val.string(""));
     if (name_changed or avatar_changed or about_changed) {
         if (set.get("name") != .undef) _ = try col().chats.updateMany(a, .{ .teamId = team.get("_id") }, .{ .@"$set" = .{ .title = team.get("name") } }, .{});
         const list = try col().chats.find(a, .{ .teamId = team.get("_id"), .deletedAt = .{ .@"$exists" = false } }, .{});
         var changes = try Val.array(a);
-        for (set.keys()) |kv| try changes.push(a, .{ .str = kv.k });
+        for (set.keys()) |kv_k| try changes.push(Val{ .str = kv_k });
         for (list) |chat| {
             for (rt.onlineMemberVals(a, chat.get("_id"))) |uid| try chats.pushChat(r, chat, .{ .id = v.oid(uid).? }, "chat.update");
             try events.emit(a, .chat_updated, try val.from(a, .{ .chat = chat, .by = Val.null, .changes = changes }));
@@ -292,9 +292,9 @@ pub fn openTeamChat(r: *Rq, app_doc: Val, team: Val, visitor: Val, external_id: 
         .pinned = try Val.array(a),
         .memberCount = 1 + staff.len + @as(usize, if (bot != null) 1 else 0),
     });
-    if (external_id) |e| try chat.set(a, "externalId", e) else try chat.set(a, "pairKey", pair_key);
-    if (metadata.truthy()) try chat.put(a, "metadata", (try v.meta(r, metadata)) orelse .undef);
-    if (bot) |b| try chat.put(a, "botId", b.get("_id"));
+    if (external_id) |e| try chat.set("externalId", e) else try chat.set("pairKey", pair_key);
+    if (metadata.truthy()) try chat.set("metadata", (try v.meta(r, metadata)) orelse .undef);
+    if (bot) |b| try chat.set("botId", b.get("_id"));
     _ = col().chats.insertOne(a, chat) catch |e| {
         if (e == error.DuplicateKey) return openTeamChat(r, app_doc, team, visitor, external_id, metadata, bot_id);
         return e;
@@ -302,7 +302,7 @@ pub fn openTeamChat(r: *Rq, app_doc: Val, team: Val, visitor: Val, external_id: 
     const mk = struct {
         fn doc(rq: *Rq, c: Val, user_id: Val, role: []const u8, extra: ?Val) !Val {
             const d = try val.from(rq.a, .{ .chatId = c.get("_id"), .userId = user_id, .chatType = "support", .role = role, .status = "active", .joinedAt = c.get("createdAt"), .joinedSeq = 0, .lastReadSeq = 0, .unread = 0, .mentions = 0, .lastActivityAt = c.get("createdAt") });
-            if (extra) |x| for (x.keys()) |kv| try d.put(rq.a, kv.k, kv.v);
+            if (extra) |x| for (x.keys(), x.vals()) |kv_k, kv_v| try d.set(kv_k, kv_v);
             return d;
         }
     }.doc;
@@ -310,11 +310,11 @@ pub fn openTeamChat(r: *Rq, app_doc: Val, team: Val, visitor: Val, external_id: 
     try members.append(a, try mk(r, chat, visitor.get("_id"), "member", null));
     for (staff) |u| try members.append(a, try mk(r, chat, u.get("_id"), "admin", try val.from(a, .{ .rights = try access.defaultAdminRights(a), .team = true })));
     if (bot) |b| try members.append(a, try mk(r, chat, b.get("_id"), "admin", try val.from(a, .{ .rights = try access.defaultAdminRights(a) })));
-    try col().members.insertMany(a, members.items);
+    _ = try col().members.insertMany(a, members.items);
     for (members.items) |m| rt.joinedChat(m.get("userId"), chat.get("_id"), chat.get("type"));
     for (members.items) |m| if (!val.same(m.get("userId"), visitor.get("_id"))) try chats.pushChat(r, chat, m.get("userId"), "chat.new");
     var mids = try Val.array(a);
-    for (members.items) |m| try mids.push(a, m.get("userId"));
+    for (members.items) |m| try mids.push(m.get("userId"));
     try events.emit(a, .chat_created, try val.from(a, .{ .chat = chat, .creator = visitor, .memberIds = mids }));
     return .{ .chat = chat, .created = true };
 }
@@ -345,7 +345,7 @@ pub fn teamUnreadTotal(r: *Rq, team: Val) !i64 {
 pub fn teamChats(r: *Rq, team: Val, limit_: i64, before: ?[]const u8) !Val {
     const a = r.a;
     const q = try val.from(a, .{ .teamId = team.get("_id"), .deletedAt = .{ .@"$exists" = false } });
-    if (before) |b| if (b.len > 0) try q.set(a, "lastMessageAt", .{ .@"$lt" = if (val.parseDate(b)) |ms| Val{ .date = ms } else Val.null });
+    if (before) |b| if (b.len > 0) try q.set("lastMessageAt", .{ .@"$lt" = if (val.parseDate(b)) |ms| Val{ .date = ms } else Val.null });
     const list = try col().chats.find(a, q, .{ .sort = .{ .lastMessageAt = -1 }, .limit = @min(@max(limit_, 1), 200) });
     var out = try Val.array(a);
     if (list.len == 0) return out;
@@ -368,7 +368,7 @@ pub fn teamChats(r: *Rq, team: Val, limit_: i64, before: ?[]const u8) !Val {
         for (visitors) |u| if (val.same(u.get("_id"), c.get("visitorId"))) {
             vis = try val.from(a, .{ .id = try r.str(u.get("_id")), .externalId = if (u.get("externalId").truthy()) u.get("externalId") else Val.null, .name = u.get("displayName"), .avatarUrl = if (u.get("avatarUrl").truthy()) u.get("avatarUrl") else Val.null });
         };
-        try out.push(a, try val.from(a, .{
+        try out.push(try val.from(a, .{
             .id = try r.str(c.get("_id")),
             .externalId = if (c.get("externalId").truthy()) c.get("externalId") else Val.null,
             .encrypted = c.get("encrypted").truthy(),

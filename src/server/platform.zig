@@ -47,7 +47,7 @@ pub fn get() Settings {
         if (d.get("earlyAccessUsers") == .arr) {
             var list: std.ArrayList([]const u8) = .empty;
             for (d.get("earlyAccessUsers").items()) |u| {
-                const t = val.str(na, u) catch continue;
+                const t = val.toStr(na, u) catch continue;
                 list.append(na, @import("validate.zig").jsLower(na, t) catch continue) catch {};
             }
             s.early_access_users = list.items;
@@ -71,8 +71,8 @@ pub fn canOpenApp(a: std.mem.Allocator, user: ?Val) !bool {
     const u = user orelse return false;
     if (u.get("appId").truthy()) return false;
     if (u.get("isAdmin").truthy()) return true;
-    const name = try @import("validate.zig").jsLower(a, if (u.get("username").truthy()) try val.str(a, u.get("username")) else "");
-    const wid = try @import("validate.zig").jsLower(a, if (u.get("wufourId").truthy()) try val.str(a, u.get("wufourId")) else "");
+    const name = try @import("validate.zig").jsLower(a, if (u.get("username").truthy()) try val.toStr(a, u.get("username")) else "");
+    const wid = try @import("validate.zig").jsLower(a, if (u.get("wufourId").truthy()) try val.toStr(a, u.get("wufourId")) else "");
     lock.lockUncancelable(A.app.io);
     defer lock.unlock(A.app.io);
     // The cached list, read under the lock (a refresh may replace it meanwhile).

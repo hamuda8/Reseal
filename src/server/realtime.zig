@@ -11,7 +11,7 @@ const http = @import("http");
 const A = @import("app.zig");
 const web = @import("web.zig");
 const auth = @import("auth.zig");
-const ws = @import("lib/ws.zig");
+const ws = @import("http").ws;
 const calls = @import("calls.zig");
 const val = A.val;
 const Val = A.Val;
@@ -40,7 +40,9 @@ pub const Conn = struct {
     app_id: ?Key,
     device: []const u8,
     visible: bool = true,
-    peer: *ws.Peer,
+    peer: *ws.Socket,
+    /// Last time a ping or pong arrived (ms); proves the peer is alive.
+    last_pong: std.atomic.Value(i64) = .init(0),
 
     pub fn idStr(c: *const Conn) []const u8 {
         return &c.id;
@@ -49,9 +51,15 @@ pub const Conn = struct {
     /// Sends `{ t, d }`; false when the connection is gone.
     pub fn send(c: *Conn, a: std.mem.Allocator, t: []const u8, d: Val) bool {
         const text = frame(a, t, d) catch return false;
-        return c.peer.sendText(text);
+        return sendText(c.peer, text);
     }
 };
+
+/// Queues a text frame; false when the connection is closed (or was dropped for not reading).
+fn sendText(s: *ws.Socket, text: []const u8) bool {
+    s.sendText(text) catch return false;
+    return true;
+}
 
 fn frame(a: std.mem.Allocator, t: []const u8, d: Val) ![]const u8 {
     return val.stringify(a, try val.from(a, .{ .t = t, .d = d }));
@@ -115,7 +123,7 @@ pub fn toUserExcept(a: std.mem.Allocator, user_id: Val, t: []const u8, d: Val, e
     var n: usize = 0;
     for (list.items) |c| {
         if (except_conn) |e| if (std.mem.eql(u8, &c.id, e)) continue;
-        if (c.peer.sendText(text)) n += 1;
+        if (sendText(c.peer, text)) n += 1;
     }
     return n;
 }
@@ -433,7 +441,7 @@ pub fn sendToConn(a: std.mem.Allocator, conn_id: []const u8, t: []const u8, d: V
     lockIt();
     defer unlockIt();
     var it = sockets.valueIterator();
-    while (it.next()) |list| for (list.items) |c| if (std.mem.eql(u8, &c.id, conn_id)) return c.peer.sendText(text);
+    while (it.next()) |list| for (list.items) |c| if (std.mem.eql(u8, &c.id, conn_id)) return sendText(c.peer, text);
     return false;
 }
 
@@ -465,7 +473,7 @@ pub fn pingLoop() void {
         lockIt();
         var it = sockets.valueIterator();
         while (it.next()) |list| for (list.items) |c| {
-            if (t - c.peer.last_pong.load(.acquire) > 62_500) c.peer.terminate() else _ = c.peer.send(.ping, "");
+            if (t - c.last_pong.load(.acquire) > 62_500) c.peer.terminate() else c.peer.send(.ping, "") catch {};
         };
         unlockIt();
     }
@@ -498,13 +506,16 @@ pub fn upgrade(q: *web.Req) !void {
     const resolved = (auth.resolveToken(&q.r, token) catch null) orelse return reject(ctx, 401, "Unauthorized");
 
     const gpa_ = A.app.gpa;
-    const socket = ctx.webSocket() catch return reject(ctx, 400, "Bad Request");
-    var peer: ws.Peer = .{ .io = A.app.io, .gpa = gpa_, .in = socket.in, .out = socket.out, .stream = socket.stream };
-    peer.last_pong.store(A.nowMs(), .release);
+    var peer = ctx.webSocket() catch return reject(ctx, 400, "Bad Request");
+    // As Reseal-js's ws: messages up to 512 KiB (call signalling), sends queued for the
+    // connection's writer task, a client that stops reading dropped at 16 MiB.
+    peer.max_payload = 512 * 1024;
+    peer.queued = true;
 
     const conn = try gpa_.create(Conn);
     defer gpa_.destroy(conn);
     conn.* = .{ .id = undefined, .user_id = keyOf(resolved.user.get("_id")) orelse return, .arena = .init(gpa_), .user = undefined, .app_id = null, .device = "", .peer = &peer };
+    conn.last_pong.store(A.nowMs(), .release);
     defer conn.arena.deinit();
     _ = A.randomUuid(&conn.id);
     const ca = conn.arena.allocator();
@@ -513,7 +524,7 @@ pub fn upgrade(q: *web.Req) !void {
     conn.app_id = keyOf(resolved.user.get("appId"));
 
     var writer: Io.Group = .init;
-    try writer.concurrent(A.app.io, ws.Peer.writerLoop, .{&peer});
+    try writer.concurrent(A.app.io, ws.Socket.writerLoop, .{&peer});
     defer {
         peer.close(1000);
         writer.await(A.app.io) catch {};
@@ -536,10 +547,9 @@ pub fn upgrade(q: *web.Req) !void {
         _ = conn.send(a, "ready", try val.from(a, .{ .connId = conn.idStr(), .userId = &conn.user_id, .serverTime = A.nowMs() }));
     }
 
-    var buf: std.ArrayList(u8) = .empty;
-    defer buf.deinit(gpa_);
     while (true) {
-        const m = peer.read(&buf, A.nowMs()) catch break;
+        const m = peer.read() catch break;
+        if (m.op == .ping or m.op == .pong) conn.last_pong.store(A.nowMs(), .release);
         _ = msg_arena.reset(.retain_capacity);
         if (m.op != .text) continue;
         var r: Rq = .{ .a = msg_arena.allocator() };
@@ -599,7 +609,7 @@ fn dispatch(r: *Rq, conn: *Conn, t: []const u8, d: Val) !Val {
 /// Typing indicators: "typing", "recording voice", "uploading photo", ...
 fn typing(r: *Rq, conn: *Conn, d: Val) !void {
     const a = r.a;
-    const chat_s = try val.str(a, if (d.get("chatId").truthy()) d.get("chatId") else Val.s(""));
+    const chat_s = try val.toStr(a, if (d.get("chatId").truthy()) d.get("chatId") else Val.string(""));
     const action_v = d.get("action").asStr();
     var action: []const u8 = "typing";
     if (action_v) |x| for (ACTIONS) |known| if (std.mem.eql(u8, known, x)) {

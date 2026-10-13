@@ -98,10 +98,10 @@ fn patchMe(q: *Req) !void {
     const unset = try Val.object(a);
     if (b.get("displayName") != .undef) {
         const name = try v.reqStr(r, b.get("displayName"), "displayName", .{ .min = 1, .max = 64 });
-        try set.set(a, "displayName", name);
-        try set.set(a, "displayNameLower", try v.jsLower(a, name));
+        try set.set("displayName", name);
+        try set.set("displayNameLower", try v.jsLower(a, name));
     }
-    if (b.get("bio") != .undef) try set.set(a, "bio", try v.reqStr(r, b.get("bio"), "bio", .{ .max = 140 }));
+    if (b.get("bio") != .undef) try set.set("bio", try v.reqStr(r, b.get("bio"), "bio", .{ .max = 140 }));
     // Content checks (Wufour Moderation): the name and bio are visible to everyone.
     if (set.get("displayName") != .undef or set.get("bio") != .undef) {
         _ = try moderation.check(r, me, try val.from(a, .{ .type = "profile", .field = "me" }), try val.from(a, .{ .displayName = set.get("displayName"), .bio = set.get("bio") }), null);
@@ -110,15 +110,15 @@ fn patchMe(q: *Req) !void {
         try r.ensure(!me.get("appId").truthy(), "Usernames are managed by the app you are using", 400, null);
         if (b.get("username").truthy()) {
             const un = try v.reqStr(r, b.get("username"), "username", .{ .pattern = v.isUsername });
-            try set.set(a, "username", un);
+            try set.set("username", un);
             const lower = try v.jsLower(a, un);
-            try set.set(a, "usernameLower", lower);
+            try set.set("usernameLower", lower);
             try r.ensure(!std.ascii.endsWithIgnoreCase(un, "bot"), "Only bots can have usernames ending in \"bot\"", 400, null);
             const taken = try col().chats.findOne(a, .{ .usernameLower = lower }, .{ .projection = .{ ._id = 1 } });
             try r.ensure(taken == null, "That username is taken", 409, "username_taken");
         } else {
-            try unset.set(a, "username", "");
-            try unset.set(a, "usernameLower", "");
+            try unset.set("username", "");
+            try unset.set("usernameLower", "");
         }
     }
     if (b.get("avatar") != .undef) {
@@ -126,26 +126,26 @@ fn patchMe(q: *Req) !void {
             const m = try col().media.findOne(a, .{ ._id = try v.reqId(r, b.get("avatar"), "avatar"), .ownerId = me.get("_id"), .status = "ready" }, .{});
             try r.ensure(m != null and std.mem.startsWith(u8, m.?.get("mime").asStr() orelse "", "image/"), "Your photo must be an image you uploaded", 400, null);
             _ = try col().media.updateOne(a, .{ ._id = m.?.get("_id") }, .{ .@"$set" = .{ .public = true } }, .{});
-            try set.put(a, "avatar", m.?.get("_id"));
-        } else try set.put(a, "avatar", .null);
+            try set.set("avatar", m.?.get("_id"));
+        } else try set.set("avatar", .null);
     }
     if (b.get("privacy") != .undef) {
         const p = try v.reqObj(r, b.get("privacy"), "privacy");
         for ([_][]const u8{ "lastSeen", "avatar", "calls", "groups", "forwards" }) |k| {
-            if (p.get(k) != .undef) try set.set(a, try r.fmt("privacy.{s}", .{k}), try v.reqOneOf(r, p.get(k), try r.fmt("privacy.{s}", .{k}), &PRIVACY_RULES));
+            if (p.get(k) != .undef) try set.set(try r.fmt("privacy.{s}", .{k}), try v.reqOneOf(r, p.get(k), try r.fmt("privacy.{s}", .{k}), &PRIVACY_RULES));
         }
-        if (p.get("readReceipts") != .undef) try set.set(a, "privacy.readReceipts", try v.reqBool(r, p.get("readReceipts"), "privacy.readReceipts"));
+        if (p.get("readReceipts") != .undef) try set.set("privacy.readReceipts", try v.reqBool(r, p.get("readReceipts"), "privacy.readReceipts"));
     }
     if (b.get("settings") != .undef) {
         // Client preferences synced across devices (theme, sounds, ...). Bounded, opaque to the server.
         const s = try v.reqObj(r, b.get("settings"), "settings");
         try r.ensure(v.utf16Len(try val.stringify(a, s)) <= 8192, "settings are too large", 400, null);
         _ = try v.metadata(r, s, "settings", 8192);
-        for (s.keys()) |kv| try set.put(a, try r.fmt("settings.{s}", .{kv.k}), kv.v);
+        for (s.keys(), s.vals()) |kv_k, kv_v| try set.set(try r.fmt("settings.{s}", .{kv_k}), kv_v);
     }
     const update = try Val.object(a);
-    if (set.len() > 0) try update.put(a, "$set", set);
-    if (unset.len() > 0) try update.put(a, "$unset", unset);
+    if (set.len() > 0) try update.set("$set", set);
+    if (unset.len() > 0) try update.set("$unset", unset);
     if (update.len() > 0) _ = col().users.updateOne(a, .{ ._id = me.get("_id") }, update, .{}) catch |e| {
         if (e == error.DuplicateKey) return r.fail(409, "That username is taken", "username_taken");
         return e;
@@ -175,7 +175,7 @@ fn username(q: *Req) !void {
     const c = try col().chats.findOne(a, .{ .usernameLower = lower }, .{ .projection = .{ ._id = 1 } });
     const mine = u != null and val.same(u.?.get("_id"), q.user().get("_id"));
     const ok = mine or (u == null and c == null);
-    return q.json(.{ .available = ok, .reason = if (ok) Val.null else Val.s("That username is taken.") });
+    return q.json(.{ .available = ok, .reason = if (ok) Val.null else Val.string("That username is taken.") });
 }
 
 fn deleteMe(q: *Req) !void {
@@ -222,9 +222,9 @@ pub fn usersFor(r: *Rq, viewer: Val, users: []const Val, full: bool) !Val {
         for (mine) |c| if (val.same(c.get("contactId"), u.get("_id"))) {
             c_ = c;
         };
-        try o.set(a, "inContacts", c_ != null);
-        if (c_) |c| if (c.get("name").truthy()) try o.put(a, "contactName", c.get("name"));
-        try out.push(a, o);
+        try o.set("inContacts", c_ != null);
+        if (c_) |c| if (c.get("name").truthy()) try o.set("contactName", c.get("name"));
+        try out.push(o);
     }
     return out;
 }
@@ -237,7 +237,7 @@ fn usersLookup(q: *Req) !void {
     const a = q.r.a;
     const ids = try v.reqIds(&q.r, q.b("ids"), "ids", 500);
     var list = try Val.array(a);
-    for (ids) |x| try list.push(a, idv(x));
+    for (ids) |x| try list.push(idv(x));
     const users = try col().users.find(a, .{ ._id = .{ .@"$in" = list }, .appId = scope(q.user()) }, .{});
     return q.json(.{ .users = try usersFor(&q.r, q.user(), users, false) });
 }
@@ -258,26 +258,26 @@ fn getUser(q: *Req) !void {
     const id = try v.reqId(r, q.pv("id"), "id");
     const me = q.user();
     const u = (try col().users.findOne(a, .{ ._id = id }, .{})) orelse return r.fail(404, "User not found", "user_not_found");
-    try r.ensure(std.mem.eql(u8, try val.str(a, if (u.get("appId").truthy()) u.get("appId") else Val.s("")), try val.str(a, if (me.get("appId").truthy()) me.get("appId") else Val.s(""))), "User not found", 404, "user_not_found");
+    try r.ensure(std.mem.eql(u8, try val.toStr(a, if (u.get("appId").truthy()) u.get("appId") else Val.string("")), try val.toStr(a, if (me.get("appId").truthy()) me.get("appId") else Val.string(""))), "User not found", 404, "user_not_found");
     const out = (try usersFor(r, me, &.{u}, true)).items()[0];
     const blocked = try col().blocks.findOne(a, .{ .userId = me.get("_id"), .blockedId = u.get("_id") }, .{});
     const blocked_me = try col().blocks.findOne(a, .{ .userId = u.get("_id"), .blockedId = me.get("_id") }, .{});
-    try out.set(a, "blocked", blocked != null);
+    try out.set("blocked", blocked != null);
     if (blocked_me != null) {
-        try out.set(a, "presence", .{ .status = "long_ago" });
-        try out.put(a, "avatar", .null);
+        try out.set("presence", .{ .status = "long_ago" });
+        try out.set("avatar", .null);
     }
     // Groups you share with this person.
     const mine = try col().members.find(a, .{ .userId = me.get("_id"), .status = "active", .chatType = "group" }, .{ .projection = .{ .chatId = 1 } });
     var ids: std.ArrayList(Val) = .empty;
     for (mine) |m| try ids.append(a, m.get("chatId"));
-    try out.set(a, "commonGroups", try col().members.count(a, .{ .userId = u.get("_id"), .status = "active", .chatId = .{ .@"$in" = ids.items } }, .{}));
+    try out.set("commonGroups", try col().members.count(a, .{ .userId = u.get("_id"), .status = "active", .chatId = .{ .@"$in" = ids.items } }, .{}));
     if (eq(u.get("kind"), "bot")) {
         const bot = try col().bots.findOne(a, .{ ._id = u.get("_id") }, .{ .projection = .{ .starters = 1, .model = 1 } });
         const b = try val.clone(a, if (out.get("bot").truthy()) out.get("bot") else try Val.object(a));
-        try b.put(a, "starters", if (bot != null and bot.?.get("starters").truthy()) bot.?.get("starters") else try Val.array(a));
-        try b.put(a, "model", if (bot != null and bot.?.get("model").truthy()) bot.?.get("model") else Val.null);
-        try out.put(a, "bot", b);
+        try b.set("starters", if (bot != null and bot.?.get("starters").truthy()) bot.?.get("starters") else try Val.array(a));
+        try b.set("model", if (bot != null and bot.?.get("model").truthy()) bot.?.get("model") else Val.null);
+        try out.set("bot", b);
     }
     return q.json(.{ .user = out });
 }
@@ -294,7 +294,7 @@ fn commonGroups(q: *Req) !void {
     for (shared) |m| try sids.append(a, m.get("chatId"));
     const chats = try col().chats.find(a, .{ ._id = .{ .@"$in" = sids.items } }, .{ .projection = .{ .title = 1, .avatar = 1, .memberCount = 1, .type = 1 } });
     var out = try Val.array(a);
-    for (chats) |c| try out.push(a, try val.from(a, .{ .id = try r.str(c.get("_id")), .title = c.get("title"), .avatar = if (c.get("avatar").truthy()) Val{ .str = try r.str(c.get("avatar")) } else Val.null, .color = try ser.colorOf(a, c.get("_id")), .memberCount = c.get("memberCount"), .type = c.get("type") }));
+    for (chats) |c| try out.push(try val.from(a, .{ .id = try r.str(c.get("_id")), .title = c.get("title"), .avatar = if (c.get("avatar").truthy()) Val{ .str = try r.str(c.get("avatar")) } else Val.null, .color = try ser.colorOf(a, c.get("_id")), .memberCount = c.get("memberCount"), .type = c.get("type") }));
     return q.json(.{ .chats = out });
 }
 
@@ -373,7 +373,7 @@ fn search(q: *Req) !void {
                 k = true;
             };
             if (k or val.same(f.get("id"), me.get("wufourId"))) continue;
-            try wufour_list.push(a, try val.from(a, .{ .wufourId = f.get("id"), .username = f.get("username"), .displayName = f.get("username") }));
+            try wufour_list.push(try val.from(a, .{ .wufourId = f.get("id"), .username = f.get("username"), .displayName = f.get("username") }));
         }
     }
     var chats_out = try Val.array(a);
@@ -391,7 +391,7 @@ fn search(q: *Req) !void {
         for (memberships) |m| if (val.same(m.get("chatId"), c.get("_id"))) {
             member = true;
         };
-        try chats_out.push(a, try val.from(a, .{
+        try chats_out.push(try val.from(a, .{
             .id = try r.str(c.get("_id")),
             .type = c.get("type"),
             .title = c.get("title"),
@@ -432,7 +432,7 @@ fn searchMessages(q: *Req) !void {
         rows = keep.items;
     } else {
         const filter = try val.from(a, .{ .chatId = .{ .@"$in" = pids.items }, .@"$text" = .{ .@"$search" = text } });
-        for (visible.keys()) |kv| try filter.put(a, kv.k, kv.v);
+        for (visible.keys(), visible.vals()) |kv_k, kv_v| try filter.set(kv_k, kv_v);
         rows = try col().messages.find(a, filter, .{ .projection = .{ .score = .{ .@"$meta" = "textScore" } }, .sort = .{ .createdAt = -1 }, .limit = 50, .maxTimeMS = SEARCH_MS });
     }
     var out = try Val.array(a);
@@ -446,7 +446,7 @@ fn searchMessages(q: *Req) !void {
         for (plain) |c| if (val.same(c.get("_id"), m.get("chatId"))) {
             chat = c;
         };
-        try out.push(a, try ser.message(a, m, me.get("_id"), chat));
+        try out.push(try ser.message(a, m, me.get("_id"), chat));
     }
     return q.json(.{ .messages = out });
 }
@@ -554,7 +554,7 @@ fn setLock(q: *Req) !void {
     const lock = try val.from(a, .{ .salt = try b64e(a, &salt), .hash = try b64e(a, &hash), .updatedAt = A.now() });
     _ = try col().users.updateOne(a, .{ ._id = me.get("_id") }, .{ .@"$set" = .{ .chatLock = lock } }, .{});
     const u = try val.clone(a, me);
-    try u.put(a, "chatLock", lock);
+    try u.set("chatLock", lock);
     return q.json(.{ .user = try ser.me(a, u) });
 }
 
@@ -581,7 +581,7 @@ fn removeLock(q: *Req) !void {
     for (list) |chat| {
         for (locked) |m| if (val.same(m.get("chatId"), chat.get("_id"))) {
             const mm = try val.clone(a, m);
-            try mm.set(a, "locked", false);
+            try mm.set("locked", false);
             _ = rt.toUser(a, me.get("_id"), "chat.state", try val.from(a, .{ .chatId = try r.str(chat.get("_id")), .me = (try ser.chat(a, chat, mm, me.get("_id"), .{})).get("me") }));
             break;
         };
@@ -607,13 +607,13 @@ fn cleanFolder(r: *Rq, b: Val) !Val {
         for (include.items()) |y| if (std.mem.eql(u8, y.str, s)) {
             dup = true;
         };
-        if (known and !dup) try include.push(a, t);
+        if (known and !dup) try include.push(t);
     }
     const emoji = try v.str(r, b.get("emoji"), "emoji", .{ .max = 8, .optional = true });
     var chat_ids = try Val.array(a);
-    for (try v.reqIds(r, if (b.get("chatIds").truthy()) b.get("chatIds") else try Val.array(a), "chatIds", 200)) |x| try chat_ids.push(a, idv(x));
+    for (try v.reqIds(r, if (b.get("chatIds").truthy()) b.get("chatIds") else try Val.array(a), "chatIds", 200)) |x| try chat_ids.push(idv(x));
     var ex_ids = try Val.array(a);
-    for (try v.reqIds(r, if (b.get("excludeChatIds").truthy()) b.get("excludeChatIds") else try Val.array(a), "excludeChatIds", 200)) |x| try ex_ids.push(a, idv(x));
+    for (try v.reqIds(r, if (b.get("excludeChatIds").truthy()) b.get("excludeChatIds") else try Val.array(a), "excludeChatIds", 200)) |x| try ex_ids.push(idv(x));
     return val.from(a, .{
         .name = try v.reqStr(r, b.get("name"), "name", .{ .min = 1, .max = 24 }),
         .emoji = if (emoji) |e| (if (e.len > 0) Val{ .str = e } else Val.null) else Val.null,
@@ -629,15 +629,15 @@ fn cleanFolder(r: *Rq, b: Val) !Val {
 fn folderOut(r: *Rq, f: Val) !Val {
     const a = r.a;
     const out = try val.clone(a, f);
-    try out.put(a, "id", .{ .str = try r.str(f.get("_id")) });
-    try out.put(a, "_id", .undef);
-    try out.put(a, "userId", .undef);
+    try out.set("id", Val{ .str = try r.str(f.get("_id")) });
+    try out.set("_id", .undef);
+    try out.set("userId", .undef);
     var ids = try Val.array(a);
-    for (f.get("chatIds").items()) |x| try ids.push(a, .{ .str = try r.str(x) });
-    try out.put(a, "chatIds", ids);
+    for (f.get("chatIds").items()) |x| try ids.push(Val{ .str = try r.str(x) });
+    try out.set("chatIds", ids);
     var ex = try Val.array(a);
-    for (f.get("excludeChatIds").items()) |x| try ex.push(a, .{ .str = try r.str(x) });
-    try out.put(a, "excludeChatIds", ex);
+    for (f.get("excludeChatIds").items()) |x| try ex.push(Val{ .str = try r.str(x) });
+    try out.set("excludeChatIds", ex);
     return out;
 }
 
@@ -645,7 +645,7 @@ fn getFolders(q: *Req) !void {
     const a = q.r.a;
     const rows = try col().folders.find(a, .{ .userId = q.user().get("_id") }, .{ .sort = .{ .order = 1 } });
     var out = try Val.array(a);
-    for (rows) |f| try out.push(a, try folderOut(&q.r, f));
+    for (rows) |f| try out.push(try folderOut(&q.r, f));
     return q.json(.{ .folders = out });
 }
 
@@ -655,9 +655,10 @@ fn addFolder(q: *Req) !void {
     const n = try col().folders.count(a, .{ .userId = q.user().get("_id") }, .{});
     try r.ensure(n < A.Limits.folders, try r.fmt("You can have up to {d} folders", .{A.Limits.folders}), 400, null);
     const doc = try val.from(a, .{ .userId = q.user().get("_id") });
-    for ((try cleanFolder(r, try q.bodyObj())).keys()) |kv| try doc.put(a, kv.k, kv.v);
-    try doc.set(a, "order", n);
-    try doc.put(a, "createdAt", A.now());
+    const folder = try cleanFolder(r, try q.bodyObj());
+    for (folder.keys(), folder.vals()) |fk, fv| try doc.set(fk, fv);
+    try doc.set("order", n);
+    try doc.set("createdAt", A.now());
     _ = try col().folders.insertOne(a, doc);
     _ = rt.toUser(a, q.user().get("_id"), "folders.update", try Val.object(a));
     return q.json(.{ .folder = try folderOut(r, doc) });
@@ -667,7 +668,7 @@ fn putFolder(q: *Req) !void {
     const r = &q.r;
     const a = r.a;
     const id = try v.reqId(r, q.pv("id"), "id");
-    const updated = (try col().folders.findOneAndUpdate(a, .{ ._id = id, .userId = q.user().get("_id") }, .{ .@"$set" = try cleanFolder(r, try q.bodyObj()) }, .{})) orelse return r.fail(404, "Folder not found", null);
+    const updated = (try col().folders.findOneAndUpdate(a, .{ ._id = id, .userId = q.user().get("_id") }, .{ .@"$set" = try cleanFolder(r, try q.bodyObj()) }, .{ .returnDocument = .after })) orelse return r.fail(404, "Folder not found", null);
     _ = rt.toUser(a, q.user().get("_id"), "folders.update", try Val.object(a));
     return q.json(.{ .folder = try folderOut(r, updated) });
 }
@@ -697,7 +698,7 @@ fn getBackup(q: *Req) !void {
     try r.ensure(k.get("enc").truthy(), "No encryption keys yet", 404, "no_keys");
     // The passcode-protected backup (advanced protection); the automatic one is /keys/restore.
     const b = k.get("backup");
-    return q.json(.{ .enc = k.get("enc"), .sig = k.get("sig"), .version = if (k.get("version").truthy()) k.get("version") else Val.n(1), .mode = if (k.get("mode").truthy()) k.get("mode") else Val.s("advanced"), .backup = .{ .passcode = b.get("passcode"), .recovery = b.get("recovery") } });
+    return q.json(.{ .enc = k.get("enc"), .sig = k.get("sig"), .version = if (k.get("version").truthy()) k.get("version") else Val.number(1), .mode = if (k.get("mode").truthy()) k.get("mode") else Val.string("advanced"), .backup = .{ .passcode = b.get("passcode"), .recovery = b.get("recovery") } });
 }
 
 fn restore(q: *Req) !void {

@@ -52,8 +52,8 @@ fn typeLabel(L: Labels, t: Val) []const u8 {
 
 /// A photo as Reseal's client builds it; only photos everyone may see.
 fn photo(a: std.mem.Allocator, media_id: Val, external: Val) ![]const u8 {
-    if (external.truthy()) return val.str(a, external);
-    if (media_id.truthy()) return std.fmt.allocPrint(a, "/m/{s}", .{try val.str(a, media_id)});
+    if (external.truthy()) return val.toStr(a, external);
+    if (media_id.truthy()) return std.fmt.allocPrint(a, "/m/{s}", .{try val.toStr(a, media_id)});
     return "";
 }
 
@@ -121,7 +121,7 @@ fn search(q: *Req) !void {
     var pair_keys = try Val.array(a);
     for (people.items) |u| {
         const us = try r.str(u.get("_id"));
-        try pair_keys.push(a, .{ .str = if (std.mem.order(u8, me_s, us) == .gt) try r.fmt("{s}:{s}", .{ us, me_s }) else try r.fmt("{s}:{s}", .{ me_s, us }) });
+        try pair_keys.push(Val{ .str = if (std.mem.order(u8, me_s, us) == .gt) try r.fmt("{s}:{s}", .{ us, me_s }) else try r.fmt("{s}:{s}", .{ me_s, us }) });
     }
     const pairs = if (people.items.len > 0) try col().chats.find(a, .{ .pairKey = .{ .@"$in" = pair_keys } }, .{ .projection = .{ .pairKey = 1 }, .maxTimeMS = MAX_TIME_MS }) else val.none[0..];
 
@@ -132,7 +132,7 @@ fn search(q: *Req) !void {
         const mc = c.get("memberCount").asInt() orelse 0;
         if (mc > 2) try parts.append(a, try membersLabel(a, L, mc));
         if (c.get("encrypted").truthy()) try parts.append(a, L.encrypted);
-        try results.push(a, try val.from(a, .{ .kind = "chat", .title = if (c.get("title").truthy()) c.get("title") else Val.s(L.chat), .subtitle = try std.mem.join(a, " · ", parts.items), .meta = "", .image = try photo(a, c.get("avatar"), .null), .url = try r.fmt("/c/{s}", .{try r.str(c.get("_id"))}) }));
+        try results.push(try val.from(a, .{ .kind = "chat", .title = if (c.get("title").truthy()) c.get("title") else Val.string(L.chat), .subtitle = try std.mem.join(a, " · ", parts.items), .meta = "", .image = try photo(a, c.get("avatar"), .null), .url = try r.fmt("/c/{s}", .{try r.str(c.get("_id"))}) }));
     }
     for (people.items, 0..) |u, i| {
         var chat_id: ?[]const u8 = null;
@@ -141,10 +141,10 @@ fn search(q: *Req) !void {
         };
         const url = if (chat_id) |c| try r.fmt("/c/{s}", .{c}) else if (u.get("username").truthy()) try r.fmt("/@{s}", .{try web.encodeComponent(a, try r.str(u.get("username")))}) else continue;
         const everyone = std.mem.eql(u8, u.path("privacy.avatar").asStr() orelse "everyone", "everyone");
-        try results.push(a, try val.from(a, .{
+        try results.push(try val.from(a, .{
             .kind = if (eq(u.get("kind"), "bot")) "bot" else "user",
             .title = if (u.get("displayName").truthy()) u.get("displayName") else u.get("username"),
-            .subtitle = if (u.get("username").truthy()) Val{ .str = try r.fmt("@{s}", .{try r.str(u.get("username"))}) } else Val.s(""),
+            .subtitle = if (u.get("username").truthy()) Val{ .str = try r.fmt("@{s}", .{try r.str(u.get("username"))}) } else Val.string(""),
             .meta = if (eq(u.get("kind"), "bot")) L.bot else "",
             .image = if (everyone) try photo(a, u.get("avatar"), u.get("avatarUrl")) else "",
             .url = url,
@@ -160,7 +160,7 @@ fn search(q: *Req) !void {
         var parts: std.ArrayList([]const u8) = .empty;
         try parts.append(a, try r.fmt("@{s}", .{un}));
         if (c.get("memberCount").truthy()) try parts.append(a, try membersLabel(a, L, c.get("memberCount").asInt() orelse 0));
-        try results.push(a, try val.from(a, .{ .kind = "chat", .title = if (c.get("title").truthy()) c.get("title") else Val{ .str = try r.fmt("@{s}", .{un}) }, .subtitle = try std.mem.join(a, " · ", parts.items), .meta = typeLabel(L, c.get("type")), .image = try photo(a, c.get("avatar"), .null), .url = try r.fmt("/@{s}", .{try web.encodeComponent(a, un)}) }));
+        try results.push(try val.from(a, .{ .kind = "chat", .title = if (c.get("title").truthy()) c.get("title") else Val{ .str = try r.fmt("@{s}", .{un}) }, .subtitle = try std.mem.join(a, " · ", parts.items), .meta = typeLabel(L, c.get("type")), .image = try photo(a, c.get("avatar"), .null), .url = try r.fmt("/@{s}", .{try web.encodeComponent(a, un)}) }));
     }
     if (plain.len > 0) {
         var pids: std.ArrayList(Val) = .empty;
@@ -193,7 +193,7 @@ fn search(q: *Req) !void {
                 title = try r.str(c.get("title"));
             };
             const ca = m.get("createdAt");
-            try results.push(a, try val.from(a, .{ .kind = "message", .title = if (snippet.len > 0) snippet else L.chat, .subtitle = title, .meta = if (ca == .date) (try val.isoDate(a, ca.date))[0..10] else "", .image = "", .url = try r.fmt("/c/{s}#{s}", .{ try r.str(m.get("chatId")), try r.str(m.get("seq")) }) }));
+            try results.push(try val.from(a, .{ .kind = "message", .title = if (snippet.len > 0) snippet else L.chat, .subtitle = title, .meta = if (ca == .date) (try val.isoDate(a, ca.date))[0..10] else "", .image = "", .url = try r.fmt("/c/{s}#{s}", .{ try r.str(m.get("chatId")), try r.str(m.get("seq")) }) }));
         }
     }
     try q.setHeader("cache-control", "no-store");

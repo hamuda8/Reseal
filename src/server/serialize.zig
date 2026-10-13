@@ -18,7 +18,7 @@ fn strEq(v: Val, x: []const u8) bool {
 
 /// A stable color index (0-7) for avatars without a photo.
 pub fn colorOf(a: Allocator, id: Val) !u32 {
-    const str = try val.str(a, id);
+    const str = try val.toStr(a, id);
     var h: u32 = 0;
     // JS charCodeAt walks UTF-16 code units; ids are ASCII.
     for (str) |c| h = h *% 31 +% c;
@@ -44,22 +44,22 @@ pub fn user(a: Allocator, u: Val, viewer_id: Val, o: UserOpts) !Val {
         .isBot = strEq(u.get("kind"), "bot"),
         .deleted = u.get("deletedAt").truthy(),
         .presence = try rt.presenceFor(a, u, viewer_id, o.is_contact),
-        .keys = if (k.truthy()) try val.from(a, .{ .enc = k.get("enc"), .sig = k.get("sig"), .version = if (k.get("version").truthy()) k.get("version") else Val.n(1), .updatedAt = k.get("updatedAt") }) else Val.null,
+        .keys = if (k.truthy()) try val.from(a, .{ .enc = k.get("enc"), .sig = k.get("sig"), .version = if (k.get("version").truthy()) k.get("version") else Val.number(1), .updatedAt = k.get("updatedAt") }) else Val.null,
     });
     if (o.full or self) {
-        try out.set(a, "bio", if (u.get("bio").truthy()) u.get("bio") else Val.s(""));
-        try out.set(a, "isContact", o.is_contact);
+        try out.set("bio", if (u.get("bio").truthy()) u.get("bio") else Val.string(""));
+        try out.set("isContact", o.is_contact);
     }
     if (strEq(u.get("kind"), "bot") and u.get("botInfo").truthy()) {
         const bi = u.get("botInfo");
-        try out.set(a, "bot", .{
-            .description = if (bi.get("description").truthy()) bi.get("description") else Val.s(""),
+        try out.set("bot", .{
+            .description = if (bi.get("description").truthy()) bi.get("description") else Val.string(""),
             .model = if (bi.get("model").truthy()) bi.get("model") else Val.null,
             .ownerId = try s(a, bi.get("ownerId")),
             .starters = if (bi.get("starters").truthy()) bi.get("starters") else try Val.array(a),
         });
     }
-    if (strEq(u.get("kind"), "app") and u.get("role").truthy()) try out.put(a, "role", u.get("role"));
+    if (strEq(u.get("kind"), "app") and u.get("role").truthy()) try out.set("role", u.get("role"));
     return out;
 }
 
@@ -67,17 +67,17 @@ pub fn user(a: Allocator, u: Val, viewer_id: Val, o: UserOpts) !Val {
 pub fn me(a: Allocator, u: Val) !Val {
     const out = try user(a, u, u.get("_id"), .{ .full = true });
     const k = u.get("keys");
-    try out.put(a, "appId", try s(a, u.get("appId")));
-    try out.put(a, "privacy", if (u.get("privacy").truthy()) u.get("privacy") else try Val.object(a));
-    try out.put(a, "settings", if (u.get("settings").truthy()) u.get("settings") else try Val.object(a));
-    try out.set(a, "isAdmin", u.get("isAdmin").truthy());
-    try out.set(a, "guest", u.get("guest").truthy());
-    try out.set(a, "hasKeys", k.get("enc").truthy());
-    try out.set(a, "keyBackup", k.get("backup").truthy());
+    try out.set("appId", try s(a, u.get("appId")));
+    try out.set("privacy", if (u.get("privacy").truthy()) u.get("privacy") else try Val.object(a));
+    try out.set("settings", if (u.get("settings").truthy()) u.get("settings") else try Val.object(a));
+    try out.set("isAdmin", u.get("isAdmin").truthy());
+    try out.set("guest", u.get("guest").truthy());
+    try out.set("hasKeys", k.get("enc").truthy());
+    try out.set("keyBackup", k.get("backup").truthy());
     // 'standard' = automatic key backup; 'advanced' = passcode only the user knows.
-    try out.put(a, "keyMode", if (k.get("enc").truthy()) (if (k.get("mode").truthy()) k.get("mode") else Val.s("advanced")) else Val.null);
-    try out.set(a, "chatLock", u.get("chatLock").truthy());
-    try out.put(a, "createdAt", u.get("createdAt"));
+    try out.set("keyMode", if (k.get("enc").truthy()) (if (k.get("mode").truthy()) k.get("mode") else Val.string("advanced")) else Val.null);
+    try out.set("chatLock", u.get("chatLock").truthy());
+    try out.set("createdAt", u.get("createdAt"));
     return out;
 }
 
@@ -86,9 +86,9 @@ pub fn reactionsOf(a: Allocator, reactions: Val, viewer_id: Val, anonymous: bool
     if (reactions != .obj) return out;
     const Entry = struct { emoji: []const u8, users: []Val };
     var list: std.ArrayList(Entry) = .empty;
-    for (reactions.keys()) |kv| {
-        if (kv.v != .arr or kv.v.len() == 0) continue;
-        try list.append(a, .{ .emoji = kv.k, .users = kv.v.items() });
+    for (reactions.keys(), reactions.vals()) |kv_k, kv_v| {
+        if (kv_v != .arr or kv_v.len() == 0) continue;
+        try list.append(a, .{ .emoji = kv_k, .users = kv_v.items() });
     }
     // Stable, by count, highest first.
     std.mem.sort(Entry, list.items, {}, struct {
@@ -104,9 +104,9 @@ pub fn reactionsOf(a: Allocator, reactions: Val, viewer_id: Val, anonymous: bool
         var recent = try Val.array(a);
         if (!anonymous) {
             const start = if (e.users.len > 3) e.users.len - 3 else 0;
-            for (e.users[start..]) |u| try recent.push(a, try s(a, u));
+            for (e.users[start..]) |u| try recent.push(try s(a, u));
         }
-        try out.push(a, try val.from(a, .{ .emoji = e.emoji, .count = e.users.len, .me = me_, .recent = recent }));
+        try out.push(try val.from(a, .{ .emoji = e.emoji, .count = e.users.len, .me = me_, .recent = recent }));
     }
     return out;
 }
@@ -121,67 +121,67 @@ pub fn message(a: Allocator, m: Val, viewer_id: Val, chat_: Val) !Val {
         .seq = if (m.get("seq").isNullish()) Val.null else m.get("seq"),
         .senderId = if (channel and !chat_.get("signMessages").truthy()) Val.null else try s(a, m.get("senderId")),
         .authorId = try s(a, m.get("senderId")),
-        .kind = if (m.get("kind").truthy()) m.get("kind") else Val.s("message"),
+        .kind = if (m.get("kind").truthy()) m.get("kind") else Val.string("message"),
         .createdAt = m.get("createdAt"),
     });
-    if (m.get("clientId").truthy() and eqNullable(try s(a, m.get("senderId")), viewer)) try out.put(a, "clientId", m.get("clientId"));
+    if (m.get("clientId").truthy() and eqNullable(try s(a, m.get("senderId")), viewer)) try out.set("clientId", m.get("clientId"));
     if (m.get("deletedAt").truthy()) {
-        try out.set(a, "deleted", true);
+        try out.set("deleted", true);
         return out;
     }
-    if (m.get("enc").truthy()) try out.put(a, "enc", m.get("enc"));
-    if (m.get("text") != .undef) try out.put(a, "text", m.get("text"));
-    if (m.get("entities").len() > 0) try out.put(a, "entities", m.get("entities"));
+    if (m.get("enc").truthy()) try out.set("enc", m.get("enc"));
+    if (m.get("text") != .undef) try out.set("text", m.get("text"));
+    if (m.get("entities").len() > 0) try out.set("entities", m.get("entities"));
     if (m.get("media").len() > 0) {
         var list = try Val.array(a);
         for (m.get("media").items()) |x| {
             const c = try val.clone(a, x);
-            try c.put(a, "id", try s(a, x.get("id")));
-            try list.push(a, c);
+            try c.set("id", try s(a, x.get("id")));
+            try list.push(c);
         }
-        try out.put(a, "media", list);
+        try out.set("media", list);
     }
-    inline for (.{ "location", "contact", "sticker", "preview" }) |k| if (m.get(k).truthy()) try out.put(a, k, m.get(k));
+    inline for (.{ "location", "contact", "sticker", "preview" }) |k| if (m.get(k).truthy()) try out.set(k, m.get(k));
     if (m.get("service").truthy()) {
         const svc = try val.clone(a, m.get("service"));
-        try svc.put(a, "actorId", try s(a, m.path("service.actorId")));
+        try svc.set("actorId", try s(a, m.path("service.actorId")));
         const t = m.path("service.targetIds");
         if (t == .arr) {
             var ids = try Val.array(a);
-            for (t.items()) |x| try ids.push(a, try s(a, x));
-            try svc.put(a, "targetIds", ids);
-        } else try svc.put(a, "targetIds", .undef);
-        try out.put(a, "service", svc);
+            for (t.items()) |x| try ids.push(try s(a, x));
+            try svc.set("targetIds", ids);
+        } else try svc.set("targetIds", .undef);
+        try out.set("service", svc);
     }
-    if (m.get("replyTo").truthy()) try out.set(a, "replyTo", .{ .id = try s(a, m.path("replyTo.id")), .seq = if (m.path("replyTo.seq").isNullish()) Val.null else m.path("replyTo.seq") });
+    if (m.get("replyTo").truthy()) try out.set("replyTo", .{ .id = try s(a, m.path("replyTo.id")), .seq = if (m.path("replyTo.seq").isNullish()) Val.null else m.path("replyTo.seq") });
     if (m.get("fwd").truthy()) {
         const f = try val.clone(a, m.get("fwd"));
-        try f.put(a, "fromUserId", try s(a, m.path("fwd.fromUserId")));
-        try f.put(a, "fromChatId", try s(a, m.path("fwd.fromChatId")));
-        try out.put(a, "fwd", f);
+        try f.set("fromUserId", try s(a, m.path("fwd.fromUserId")));
+        try f.set("fromChatId", try s(a, m.path("fwd.fromChatId")));
+        try out.set("fwd", f);
     }
-    if (m.get("tags").len() > 0) try out.put(a, "tags", m.get("tags"));
+    if (m.get("tags").len() > 0) try out.set("tags", m.get("tags"));
     if (m.get("mentions").len() > 0) {
         var list = try Val.array(a);
-        for (m.get("mentions").items()) |x| try list.push(a, try s(a, x));
-        try out.put(a, "mentions", list);
+        for (m.get("mentions").items()) |x| try list.push(try s(a, x));
+        try out.set("mentions", list);
     }
-    if (m.get("poll").truthy()) try out.put(a, "poll", try poll(a, m.get("poll"), viewer));
-    if (m.get("editedAt").truthy()) try out.put(a, "editedAt", m.get("editedAt"));
-    if (m.get("silent").truthy()) try out.set(a, "silent", true);
+    if (m.get("poll").truthy()) try out.set("poll", try poll(a, m.get("poll"), viewer));
+    if (m.get("editedAt").truthy()) try out.set("editedAt", m.get("editedAt"));
+    if (m.get("silent").truthy()) try out.set("silent", true);
     if (m.get("ttl").truthy()) {
-        try out.put(a, "ttl", m.get("ttl"));
-        try out.put(a, "expiresAt", m.get("expiresAt"));
+        try out.set("ttl", m.get("ttl"));
+        try out.set("expiresAt", m.get("expiresAt"));
     }
-    if (m.get("scheduledAt").truthy()) try out.put(a, "scheduledAt", m.get("scheduledAt"));
-    if (m.get("waitFor").truthy()) try out.set(a, "whenOnline", true);
-    if (m.get("views").truthy()) try out.put(a, "views", m.get("views"));
-    if (m.get("streaming").truthy()) try out.set(a, "streaming", true);
-    inline for (.{ "error", "bot", "metadata", "buttons" }) |k| if (m.get(k).truthy()) try out.put(a, k, m.get(k));
-    if (m.get("system").truthy()) try out.set(a, "system", true);
-    if (m.get("reminder").truthy()) try out.set(a, "reminder", true);
+    if (m.get("scheduledAt").truthy()) try out.set("scheduledAt", m.get("scheduledAt"));
+    if (m.get("waitFor").truthy()) try out.set("whenOnline", true);
+    if (m.get("views").truthy()) try out.set("views", m.get("views"));
+    if (m.get("streaming").truthy()) try out.set("streaming", true);
+    inline for (.{ "error", "bot", "metadata", "buttons" }) |k| if (m.get(k).truthy()) try out.set(k, m.get(k));
+    if (m.get("system").truthy()) try out.set("system", true);
+    if (m.get("reminder").truthy()) try out.set("reminder", true);
     const reactions = try reactionsOf(a, m.get("reactions"), viewer, channel);
-    if (reactions.len() > 0) try out.put(a, "reactions", reactions);
+    if (reactions.len() > 0) try out.set("reactions", reactions);
     return out;
 }
 
@@ -206,7 +206,7 @@ pub fn poll(a: Allocator, p: Val, viewer: Val) !Val {
     var counts_v: Val = .null;
     if (show) {
         counts_v = try Val.array(a);
-        for (counts) |c| try counts_v.push(a, .{ .num = c });
+        for (counts) |c| try counts_v.push(Val{ .num = c });
     }
     const out = try val.from(a, .{
         .question = p.get("question"),
@@ -221,8 +221,8 @@ pub fn poll(a: Allocator, p: Val, viewer: Val) !Val {
         .counts = counts_v,
     });
     if (p.get("quiz").truthy() and show) {
-        try out.put(a, "correct", if (p.get("correct").isNullish()) Val.null else p.get("correct"));
-        if (p.get("explanation").truthy()) try out.put(a, "explanation", p.get("explanation"));
+        try out.set("correct", if (p.get("correct").isNullish()) Val.null else p.get("correct"));
+        if (p.get("explanation").truthy()) try out.set("explanation", p.get("explanation"));
     }
     return out;
 }
@@ -243,7 +243,7 @@ pub fn member(a: Allocator, m: Val) !Val {
 /// Highest "read up to" among members other than the viewer: drives the double check marks.
 pub fn outboxRead(c: Val, viewer_id: Val) Val {
     for (c.get("readTop").items()) |r| if (!val.same(r.get("u"), viewer_id)) return r.get("s");
-    return Val.n(0);
+    return Val.number(0);
 }
 
 pub const ChatOpts = struct {
@@ -255,21 +255,21 @@ pub const ChatOpts = struct {
 };
 
 fn orZero(v: Val) Val {
-    return if (v.truthy()) v else Val.n(0);
+    return if (v.truthy()) v else Val.number(0);
 }
 
 pub fn chat(a: Allocator, c: Val, membership: Val, viewer_id: Val, o: ChatOpts) !Val {
     const ka = c.get("keyEpochAt");
     const old_key = c.get("encrypted").truthy() and c.get("keyEpoch").truthy() and ka.truthy() and ka == .date and A.nowMs() - ka.date > 7 * 86400_000;
     var pinned = try Val.array(a);
-    for (c.get("pinned").items()) |p| try pinned.push(a, try s(a, p));
+    for (c.get("pinned").items()) |p| try pinned.push(try s(a, p));
     const is_group = strEq(c.get("type"), "group");
     const out = try val.from(a, .{
         .id = try s(a, c.get("_id")),
         .type = c.get("type"),
         .encrypted = c.get("encrypted").truthy(),
-        .title = if (c.get("title").truthy()) c.get("title") else Val.s(""),
-        .about = if (c.get("about").truthy()) c.get("about") else Val.s(""),
+        .title = if (c.get("title").truthy()) c.get("title") else Val.string(""),
+        .about = if (c.get("about").truthy()) c.get("about") else Val.string(""),
         .avatar = try s(a, c.get("avatar")),
         .color = try colorOf(a, c.get("_id")),
         .username = if (c.get("username").truthy()) c.get("username") else Val.null,
@@ -300,16 +300,16 @@ pub fn chat(a: Allocator, c: Val, membership: Val, viewer_id: Val, o: ChatOpts) 
         .visitorId = try s(a, c.get("visitorId")),
     });
     // A team chat: the visitor sees the team (a store, a department); the staff see the visitor.
-    if (o.team.truthy()) try out.put(a, "team", o.team);
-    if (o.visitor.truthy()) try out.put(a, "visitor", o.visitor);
+    if (o.team.truthy()) try out.set("team", o.team);
+    if (o.visitor.truthy()) try out.set("visitor", o.visitor);
     // The Saved chat every account starts with; extra Saved chats are topics the person created.
-    if (strEq(c.get("type"), "saved")) try out.set(a, "primary", c.get("pairKey").truthy());
-    if (o.last_message != .undef) try out.put(a, "lastMessage", o.last_message);
-    if (o.peer.truthy()) try out.put(a, "peer", o.peer);
-    if (o.active_call.truthy()) try out.put(a, "call", o.active_call);
+    if (strEq(c.get("type"), "saved")) try out.set("primary", c.get("pairKey").truthy());
+    if (o.last_message != .undef) try out.set("lastMessage", o.last_message);
+    if (o.peer.truthy()) try out.set("peer", o.peer);
+    if (o.active_call.truthy()) try out.set("call", o.active_call);
     if (membership.truthy()) {
         const m = membership;
-        try out.set(a, "me", .{
+        try out.set("me", .{
             .role = m.get("role"),
             .rights = if (strEq(m.get("role"), "admin") and m.get("rights").truthy()) m.get("rights") else Val.null,
             .status = m.get("status"),

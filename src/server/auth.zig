@@ -9,9 +9,10 @@
 
 const std = @import("std");
 const Io = std.Io;
+const wufour = @import("wufour");
 const A = @import("app.zig");
 const web = @import("web.zig");
-const fetch = @import("lib/fetch.zig");
+
 const v = @import("validate.zig");
 const val = A.val;
 const Val = A.Val;
@@ -22,89 +23,25 @@ pub fn defaultPrivacy(a: std.mem.Allocator) !Val {
     return val.from(a, .{ .lastSeen = "everyone", .avatar = "everyone", .calls = "everyone", .groups = "everyone", .forwards = "everyone", .readReceipts = true });
 }
 
-// ---- Wufour token checks, cached ----------------------------------------------------------
-
-const VERIFY_CACHE_MS = 60_000;
-
-const CacheEntry = struct {
-    until: i64,
-    /// The verified user as JSON (owned by gpa), or null for a refused token.
-    user_json: ?[]const u8,
-};
-
-var cache_lock: Io.Mutex = .init;
-var cache: std.StringHashMapUnmanaged(CacheEntry) = .empty;
-var cache_swept: i64 = 0;
+// ---- Wufour token checks, cached (zig-core's wufour.Verifier: 60 s, refusals 5 s) ------------
 
 /// Wufour's backend address: wufour-auth calls 127.0.0.1 instead of localhost.
 pub fn backendHost(a: std.mem.Allocator) ![]const u8 {
-    return std.mem.replaceOwned(u8, a, A.app.config.auth_host, "localhost", "127.0.0.1");
+    return wufour.backendHost(a, A.app.config.auth_host);
 }
 
 /// POST /api/auth/verify; the Wufour user, or null when the token is not valid (or Wufour
 /// cannot be reached).
 pub fn wufourVerifyUncached(a: std.mem.Allocator, token: []const u8) ?Val {
-    const body = val.stringify(a, val.from(a, .{ .token = token }) catch return null) catch return null;
-    const url = std.fmt.allocPrint(a, "{s}/api/auth/verify", .{backendHost(a) catch return null}) catch return null;
-    const res = fetch.fetch(a, url, .{ .method = .POST, .body = body, .content_type = "application/json", .timeout_ms = 15_000 }) catch return null;
-    const data = val.parseJson(a, res.body) catch return null;
-    if (!data.get("success").truthy()) return null;
-    const u = data.get("user");
-    return if (u.isNullish()) null else u;
+    return A.app.wufour.verifyUncached(a, token);
 }
 
 fn verifyWufourToken(a: std.mem.Allocator, token: []const u8) ?Val {
-    const key = A.sha256Hex(a, token) catch return null;
-    const io = A.app.io;
-    {
-        cache_lock.lockUncancelable(io);
-        defer cache_lock.unlock(io);
-        if (cache.get(key)) |hit| if (hit.until > A.nowMs()) {
-            const j = hit.user_json orelse return null;
-            return val.parseJson(a, j) catch null;
-        };
-    }
-    const user = wufourVerifyUncached(a, token);
-    const gpa = A.app.gpa;
-    cache_lock.lockUncancelable(io);
-    defer cache_lock.unlock(io);
-    const t = A.nowMs();
-    if (t - cache_swept > 120_000) {
-        cache_swept = t;
-        var stale: std.ArrayList([]const u8) = .empty;
-        defer stale.deinit(gpa);
-        var it = cache.iterator();
-        while (it.next()) |e| if (e.value_ptr.until < t) stale.append(gpa, e.key_ptr.*) catch {};
-        for (stale.items) |k| if (cache.fetchRemove(k)) |kv| {
-            if (kv.value.user_json) |j| gpa.free(j);
-            gpa.free(kv.key);
-        };
-    }
-    // Failures are remembered for a shorter time than successes.
-    const json: ?[]const u8 = if (user) |u| (gpa.dupe(u8, val.stringify(a, u) catch return user) catch return user) else null;
-    const gop = cache.getOrPut(gpa, key) catch return user;
-    if (gop.found_existing) {
-        if (gop.value_ptr.user_json) |j| gpa.free(j);
-    } else {
-        gop.key_ptr.* = gpa.dupe(u8, key) catch {
-            _ = cache.remove(key);
-            if (json) |j| gpa.free(j);
-            return user;
-        };
-    }
-    gop.value_ptr.* = .{ .until = t + (if (user != null) @as(i64, VERIFY_CACHE_MS) else 5_000), .user_json = json };
-    return user;
+    return A.app.wufour.verify(a, token, A.nowMs());
 }
 
-pub fn forgetToken(a: std.mem.Allocator, token: ?[]const u8) void {
-    const t = token orelse return;
-    const key = A.sha256Hex(a, t) catch return;
-    cache_lock.lockUncancelable(A.app.io);
-    defer cache_lock.unlock(A.app.io);
-    if (cache.fetchRemove(key)) |kv| {
-        if (kv.value.user_json) |j| A.app.gpa.free(j);
-        A.app.gpa.free(kv.key);
-    }
+pub fn forgetToken(token: ?[]const u8) void {
+    A.app.wufour.forget(token orelse return);
 }
 
 // ---- Profiles -----------------------------------------------------------------------------
@@ -113,7 +50,7 @@ pub fn forgetToken(a: std.mem.Allocator, token: ?[]const u8) void {
 pub fn upsertWufourUser(r: *Rq, wu: Val) !Val {
     const a = r.a;
     const col = &A.app.col;
-    const wufour_id = try val.str(a, wu.get("userId"));
+    const wufour_id = try val.toStr(a, wu.get("userId"));
     const now = A.now();
     if (try col.users.findOne(a, .{ .wufourId = wufour_id }, .{})) |existing| {
         const role = wu.get("role");
@@ -121,13 +58,13 @@ pub fn upsertWufourUser(r: *Rq, wu: Val) !Val {
             const is_admin = role == .str and std.mem.eql(u8, role.str, "admin");
             if (is_admin != existing.get("isAdmin").truthy()) {
                 _ = try col.users.updateOne(a, .{ ._id = existing.get("_id") }, .{ .@"$set" = .{ .isAdmin = is_admin } }, .{});
-                try existing.put(a, "isAdmin", .{ .bool = is_admin });
+                try existing.set("isAdmin", Val{ .bool = is_admin });
             }
         }
         return existing;
     }
     const uname = wu.get("username");
-    const display = v.sliceUtf16(if (uname.truthy()) try val.str(a, uname) else "New user", 64);
+    const display = v.sliceUtf16(if (uname.truthy()) try val.toStr(a, uname) else "New user", 64);
     const doc = try val.from(a, .{
         .kind = "wufour",
         .appId = Val.null,
@@ -146,8 +83,8 @@ pub fn upsertWufourUser(r: *Rq, wu: Val) !Val {
     if (uname.asStr()) |un| if (v.isUsername(un)) {
         const lower = try v.jsLower(a, un);
         if (try col.users.findOne(a, .{ .usernameLower = lower }, .{ .projection = .{ ._id = 1 } }) == null) {
-            try doc.set(a, "username", un);
-            try doc.set(a, "usernameLower", lower);
+            try doc.set("username", un);
+            try doc.set("usernameLower", lower);
         }
     };
     _ = col.users.insertOne(a, doc) catch |e| switch (e) {
@@ -178,7 +115,7 @@ pub fn createSavedMessages(r: *Rq, user_id: Val) !void {
         .appId = Val.null,
         .encrypted = true,
         .title = "Saved Messages",
-        .pairKey = try std.fmt.allocPrint(a, "saved:{s}", .{try val.str(a, user_id)}),
+        .pairKey = try std.fmt.allocPrint(a, "saved:{s}", .{try val.toStr(a, user_id)}),
         .createdBy = user_id,
         .createdAt = now,
         .seq = 0,
@@ -332,9 +269,8 @@ pub fn callback(q: *Req) !void {
 
 /// ALL /logout
 pub fn logout(q: *Req) !void {
-    const a = q.r.a;
     const t = tokenFromRequest(q);
-    forgetToken(a, t.token);
+    forgetToken(t.token);
     const token = q.cookie("auth_token") orelse q.cookie("wufour_token");
     if (token) |tok| A.spawn(tellWufourLogout, .{A.app.gpa.dupe(u8, tok) catch return});
     try clearAuthCookies(q);
@@ -351,5 +287,5 @@ fn tellWufourLogout(token: []const u8) void {
     const a = arena.allocator();
     const body = val.stringify(a, val.from(a, .{ .token = token }) catch return) catch return;
     const url = std.fmt.allocPrint(a, "{s}/api/auth/logout", .{backendHost(a) catch return}) catch return;
-    _ = fetch.fetch(a, url, .{ .method = .POST, .body = body, .content_type = "application/json" }) catch |e| std.log.warn("Logout API Warning: {t}", .{e});
+    _ = A.app.fetch.fetch(a, url, .{ .method = .POST, .body = body, .content_type = "application/json" }) catch |e| std.log.warn("Logout API Warning: {t}", .{e});
 }

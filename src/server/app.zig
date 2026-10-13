@@ -6,8 +6,10 @@ const std = @import("std");
 const Io = std.Io;
 const mongo = @import("mongo");
 const env_mod = @import("env");
-pub const val = @import("lib/val.zig");
-pub const db = @import("lib/db.zig");
+const fetch_mod = @import("fetch");
+const wufour_mod = @import("wufour");
+pub const val = mongo.val;
+pub const db = mongo.db;
 pub const Val = val.Val;
 pub const ObjectId = val.ObjectId;
 pub const Allocator = std.mem.Allocator;
@@ -110,7 +112,7 @@ fn list(a: Allocator, value: ?[]const u8, fallback: []const []const u8) ![]const
     if (val.parseJson(a, v)) |parsed| {
         if (parsed != .arr) return fallback;
         var out: std.ArrayList([]const u8) = .empty;
-        for (parsed.items()) |x| try out.append(a, try val.str(a, x));
+        for (parsed.items()) |x| try out.append(a, try val.toStr(a, x));
         return out.items;
     } else |_| {}
     var out: std.ArrayList([]const u8) = .empty;
@@ -211,7 +213,10 @@ pub const App = struct {
     config: Config,
     mongo: *mongo.Client,
     col: Cols,
-    client: std.http.Client,
+    /// Outgoing HTTP (webhooks, app storage, Wufour, OpenRouter, push services, link previews).
+    fetch: fetch_mod.Client,
+    /// Wufour token checks (cached).
+    wufour: wufour_mod.Verifier,
     /// Background tasks (event subscribers, timers, AI replies).
     bg: Io.Group = .init,
     started_ms: i64,
@@ -281,7 +286,7 @@ pub const Rq = struct {
     }
 
     pub fn str(r: *Rq, v: Val) ![]const u8 {
-        return val.str(r.a, v);
+        return val.toStr(r.a, v);
     }
 
     /// String(x) or null for nullish (serialize.js `s`).
@@ -460,4 +465,12 @@ test "lenient base64 and hint" {
     try std.testing.expectEqualStrings("hello", try lenientBase64(a, "aGVsbG8="));
     try std.testing.expectEqualStrings("hello", try lenientBase64(a, "aGVsbG8"));
     try std.testing.expectEqualStrings("…cdef", (try hint(a, "abcdef")).str);
+}
+
+/// The message Reseal-js's assertPublicUrl and fetch errors carry.
+pub fn urlErrorMessage(e: anyerror) []const u8 {
+    return switch (e) {
+        error.Unreachable => "That address is not reachable from Reseal",
+        else => fetch_mod.urlErrorMessage(e),
+    };
 }

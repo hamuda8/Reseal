@@ -2,7 +2,8 @@
 //! database documents and environment variables, so it can replace the Node server without any
 //! other app (Control, Taazur, Wufour, Moderation) noticing.
 //!
-//! Configuration: environment variables, else `.env.production` / `.env` (see app.Config).
+//! Configuration: environment variables, else RESEAL_ENV_FILE or the first of `.env.local`,
+//! `.env.production`, `.env` (see app.Config).
 
 const std = @import("std");
 const http = @import("http");
@@ -35,7 +36,7 @@ pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
     const arena = init.arena.allocator();
 
-    const env = try env_mod.Env.load(arena, io, init.environ_map, &.{ ".env.production", ".env" });
+    const env = try env_mod.Env.loadApp(arena, io, init.environ_map, "reseal");
     const config = try A.Config.load(arena, io, &env);
 
     const client = try mongo.Client.init(io, gpa, config.mongo_uri);
@@ -46,10 +47,14 @@ pub fn main(init: std.process.Init) !void {
         .config = config,
         .mongo = client,
         .col = undefined,
-        .client = .{ .allocator = gpa, .io = io },
+        .fetch = .init(io, gpa),
+        .wufour = undefined,
         .started_ms = std.Io.Timestamp.now(io, .real).toMilliseconds(),
     };
-    defer state.client.deinit();
+    defer state.fetch.deinit();
+    state.fetch.allow_private = config.allow_private_fetch;
+    state.wufour = .{ .fetch = &state.fetch, .host = config.auth_host, .ttl_ms = 60_000, .refused_ttl_ms = 5_000 };
+    defer state.wufour.deinit();
     inline for (comptime std.meta.fieldNames(A.Cols)) |name| {
         @field(state.col, name) = .{ .client = client, .db = config.db_name, .name = name };
     }
@@ -183,9 +188,6 @@ fn handle(ctx: *http.Context) anyerror!void {
     if (q.secure()) try q.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
 
     if (ctx.wantsWebSocket()) return rt.upgrade(&q);
-    // A body on DELETE (or GET) is read now, whatever the route does with it, so it can never be
-    // mistaken for the next request on a kept-alive connection.
-    if (!ctx.method.requestHasBody() and q.hasBody()) _ = q.rawBody(2 * 1024 * 1024) catch {};
 
     dispatch(&q) catch |err| try web.sendError(&q, err);
     if (!ctx.responded) try web.cannot(&q);
@@ -360,6 +362,5 @@ test {
     _ = val;
     _ = @import("validate.zig");
     _ = @import("store.zig");
-    _ = @import("lib/ec.zig");
     _ = A;
 }

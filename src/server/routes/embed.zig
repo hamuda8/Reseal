@@ -40,11 +40,11 @@ fn config(q: *Req) !void {
     const app_doc = (try apps.appByPublishableKey(r, q.query("pk") orelse "")) orelse return r.fail(404, "Unknown or disabled app key", "app_not_found");
     const cfg = try apps.publicAppConfig(r, app_doc);
     const logo = cfg.path("theme.logo");
-    if (logo.truthy()) try cfg.get("theme").set(a, "logoUrl", try media.signedPath(r, try r.str(logo), 30 * 86400));
+    if (logo.truthy()) try cfg.get("theme").set("logoUrl", try media.signedPath(r, try r.str(logo), 30 * 86400));
     const bot_id = cfg.path("widget.botId");
     if (bot_id.truthy()) {
         const b = try col().users.findOne(a, .{ ._id = v.oid(.{ .str = try r.str(bot_id) }) }, .{ .projection = .{ .displayName = 1, .avatar = 1 } });
-        try cfg.get("widget").put(a, "bot", if (b) |x| try val.from(a, .{ .id = try r.str(x.get("_id")), .name = x.get("displayName"), .avatar = if (x.get("avatar").truthy()) Val{ .str = try r.str(x.get("avatar")) } else Val.null }) else Val.null);
+        try cfg.get("widget").set("bot", if (b) |x| try val.from(a, .{ .id = try r.str(x.get("_id")), .name = x.get("displayName"), .avatar = if (x.get("avatar").truthy()) Val{ .str = try r.str(x.get("avatar")) } else Val.null }) else Val.null);
     }
     // The SDK on the host site reads this (public, no credentials).
     try q.setHeader("cache-control", "no-store");
@@ -62,13 +62,13 @@ fn guest(q: *Req) !void {
     try account.rateLimit(q, "guest", 20, 3600_000);
     const r = &q.r;
     const a = r.a;
-    const pk = try val.str(a, if (q.b("pk").truthy()) q.b("pk") else Val.s(""));
+    const pk = try val.toStr(a, if (q.b("pk").truthy()) q.b("pk") else Val.string(""));
     const app_doc = (try apps.appByPublishableKey(r, pk)) orelse return r.fail(404, "Unknown or disabled app key", "app_not_found");
     try r.ensure(app_doc.path("settings.guests").truthy(), "This app does not allow guest chats", 403, "guests_disabled");
     const guest_id = try v.reqStr(r, q.b("guestId"), "guestId", .{ .min = 16, .max = 64, .pattern = guestPattern });
     const name = try v.str(r, q.b("name"), "name", .{ .max = 64, .optional = true });
     const body = try val.from(a, .{ .externalId = try r.fmt("guest:{s}", .{guest_id}) });
-    if (name) |n| if (n.len > 0) try body.set(a, "name", n);
+    if (name) |n| if (n.len > 0) try body.set("name", n);
     const user = try apps.upsertAppUser(r, app_doc, body);
     _ = try col().users.updateOne(a, .{ ._id = user.get("_id") }, .{ .@"$set" = .{ .guest = true } }, .{});
     const t = try auth.issueUserToken(r, user, 7 * 86400, app_doc.get("_id"), "guest");
@@ -116,7 +116,7 @@ fn myTeams(q: *Req) !void {
     try auth.requireUser(q);
     const r = &q.r;
     var out = try Val.array(r.a);
-    for (try teams.teamsOf(r, q.user())) |t| try out.push(r.a, try teams.publicTeam(r, t));
+    for (try teams.teamsOf(r, q.user())) |t| try out.push(try teams.publicTeam(r, t));
     return q.json(.{ .teams = out });
 }
 

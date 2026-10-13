@@ -6,7 +6,7 @@
 const std = @import("std");
 const Io = std.Io;
 const A = @import("app.zig");
-const fetch = @import("lib/fetch.zig");
+
 const ser = @import("serialize.zig");
 const events = @import("events.zig");
 const val = A.val;
@@ -52,8 +52,8 @@ fn chatPayload(r: *Rq, chat: Val) !Val {
         .metadata = if (chat.get("metadata").truthy()) chat.get("metadata") else Val.null,
     });
     if (chat.get("teamId").truthy()) {
-        try out.set(a, "team", .{ .id = try r.sn(chat.get("teamId")), .externalId = if (chat.get("teamExternalId").truthy()) chat.get("teamExternalId") else Val.null });
-        try out.set(a, "visitor", .{ .id = try r.sn(chat.get("visitorId")), .externalId = if (chat.get("visitorExternalId").truthy()) chat.get("visitorExternalId") else Val.null });
+        try out.set("team", .{ .id = try r.sn(chat.get("teamId")), .externalId = if (chat.get("teamExternalId").truthy()) chat.get("teamExternalId") else Val.null });
+        try out.set("visitor", .{ .id = try r.sn(chat.get("visitorId")), .externalId = if (chat.get("visitorExternalId").truthy()) chat.get("visitorExternalId") else Val.null });
     }
     return out;
 }
@@ -64,8 +64,8 @@ fn messagePayload(r: *Rq, chat: Val, message: Val) !Val {
     const out = try ser.message(a, message, .null, chat);
     out.del("enc"); // never forward ciphertext; it is useless to the receiver
     const e = extOf(ext, message.get("senderId"));
-    try out.put(a, "sender", if (message.get("senderId").truthy()) try val.from(a, .{ .id = try r.sn(message.get("senderId")), .externalId = if (e.truthy()) e else Val.null }) else Val.null);
-    if (chat.get("encrypted").truthy()) try out.set(a, "encrypted", true);
+    try out.set("sender", if (message.get("senderId").truthy()) try val.from(a, .{ .id = try r.sn(message.get("senderId")), .externalId = if (e.truthy()) e else Val.null }) else Val.null);
+    if (chat.get("encrypted").truthy()) try out.set("encrypted", true);
     return out;
 }
 
@@ -122,7 +122,7 @@ pub fn onEvent(r: *Rq, kind: events.Kind, p: Val) !void {
         .message_edited => try enqueue(r, app_id, "message.edited", try val.from(a, .{ .chat = try chatPayload(r, chat), .message = try messagePayload(r, chat, p.get("message")) })),
         .message_deleted => {
             var ids = try Val.array(a);
-            for (p.get("ids").items()) |x| try ids.push(a, try r.sn(x));
+            for (p.get("ids").items()) |x| try ids.push(try r.sn(x));
             try enqueue(r, app_id, "message.deleted", try val.from(a, .{ .chat = try chatPayload(r, chat), .messageIds = ids }));
         },
         .message_reaction => {
@@ -133,7 +133,7 @@ pub fn onEvent(r: *Rq, kind: events.Kind, p: Val) !void {
             const ids = p.get("memberIds").items();
             const ext = try externalIds(r, ids);
             var members = try Val.array(a);
-            for (ids) |id| try members.push(a, try val.from(a, .{ .id = try r.sn(id), .externalId = extOf(ext, id) }));
+            for (ids) |id| try members.push(try val.from(a, .{ .id = try r.sn(id), .externalId = extOf(ext, id) }));
             try enqueue(r, app_id, "chat.created", try val.from(a, .{ .chat = try chatPayload(r, chat), .members = members }));
         },
         .chat_updated => try enqueue(r, app_id, "chat.updated", try val.from(a, .{ .chat = try chatPayload(r, chat), .changes = p.get("changes") })),
@@ -175,8 +175,8 @@ pub const Delivery = struct { ok: bool, status: u16, @"error": ?[]const u8 = nul
 pub fn deliver(r: *Rq, url: []const u8, secret: ?[]const u8, payload: Val) !Delivery {
     const a = r.a;
     const body = try val.stringify(a, payload);
-    fetch.assertPublicUrl(url) catch |e| return .{ .ok = false, .status = 0, .@"error" = fetch.urlErrorMessage(e) };
-    const res = fetch.fetch(a, url, .{
+    A.app.fetch.assertPublicUrl(url) catch |e| return .{ .ok = false, .status = 0, .@"error" = A.urlErrorMessage(e) };
+    const res = A.app.fetch.fetch(a, url, .{
         .method = .POST,
         .body = body,
         .content_type = "application/json",
@@ -186,7 +186,7 @@ pub fn deliver(r: *Rq, url: []const u8, secret: ?[]const u8, payload: Val) !Deli
             .{ .name = "Reseal-Delivery", .value = payload.get("id").asStr() orelse "" },
             .{ .name = "Reseal-Signature", .value = try signature(a, secret orelse "", body) },
         },
-    }) catch |e| return .{ .ok = false, .status = 0, .@"error" = fetch.urlErrorMessage(e) };
+    }) catch |e| return .{ .ok = false, .status = 0, .@"error" = A.urlErrorMessage(e) };
     return .{ .ok = res.status >= 200 and res.status < 300, .status = res.status };
 }
 
@@ -200,14 +200,14 @@ pub fn kick() void {
 // delivery is final (delivered, or out of retries), only the message id is kept.
 fn redact(r: *Rq, job: Val, set: Val) !void {
     const m = job.path("payload.data.message");
-    if (m.truthy()) try set.put(r.a, "payload.data.message", try val.from(r.a, .{ .id = m.get("id"), .redacted = true }));
+    if (m.truthy()) try set.set("payload.data.message", try val.from(r.a, .{ .id = m.get("id"), .redacted = true }));
 }
 
 fn work(r: *Rq) !void {
     const a = r.a;
     var i: usize = 0;
     while (i < 100) : (i += 1) {
-        const job = (try col().webhookDeliveries.findOneAndUpdate(a, .{ .status = "pending", .nextAttemptAt = .{ .@"$lte" = A.now() } }, .{ .@"$set" = .{ .status = "sending", .lockedAt = A.now() } }, .{ .sort = .{ .nextAttemptAt = 1 } })) orelse return;
+        const job = (try col().webhookDeliveries.findOneAndUpdate(a, .{ .status = "pending", .nextAttemptAt = .{ .@"$lte" = A.now() } }, .{ .@"$set" = .{ .status = "sending", .lockedAt = A.now() } }, .{ .returnDocument = .after, .sort = .{ .nextAttemptAt = 1 } })) orelse return;
         const app_doc = try col().apps.findOne(a, .{ ._id = job.get("appId") }, .{ .projection = .{ .webhook = 1 } });
         const url = if (app_doc) |d| d.path("webhook.url").asStr() orelse "" else "";
         if (url.len == 0) {

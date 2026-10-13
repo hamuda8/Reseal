@@ -33,7 +33,7 @@ fn featureDefault(f: []const u8) bool {
 
 pub fn defaultSettings(a: std.mem.Allocator) !Val {
     const features = try Val.object(a);
-    for (FEATURES) |f| try features.set(a, f, featureDefault(f));
+    for (FEATURES) |f| try features.set(f, featureDefault(f));
     return val.from(a, .{
         .e2ee = "off",
         .guests = false,
@@ -84,58 +84,58 @@ pub fn mergeSettings(r: *Rq, current: Val, body: Val) !Val {
     const a = r.a;
     const defaults = try defaultSettings(a);
     const out = try val.deepClone(a, if (current.truthy()) current else defaults);
-    for (defaults.keys()) |kv| if (out.get(kv.k) == .undef) try out.put(a, kv.k, try val.deepClone(a, kv.v));
+    for (defaults.keys(), defaults.vals()) |kv_k, kv_v| if (out.get(kv_k) == .undef) try out.set(kv_k, try val.deepClone(a, kv_v));
     // Settings saved partially (older versions, scripts) still get every default underneath.
     for ([_][]const u8{ "theme", "widget" }) |group| {
-        if (out.get(group) != .obj) try out.put(a, group, try Val.object(a));
-        for (defaults.get(group).keys()) |kv| if (out.get(group).get(kv.k) == .undef) try out.get(group).put(a, kv.k, try val.deepClone(a, kv.v));
+        if (out.get(group) != .obj) try out.set(group, try Val.object(a));
+        for (defaults.get(group).keys(), defaults.get(group).vals()) |kv_k, kv_v| if (out.get(group).get(kv_k) == .undef) try out.get(group).set(kv_k, try val.deepClone(a, kv_v));
     }
-    if (out.get("features") != .obj) try out.put(a, "features", try Val.object(a));
-    for (FEATURES) |f| if (out.get("features").get(f) == .undef) try out.get("features").set(a, f, featureDefault(f));
-    if (body.get("e2ee") != .undef) try out.set(a, "e2ee", try v.reqOneOf(r, body.get("e2ee"), "e2ee", &.{ "on", "off" }));
-    if (body.get("guests") != .undef) try out.set(a, "guests", try v.reqBool(r, body.get("guests"), "guests"));
+    if (out.get("features") != .obj) try out.set("features", try Val.object(a));
+    for (FEATURES) |f| if (out.get("features").get(f) == .undef) try out.get("features").set(f, featureDefault(f));
+    if (body.get("e2ee") != .undef) try out.set("e2ee", try v.reqOneOf(r, body.get("e2ee"), "e2ee", &.{ "on", "off" }));
+    if (body.get("guests") != .undef) try out.set("guests", try v.reqBool(r, body.get("guests"), "guests"));
     if (body.get("features") != .undef) {
         _ = try v.reqObj(r, body.get("features"), "features");
-        for (FEATURES) |f| if (body.get("features").get(f) == .bool) try out.get("features").put(a, f, body.get("features").get(f));
+        for (FEATURES) |f| if (body.get("features").get(f) == .bool) try out.get("features").set(f, body.get("features").get(f));
     }
     if (body.get("theme") != .undef) {
         const t = try v.reqObj(r, body.get("theme"), "theme");
         const th = out.get("theme");
-        if (t.get("mode") != .undef) try th.set(a, "mode", try v.reqOneOf(r, t.get("mode"), "theme.mode", &.{ "auto", "light", "dark" }));
-        if (t.get("primary") != .undef) try th.set(a, "primary", try v.reqStr(r, t.get("primary"), "theme.primary", .{ .pattern = v.isHexColor }));
-        if (t.get("accent") != .undef) try th.set(a, "accent", try v.reqStr(r, t.get("accent"), "theme.accent", .{ .pattern = v.isHexColor }));
-        if (t.get("radius") != .undef) try th.set(a, "radius", try v.reqInt(r, t.get("radius"), "theme.radius", .{ .min = 0, .max = 28 }));
-        if (t.get("font") != .undef) try th.set(a, "font", try v.reqOneOf(r, t.get("font"), "theme.font", &FONTS));
-        if (t.get("density") != .undef) try th.set(a, "density", try v.reqOneOf(r, t.get("density"), "theme.density", &.{ "comfortable", "compact" }));
-        if (t.get("bubbleStyle") != .undef) try th.set(a, "bubbleStyle", try v.reqOneOf(r, t.get("bubbleStyle"), "theme.bubbleStyle", &.{ "rounded", "square", "minimal" }));
-        if (t.get("wallpaper") != .undef) try th.set(a, "wallpaper", try v.reqStr(r, t.get("wallpaper"), "theme.wallpaper", .{ .max = 16, .pattern = wallpaperPattern }));
-        if (t.get("title") != .undef) try th.set(a, "title", try v.reqStr(r, t.get("title"), "theme.title", .{ .max = 60 }));
-        if (t.get("subtitle") != .undef) try th.set(a, "subtitle", try v.reqStr(r, t.get("subtitle"), "theme.subtitle", .{ .max = 120 }));
-        if (t.get("logo") != .undef) try th.put(a, "logo", if (t.get("logo").truthy()) Val{ .str = try r.str(.{ .id = try v.reqId(r, t.get("logo"), "theme.logo") }) } else Val.null);
+        if (t.get("mode") != .undef) try th.set("mode", try v.reqOneOf(r, t.get("mode"), "theme.mode", &.{ "auto", "light", "dark" }));
+        if (t.get("primary") != .undef) try th.set("primary", try v.reqStr(r, t.get("primary"), "theme.primary", .{ .pattern = v.isHexColor }));
+        if (t.get("accent") != .undef) try th.set("accent", try v.reqStr(r, t.get("accent"), "theme.accent", .{ .pattern = v.isHexColor }));
+        if (t.get("radius") != .undef) try th.set("radius", try v.reqInt(r, t.get("radius"), "theme.radius", .{ .min = 0, .max = 28 }));
+        if (t.get("font") != .undef) try th.set("font", try v.reqOneOf(r, t.get("font"), "theme.font", &FONTS));
+        if (t.get("density") != .undef) try th.set("density", try v.reqOneOf(r, t.get("density"), "theme.density", &.{ "comfortable", "compact" }));
+        if (t.get("bubbleStyle") != .undef) try th.set("bubbleStyle", try v.reqOneOf(r, t.get("bubbleStyle"), "theme.bubbleStyle", &.{ "rounded", "square", "minimal" }));
+        if (t.get("wallpaper") != .undef) try th.set("wallpaper", try v.reqStr(r, t.get("wallpaper"), "theme.wallpaper", .{ .max = 16, .pattern = wallpaperPattern }));
+        if (t.get("title") != .undef) try th.set("title", try v.reqStr(r, t.get("title"), "theme.title", .{ .max = 60 }));
+        if (t.get("subtitle") != .undef) try th.set("subtitle", try v.reqStr(r, t.get("subtitle"), "theme.subtitle", .{ .max = 120 }));
+        if (t.get("logo") != .undef) try th.set("logo", if (t.get("logo").truthy()) Val{ .str = try r.str(.{ .id = try v.reqId(r, t.get("logo"), "theme.logo") }) } else Val.null);
     }
     if (body.get("widget") != .undef) {
         const w = try v.reqObj(r, body.get("widget"), "widget");
         const wd = out.get("widget");
-        if (w.get("mode") != .undef) try wd.set(a, "mode", try v.reqOneOf(r, w.get("mode"), "widget.mode", &.{ "bubble", "inline", "fullscreen" }));
-        if (w.get("position") != .undef) try wd.set(a, "position", try v.reqOneOf(r, w.get("position"), "widget.position", &.{ "right", "left" }));
-        if (w.get("offsetX") != .undef) try wd.set(a, "offsetX", try v.reqInt(r, w.get("offsetX"), "widget.offsetX", .{ .min = 0, .max = 400 }));
-        if (w.get("offsetY") != .undef) try wd.set(a, "offsetY", try v.reqInt(r, w.get("offsetY"), "widget.offsetY", .{ .min = 0, .max = 400 }));
-        if (w.get("launcherIcon") != .undef) try wd.set(a, "launcherIcon", try v.reqOneOf(r, w.get("launcherIcon"), "widget.launcherIcon", &.{ "chat", "bot", "help", "support" }));
-        if (w.get("launcherLabel") != .undef) try wd.set(a, "launcherLabel", try v.reqStr(r, w.get("launcherLabel"), "widget.launcherLabel", .{ .max = 40 }));
-        if (w.get("defaultView") != .undef) try wd.set(a, "defaultView", try v.reqOneOf(r, w.get("defaultView"), "widget.defaultView", &.{ "chats", "support", "bot" }));
-        if (w.get("botId") != .undef) try wd.put(a, "botId", if (w.get("botId").truthy()) Val{ .str = try r.str(.{ .id = try v.reqId(r, w.get("botId"), "widget.botId") }) } else Val.null);
+        if (w.get("mode") != .undef) try wd.set("mode", try v.reqOneOf(r, w.get("mode"), "widget.mode", &.{ "bubble", "inline", "fullscreen" }));
+        if (w.get("position") != .undef) try wd.set("position", try v.reqOneOf(r, w.get("position"), "widget.position", &.{ "right", "left" }));
+        if (w.get("offsetX") != .undef) try wd.set("offsetX", try v.reqInt(r, w.get("offsetX"), "widget.offsetX", .{ .min = 0, .max = 400 }));
+        if (w.get("offsetY") != .undef) try wd.set("offsetY", try v.reqInt(r, w.get("offsetY"), "widget.offsetY", .{ .min = 0, .max = 400 }));
+        if (w.get("launcherIcon") != .undef) try wd.set("launcherIcon", try v.reqOneOf(r, w.get("launcherIcon"), "widget.launcherIcon", &.{ "chat", "bot", "help", "support" }));
+        if (w.get("launcherLabel") != .undef) try wd.set("launcherLabel", try v.reqStr(r, w.get("launcherLabel"), "widget.launcherLabel", .{ .max = 40 }));
+        if (w.get("defaultView") != .undef) try wd.set("defaultView", try v.reqOneOf(r, w.get("defaultView"), "widget.defaultView", &.{ "chats", "support", "bot" }));
+        if (w.get("botId") != .undef) try wd.set("botId", if (w.get("botId").truthy()) Val{ .str = try r.str(.{ .id = try v.reqId(r, w.get("botId"), "widget.botId") }) } else Val.null);
         if (w.get("agentIds") != .undef) {
             var ids = try Val.array(a);
-            for (try v.reqIds(r, w.get("agentIds"), "widget.agentIds", 50)) |x| try ids.push(a, .{ .str = try r.str(.{ .id = x }) });
-            try wd.put(a, "agentIds", ids);
+            for (try v.reqIds(r, w.get("agentIds"), "widget.agentIds", 50)) |x| try ids.push(Val{ .str = try r.str(.{ .id = x }) });
+            try wd.set("agentIds", ids);
         }
-        if (w.get("supportTitle") != .undef) try wd.set(a, "supportTitle", try v.reqStr(r, w.get("supportTitle"), "widget.supportTitle", .{ .max = 60 }));
-        if (w.get("welcome") != .undef) try wd.set(a, "welcome", try v.reqStr(r, w.get("welcome"), "widget.welcome", .{ .max = 500 }));
-        if (w.get("placeholder") != .undef) try wd.set(a, "placeholder", try v.reqStr(r, w.get("placeholder"), "widget.placeholder", .{ .max = 80 }));
-        if (w.get("width") != .undef) try wd.set(a, "width", try v.reqInt(r, w.get("width"), "widget.width", .{ .min = 300, .max = 1200 }));
-        if (w.get("height") != .undef) try wd.set(a, "height", try v.reqInt(r, w.get("height"), "widget.height", .{ .min = 360, .max = 1200 }));
-        if (w.get("showBranding") != .undef) try wd.set(a, "showBranding", try v.reqBool(r, w.get("showBranding"), "widget.showBranding"));
-        if (w.get("locale") != .undef) try wd.set(a, "locale", try v.reqOneOf(r, w.get("locale"), "widget.locale", &.{ "auto", "en", "ar" }));
+        if (w.get("supportTitle") != .undef) try wd.set("supportTitle", try v.reqStr(r, w.get("supportTitle"), "widget.supportTitle", .{ .max = 60 }));
+        if (w.get("welcome") != .undef) try wd.set("welcome", try v.reqStr(r, w.get("welcome"), "widget.welcome", .{ .max = 500 }));
+        if (w.get("placeholder") != .undef) try wd.set("placeholder", try v.reqStr(r, w.get("placeholder"), "widget.placeholder", .{ .max = 80 }));
+        if (w.get("width") != .undef) try wd.set("width", try v.reqInt(r, w.get("width"), "widget.width", .{ .min = 300, .max = 1200 }));
+        if (w.get("height") != .undef) try wd.set("height", try v.reqInt(r, w.get("height"), "widget.height", .{ .min = 360, .max = 1200 }));
+        if (w.get("showBranding") != .undef) try wd.set("showBranding", try v.reqBool(r, w.get("showBranding"), "widget.showBranding"));
+        if (w.get("locale") != .undef) try wd.set("locale", try v.reqOneOf(r, w.get("locale"), "widget.locale", &.{ "auto", "en", "ar" }));
     }
     return out;
 }
@@ -158,7 +158,7 @@ fn cleanOrigins(r: *Rq, list: Val) !Val {
         for (out.items()) |x| if (std.mem.eql(u8, x.str, origin)) {
             dup = true;
         };
-        if (!dup) try out.push(a, .{ .str = origin });
+        if (!dup) try out.push(Val{ .str = origin });
     }
     return out;
 }
@@ -169,22 +169,22 @@ pub fn describeApp(r: *Rq, app_doc: Val, secret_key: ?[]const u8) !Val {
     var events_v = wh.get("events");
     if (events_v.len() == 0) {
         events_v = try Val.array(a);
-        for (webhooks.WEBHOOK_EVENTS) |e| try events_v.push(a, .{ .str = e });
+        for (webhooks.WEBHOOK_EVENTS) |e| try events_v.push(Val{ .str = e });
     }
     const out = try val.from(a, .{
         .id = try r.str(app_doc.get("_id")),
         .name = app_doc.get("name"),
-        .description = if (app_doc.get("description").truthy()) app_doc.get("description") else Val.s(""),
+        .description = if (app_doc.get("description").truthy()) app_doc.get("description") else Val.string(""),
         .publishableKey = app_doc.get("publishableKey"),
         .secretKeyHint = app_doc.get("secretKeyHint"),
     });
-    if (secret_key) |k| try out.set(a, "secretKey", k);
-    try out.put(a, "allowedOrigins", if (app_doc.get("allowedOrigins").truthy()) app_doc.get("allowedOrigins") else try Val.array(a));
-    try out.put(a, "settings", try mergeSettings(r, app_doc.get("settings"), try Val.object(a)));
-    try out.set(a, "webhook", .{ .url = if (wh.get("url").truthy()) wh.get("url") else Val.s(""), .enabled = wh.get("enabled").truthy(), .events = events_v, .secretHint = if (wh.get("secretHint").truthy()) wh.get("secretHint") else Val.null });
-    try out.set(a, "storage", .{ .url = if (app_doc.path("storage.url").truthy()) app_doc.path("storage.url") else Val.s(""), .connected = app_doc.path("storage.url").truthy() });
-    try out.set(a, "disabled", app_doc.get("disabled").truthy());
-    try out.put(a, "createdAt", app_doc.get("createdAt"));
+    if (secret_key) |k| try out.set("secretKey", k);
+    try out.set("allowedOrigins", if (app_doc.get("allowedOrigins").truthy()) app_doc.get("allowedOrigins") else try Val.array(a));
+    try out.set("settings", try mergeSettings(r, app_doc.get("settings"), try Val.object(a)));
+    try out.set("webhook", .{ .url = if (wh.get("url").truthy()) wh.get("url") else Val.string(""), .enabled = wh.get("enabled").truthy(), .events = events_v, .secretHint = if (wh.get("secretHint").truthy()) wh.get("secretHint") else Val.null });
+    try out.set("storage", .{ .url = if (app_doc.path("storage.url").truthy()) app_doc.path("storage.url") else Val.string(""), .connected = app_doc.path("storage.url").truthy() });
+    try out.set("disabled", app_doc.get("disabled").truthy());
+    try out.set("createdAt", app_doc.get("createdAt"));
     return out;
 }
 
@@ -193,7 +193,7 @@ pub fn publicAppConfig(r: *Rq, app_doc: Val) !Val {
     const a = r.a;
     const settings = try mergeSettings(r, app_doc.get("settings"), try Val.object(a));
     const widget = try val.clone(a, settings.get("widget"));
-    try widget.put(a, "agentIds", .undef);
+    try widget.set("agentIds", .undef);
     return val.from(a, .{
         .id = try r.str(app_doc.get("_id")),
         .name = app_doc.get("name"),
@@ -236,11 +236,11 @@ pub fn createApp(r: *Rq, owner: Val, body: Val) !Val {
 pub fn updateApp(r: *Rq, app_doc: Val, body: Val) !Val {
     const a = r.a;
     const set = try Val.object(a);
-    if (body.get("name") != .undef) try set.set(a, "name", try v.reqStr(r, body.get("name"), "name", .{ .min = 1, .max = 80 }));
-    if (body.get("description") != .undef) try set.set(a, "description", try v.reqStr(r, body.get("description"), "description", .{ .max = 500 }));
-    if (body.get("allowedOrigins") != .undef) try set.put(a, "allowedOrigins", try cleanOrigins(r, body.get("allowedOrigins")));
-    if (body.get("settings") != .undef) try set.put(a, "settings", try mergeSettings(r, app_doc.get("settings"), try v.reqObj(r, body.get("settings"), "settings")));
-    if (body.get("disabled") != .undef) try set.set(a, "disabled", try v.reqBool(r, body.get("disabled"), "disabled"));
+    if (body.get("name") != .undef) try set.set("name", try v.reqStr(r, body.get("name"), "name", .{ .min = 1, .max = 80 }));
+    if (body.get("description") != .undef) try set.set("description", try v.reqStr(r, body.get("description"), "description", .{ .max = 500 }));
+    if (body.get("allowedOrigins") != .undef) try set.set("allowedOrigins", try cleanOrigins(r, body.get("allowedOrigins")));
+    if (body.get("settings") != .undef) try set.set("settings", try mergeSettings(r, app_doc.get("settings"), try v.reqObj(r, body.get("settings"), "settings")));
+    if (body.get("disabled") != .undef) try set.set("disabled", try v.reqBool(r, body.get("disabled"), "disabled"));
     const logo = set.path("settings.theme.logo");
     if (logo.truthy()) {
         const m = try col().media.findOne(a, .{ ._id = v.oid(logo), .ownerId = app_doc.get("ownerId"), .status = "ready" }, .{});
@@ -263,8 +263,8 @@ pub fn updateApp(r: *Rq, app_doc: Val, body: Val) !Val {
     }
     if (body.get("webhook") != .undef) {
         const w = try v.reqObj(r, body.get("webhook"), "webhook");
-        if (w.get("url") != .undef) try set.set(a, "webhook.url", if (w.get("url").truthy()) try v.reqStr(r, w.get("url"), "webhook.url", .{ .max = 500, .pattern = httpUrlNoSpace }) else "");
-        if (w.get("enabled") != .undef) try set.set(a, "webhook.enabled", try v.reqBool(r, w.get("enabled"), "webhook.enabled"));
+        if (w.get("url") != .undef) try set.set("webhook.url", if (w.get("url").truthy()) try v.reqStr(r, w.get("url"), "webhook.url", .{ .max = 500, .pattern = httpUrlNoSpace }) else "");
+        if (w.get("enabled") != .undef) try set.set("webhook.enabled", try v.reqBool(r, w.get("enabled"), "webhook.enabled"));
         if (w.get("events") != .undef) {
             try r.ensure(w.get("events") == .arr, "webhook.events must be a list", 400, null);
             var list = try Val.array(a);
@@ -274,20 +274,20 @@ pub fn updateApp(r: *Rq, app_doc: Val, body: Val) !Val {
                 for (list.items()) |y| if (std.mem.eql(u8, y.str, x)) {
                     dup = true;
                 };
-                if (!dup) try list.push(a, .{ .str = x });
+                if (!dup) try list.push(Val{ .str = x });
             }
-            try set.put(a, "webhook.events", list);
+            try set.set("webhook.events", list);
         }
     }
     if (body.get("storage") != .undef) {
         const st = try v.reqObj(r, body.get("storage"), "storage");
-        if (st.get("url") != .undef) try set.set(a, "storage.url", if (st.get("url").truthy()) try v.reqStr(r, st.get("url"), "storage.url", .{ .max = 500, .pattern = httpUrlNoSpace }) else "");
+        if (st.get("url") != .undef) try set.set("storage.url", if (st.get("url").truthy()) try v.reqStr(r, st.get("url"), "storage.url", .{ .max = 500, .pattern = httpUrlNoSpace }) else "");
     }
     // Webhooks and storage calls are signed with the same secret.
     if ((body.get("webhook") != .undef or body.get("storage") != .undef) and !app_doc.path("webhook.secretSealed").truthy()) {
         const secret = try A.randomToken(a, "whsec_", 24);
-        try set.put(a, "webhook.secretSealed", try A.seal(a, secret));
-        try set.put(a, "webhook.secretHint", try A.hint(a, secret));
+        try set.set("webhook.secretSealed", try A.seal(a, secret));
+        try set.set("webhook.secretHint", try A.hint(a, secret));
     }
     if (set.len() > 0) _ = try col().apps.updateOne(a, .{ ._id = app_doc.get("_id") }, .{ .@"$set" = set }, .{});
     webhooks.forgetApp(app_doc.get("_id"));
@@ -359,30 +359,30 @@ pub fn upsertAppUser(r: *Rq, app_doc: Val, body: Val) !Val {
     const set = try val.from(a, .{ .updatedAt = A.now() });
     if (body.get("name") != .undef) {
         const name = try v.reqStr(r, body.get("name"), "name", .{ .min = 1, .max = 64 });
-        try set.set(a, "displayName", name);
-        try set.set(a, "displayNameLower", try v.jsLower(a, name));
+        try set.set("displayName", name);
+        try set.set("displayNameLower", try v.jsLower(a, name));
     }
-    if (body.get("avatarUrl") != .undef) try set.put(a, "avatarUrl", if (body.get("avatarUrl").truthy()) Val{ .str = try v.reqStr(r, body.get("avatarUrl"), "avatarUrl", .{ .max = 2048, .pattern = httpsUrl }) } else Val.null);
-    if (body.get("bio") != .undef) try set.set(a, "bio", try v.reqStr(r, body.get("bio"), "bio", .{ .max = 300 }));
+    if (body.get("avatarUrl") != .undef) try set.set("avatarUrl", if (body.get("avatarUrl").truthy()) Val{ .str = try v.reqStr(r, body.get("avatarUrl"), "avatarUrl", .{ .max = 2048, .pattern = httpsUrl }) } else Val.null);
+    if (body.get("bio") != .undef) try set.set("bio", try v.reqStr(r, body.get("bio"), "bio", .{ .max = 300 }));
     // Content checks (Wufour Moderation): names and bios are visible to other people in the app.
     if (set.get("displayName") != .undef or set.get("bio") != .undef) {
         _ = try moderation.check(r, try val.from(a, .{ .externalId = external_id, .displayName = set.get("displayName") }), try val.from(a, .{ .type = "profile", .id = external_id, .field = "app-user" }), try val.from(a, .{ .name = set.get("displayName"), .bio = set.get("bio") }), null);
     }
-    if (body.get("role") != .undef) try set.set(a, "role", try v.reqOneOf(r, body.get("role"), "role", &.{ "user", "agent" }));
-    if (body.get("metadata") != .undef) try set.put(a, "metadata", (try v.meta(r, body.get("metadata"))) orelse .undef);
+    if (body.get("role") != .undef) try set.set("role", try v.reqOneOf(r, body.get("role"), "role", &.{ "user", "agent" }));
+    if (body.get("metadata") != .undef) try set.set("metadata", (try v.meta(r, body.get("metadata"))) orelse .undef);
     if (body.get("username") != .undef and body.get("username").truthy()) {
         const un = try v.reqStr(r, body.get("username"), "username", .{ .pattern = v.isUsername });
-        try set.set(a, "username", un);
+        try set.set("username", un);
         // Usernames are unique per app.
-        try set.set(a, "usernameLower", try r.fmt("{s}:{s}", .{ try r.str(app_doc.get("_id")), try v.jsLower(a, un) }));
+        try set.set("usernameLower", try r.fmt("{s}:{s}", .{ try r.str(app_doc.get("_id")), try v.jsLower(a, un) }));
     }
     const now = A.now();
     const on_insert = try val.from(a, .{ .kind = "app", .appId = app_doc.get("_id"), .externalId = external_id, .privacy = try auth.defaultPrivacy(a), .settings = try Val.object(a), .createdAt = now, .lastSeenAt = now });
     if (set.get("displayName") == .undef) {
-        try on_insert.set(a, "displayName", if (std.mem.startsWith(u8, external_id, "guest:")) "Guest" else external_id);
-        try on_insert.set(a, "displayNameLower", try v.jsLower(a, external_id));
+        try on_insert.set("displayName", if (std.mem.startsWith(u8, external_id, "guest:")) "Guest" else external_id);
+        try on_insert.set("displayNameLower", try v.jsLower(a, external_id));
     }
-    const user = col().users.findOneAndUpdate(a, .{ .appId = app_doc.get("_id"), .externalId = external_id }, .{ .@"$set" = set, .@"$setOnInsert" = on_insert, .@"$unset" = .{ .deletedAt = "" } }, .{ .upsert = true }) catch |e| {
+    const user = col().users.findOneAndUpdate(a, .{ .appId = app_doc.get("_id"), .externalId = external_id }, .{ .@"$set" = set, .@"$setOnInsert" = on_insert, .@"$unset" = .{ .deletedAt = "" } }, .{ .returnDocument = .after, .upsert = true }) catch |e| {
         if (e == error.DuplicateKey) return r.fail(409, "That username is taken in this app", "username_taken");
         return e;
     };
@@ -400,8 +400,8 @@ pub fn describeAppUser(r: *Rq, u: Val) !Val {
         .name = u.get("displayName"),
         .username = if (u.get("username").truthy()) u.get("username") else Val.null,
         .avatarUrl = if (u.get("avatarUrl").truthy()) u.get("avatarUrl") else Val.null,
-        .bio = if (u.get("bio").truthy()) u.get("bio") else Val.s(""),
-        .role = if (u.get("role").truthy()) u.get("role") else Val.s("user"),
+        .bio = if (u.get("bio").truthy()) u.get("bio") else Val.string(""),
+        .role = if (u.get("role").truthy()) u.get("role") else Val.string("user"),
         .metadata = if (u.get("metadata").truthy()) u.get("metadata") else Val.null,
         .hasKeys = u.path("keys.enc").truthy(),
         .createdAt = u.get("createdAt"),

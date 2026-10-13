@@ -9,7 +9,7 @@
 const std = @import("std");
 const corepush = @import("push");
 const A = @import("app.zig");
-const fetch = @import("lib/fetch.zig");
+
 const rt = @import("realtime.zig");
 const events = @import("events.zig");
 const val = A.val;
@@ -49,7 +49,7 @@ pub fn sendPush(r: *Rq, sub: Val, payload: Val, ttl: u32) !u16 {
         .auth = try toUrlSafe(a, sub.path("keys.auth").asStr() orelse ""),
     }, plain, null);
     var ttl_buf: [16]u8 = undefined;
-    const res = try fetch.fetch(a, endpoint, .{
+    const res = try A.app.fetch.fetch(a, endpoint, .{
         .method = .POST,
         .body = body,
         .content_type = "application/octet-stream",
@@ -89,7 +89,7 @@ fn pushToUsers(r: *Rq, user_ids: []const Val, payload: Val, ttl: u32) !void {
         var p = payload;
         if (sub.get("openUrl").truthy()) {
             p = try val.clone(a, payload);
-            try p.put(a, "openUrl", sub.get("openUrl"));
+            try p.set("openUrl", sub.get("openUrl"));
         }
         _ = sendPush(r, sub, p, ttl) catch {};
     }
@@ -101,7 +101,7 @@ fn previewOf(m: Val) Val {
         const kind = m.get("media").items()[0].get("kind").asStr() orelse "";
         const names = [_][2][]const u8{ .{ "photo", "📷 Photo" }, .{ "video", "🎬 Video" }, .{ "voice", "🎤 Voice message" }, .{ "round", "📹 Video message" }, .{ "file", "📎 File" }, .{ "audio", "🎵 Audio" }, .{ "gif", "GIF" }, .{ "sticker", "Sticker" } };
         for (names) |x| if (std.mem.eql(u8, x[0], kind)) return .{ .str = x[1] };
-        return Val.s("Media");
+        return Val.string("Media");
     }
     return .undef;
 }
@@ -110,10 +110,10 @@ fn previewText(a: std.mem.Allocator, m: Val) !Val {
     const p = previewOf(m);
     if (p != .undef) return p;
     if (m.get("poll").truthy()) return .{ .str = try std.fmt.allocPrint(a, "📊 {s}", .{m.path("poll.question").asStr() orelse "Poll"}) };
-    if (m.get("location").truthy()) return Val.s("📍 Location");
-    if (m.get("contact").truthy()) return Val.s("👤 Contact");
+    if (m.get("location").truthy()) return Val.string("📍 Location");
+    if (m.get("contact").truthy()) return Val.string("👤 Contact");
     if (m.get("sticker").truthy()) return .{ .str = try std.fmt.allocPrint(a, "{s} Sticker", .{m.path("sticker.emoji").asStr() orelse ""}) };
-    return Val.s("New message");
+    return Val.string("New message");
 }
 
 fn eq(x: Val, s: []const u8) bool {
@@ -157,12 +157,12 @@ fn onMessage(r: *Rq, chat: Val, message: Val, sender: Val) !void {
     var targets: std.ArrayList(Val) = .empty;
     for (members) |m| if (!rt.isOnline(m.get("userId")) or rt.isAway(m.get("userId"))) try targets.append(a, m.get("userId"));
     if (targets.items.len == 0) return;
-    const sender_name: Val = if (sender.get("displayName").truthy()) sender.get("displayName") else Val.s("Reseal");
+    const sender_name: Val = if (sender.get("displayName").truthy()) sender.get("displayName") else Val.string("Reseal");
     const pair = eq(chat.get("type"), "private") or eq(chat.get("type"), "bot");
     const reminder = message.get("reminder").truthy();
     const title: Val = if (reminder)
         .{ .str = try std.fmt.allocPrint(a, "Reminder · {s}", .{if (chat.get("title").truthy()) chat.get("title").str else "Saved"}) }
-    else if (pair) sender_name else (if (chat.get("title").truthy()) chat.get("title") else Val.s("Reseal"));
+    else if (pair) sender_name else (if (chat.get("title").truthy()) chat.get("title") else Val.string("Reseal"));
     const payload = try val.from(a, .{
         .type = "message",
         .chatId = try r.str(chat.get("_id")),
@@ -177,10 +177,10 @@ fn onMessage(r: *Rq, chat: Val, message: Val, sender: Val) !void {
     const service = eq(message.get("kind"), "service");
     if (chat.get("encrypted").truthy()) {
         const enc = message.get("enc");
-        if (enc.truthy() and (enc.get("ct").asStr() orelse @as([]const u8, "")).len < 2400) try payload.set(a, "enc", .{ .e = enc.get("e"), .s = enc.get("s"), .iv = enc.get("iv"), .ct = enc.get("ct"), .sig = enc.get("sig") });
-        try payload.put(a, "body", Val.s(if (service) "New activity" else "New message"));
+        if (enc.truthy() and (enc.get("ct").asStr() orelse @as([]const u8, "")).len < 2400) try payload.set("enc", .{ .e = enc.get("e"), .s = enc.get("s"), .iv = enc.get("iv"), .ct = enc.get("ct"), .sig = enc.get("sig") });
+        try payload.set("body", Val.string(if (service) "New activity" else "New message"));
     } else {
-        try payload.put(a, "body", if (service) Val.s("New activity") else try previewText(a, message));
+        try payload.set("body", if (service) Val.string("New activity") else try previewText(a, message));
     }
     const hide = try col().users.find(a, .{ ._id = .{ .@"$in" = targets.items }, .@"settings.notifyPreview" = false }, .{ .projection = .{ ._id = 1 } });
     var plain: std.ArrayList(Val) = .empty;
@@ -200,19 +200,19 @@ fn onMessage(r: *Rq, chat: Val, message: Val, sender: Val) !void {
     try pushToUsers(r, plain.items, payload, 86400);
     if (masked.items.len > 0) {
         const m = try val.clone(a, payload);
-        try m.set(a, "body", "New message");
-        try m.put(a, "enc", .undef);
-        try m.put(a, "sender", .null);
+        try m.set("body", "New message");
+        try m.set("enc", .undef);
+        try m.set("sender", .null);
         try pushToUsers(r, masked.items, m, 86400);
     }
     if (secret.items.len > 0) {
         // Locked chats notify without saying who wrote or what.
         const m = try val.clone(a, payload);
-        try m.set(a, "title", "Reseal");
-        try m.set(a, "body", "New message");
-        try m.put(a, "enc", .undef);
-        try m.put(a, "sender", .null);
-        try m.set(a, "locked", true);
+        try m.set("title", "Reseal");
+        try m.set("body", "New message");
+        try m.set("enc", .undef);
+        try m.set("sender", .null);
+        try m.set("locked", true);
         try pushToUsers(r, secret.items, m, 86400);
     }
 }
@@ -226,9 +226,9 @@ fn httpOpenUrl(s: []const u8) bool {
 
 pub fn subscribe(r: *Rq, user: Val, body: Val) !void {
     const a = r.a;
-    const endpoint = try r.str(if (body.get("endpoint").truthy()) body.get("endpoint") else Val.s(""));
-    const p256dh = try r.str(if (body.path("keys.p256dh").truthy()) body.path("keys.p256dh") else Val.s(""));
-    const auth = try r.str(if (body.path("keys.auth").truthy()) body.path("keys.auth") else Val.s(""));
+    const endpoint = try r.str(if (body.get("endpoint").truthy()) body.get("endpoint") else Val.string(""));
+    const p256dh = try r.str(if (body.path("keys.p256dh").truthy()) body.path("keys.p256dh") else Val.string(""));
+    const auth = try r.str(if (body.path("keys.auth").truthy()) body.path("keys.auth") else Val.string(""));
     const local_ok = A.app.config.allow_private_fetch and (std.mem.startsWith(u8, endpoint, "http://localhost:") or std.mem.startsWith(u8, endpoint, "http://localhost/") or std.mem.startsWith(u8, endpoint, "http://127.0.0.1:") or std.mem.startsWith(u8, endpoint, "http://127.0.0.1/"));
     if ((!std.mem.startsWith(u8, endpoint, "https://") and !local_ok) or endpoint.len > 1000 or p256dh.len == 0 or auth.len == 0) return r.fail(400, "Invalid push subscription", null);
     const set = try val.from(a, .{ .userId = user.get("_id"), .endpoint = endpoint, .keys = .{ .p256dh = p256dh, .auth = auth }, .updatedAt = A.now() });
@@ -237,13 +237,13 @@ pub fn subscribe(r: *Rq, user: Val, body: Val) !void {
     if (body.get("openUrl").truthy()) {
         const open = try r.str(body.get("openUrl"));
         if (!httpOpenUrl(open)) return r.fail(400, "openUrl must be an http(s) address", null);
-        try set.set(a, "openUrl", open);
-    } else try unset.set(a, "openUrl", "");
+        try set.set("openUrl", open);
+    } else try unset.set("openUrl", "");
     const update = try val.from(a, .{ .@"$set" = set, .@"$setOnInsert" = .{ .createdAt = A.now() } });
-    if (unset.len() > 0) try update.put(a, "$unset", unset);
+    if (unset.len() > 0) try update.set("$unset", unset);
     _ = try col().pushSubs.updateOne(a, .{ .endpoint = endpoint }, update, .{ .upsert = true });
 }
 
 pub fn unsubscribe(r: *Rq, user: Val, endpoint: Val) !void {
-    _ = try col().pushSubs.deleteOne(r.a, .{ .endpoint = try r.str(if (endpoint.truthy()) endpoint else Val.s("")), .userId = user.get("_id") });
+    _ = try col().pushSubs.deleteOne(r.a, .{ .endpoint = try r.str(if (endpoint.truthy()) endpoint else Val.string("")), .userId = user.get("_id") });
 }

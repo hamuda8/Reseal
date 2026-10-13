@@ -85,7 +85,7 @@ pub fn createStory(r: *Rq, user: Val, body: Val) !Val {
         .ct = try v.reqB64(r, e.get("ct"), "enc.ct", 64 * 1024),
         .sig = try v.reqB64(r, e.get("sig"), "enc.sig", 160),
     });
-    const audience = try v.reqOneOf(r, if (body.get("audience").truthy()) body.get("audience") else Val.s("contacts"), "audience", &.{ "contacts", "chats", "selected" });
+    const audience = try v.reqOneOf(r, if (body.get("audience").truthy()) body.get("audience") else Val.string("contacts"), "audience", &.{ "contacts", "chats", "selected" });
     const pinned = try v.reqBool(r, if (body.get("pinned").isNullish()) Val.False else body.get("pinned"), "pinned");
     if (pinned) try assertPinRoom(r, user);
     const klist = body.get("keys");
@@ -110,8 +110,8 @@ pub fn createStory(r: *Rq, user: Val, body: Val) !Val {
             allowed = true;
         };
         if (mine or allowed) {
-            try keep.push(a, w);
-            if (!mine) try viewer_ids.push(a, w.get("userId"));
+            try keep.push(w);
+            if (!mine) try viewer_ids.push(w.get("userId"));
         }
     }
     const media_ids = try v.reqIds(r, if (body.get("mediaIds").truthy()) body.get("mediaIds") else try Val.array(a), "mediaIds", 1);
@@ -120,7 +120,7 @@ pub fn createStory(r: *Rq, user: Val, body: Val) !Val {
         try r.ensure(file != null, "Upload the file first", 400, "media_missing");
     }
     var mids = try Val.array(a);
-    for (media_ids) |m| try mids.push(a, .{ .id = m });
+    for (media_ids) |m| try mids.push(Val{ .id = m });
     const doc = try val.from(a, .{
         .userId = user.get("_id"),
         .ref = ref,
@@ -165,9 +165,9 @@ pub fn storyFor(r: *Rq, st: Val, viewer_id: Val) !Val {
         .seen = mine or containsSame(st.get("seenBy"), viewer_id),
     });
     if (mine) {
-        try out.put(a, "audience", st.get("audience"));
-        try out.set(a, "viewerCount", st.get("viewerIds").len());
-        try out.set(a, "viewCount", st.get("views").len());
+        try out.set("audience", st.get("audience"));
+        try out.set("viewerCount", st.get("viewerIds").len());
+        try out.set("viewCount", st.get("views").len());
     }
     return out;
 }
@@ -214,7 +214,7 @@ pub fn viewable(r: *Rq, user: Val, story_id: Val) !Val {
 /// The author's own stories, newest first, including the ones that left the feed.
 pub fn archive(r: *Rq, user: Val, before: ?A.ObjectId, limit: i64) ![]Val {
     const q = try val.from(r.a, .{ .userId = user.get("_id") });
-    if (before) |b| try q.set(r.a, "_id", .{ .@"$lt" = b });
+    if (before) |b| try q.set("_id", .{ .@"$lt" = b });
     return col().stories.find(r.a, q, .{ .sort = .{ ._id = -1 }, .limit = @min(@max(1, limit), 100) });
 }
 
@@ -223,7 +223,7 @@ pub fn pinnedOf(r: *Rq, user: Val, author_id: Val) ![]Val {
     const mine = val.same(author_id, user.get("_id"));
     if (!mine and try blockedBetween(r, user.get("_id"), author_id)) return &.{};
     const q = try val.from(r.a, .{ .userId = author_id, .pinned = true });
-    if (!mine) try q.put(r.a, "viewerIds", user.get("_id"));
+    if (!mine) try q.set("viewerIds", user.get("_id"));
     return col().stories.find(r.a, q, .{ .sort = .{ ._id = -1 }, .limit = Limits.pinned_stories });
 }
 
@@ -244,7 +244,7 @@ pub fn setPinned(r: *Rq, user: Val, story_id: Val, pinned: bool) !Val {
     try to.appendSlice(a, st.get("viewerIds").items());
     rt.toUsers(a, to.items, "story.pin", try val.from(a, .{ .id = try r.str(st.get("_id")), .userId = try r.str(st.get("userId")), .pinned = pinned }));
     const out = try val.clone(a, st);
-    try out.set(a, "pinned", pinned);
+    try out.set("pinned", pinned);
     return out;
 }
 

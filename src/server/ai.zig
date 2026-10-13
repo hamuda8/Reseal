@@ -15,7 +15,7 @@ const msgs = @import("messages.zig");
 const store = @import("store.zig");
 const events = @import("events.zig");
 const auth = @import("auth.zig");
-const fetch = @import("lib/fetch.zig");
+
 const moderation = @import("moderation.zig");
 const val = A.val;
 const Val = A.Val;
@@ -53,21 +53,21 @@ fn modelPattern(s: []const u8) bool {
 fn cleanBotFields(r: *Rq, body: Val, partial: bool) !Val {
     const a = r.a;
     const out = try Val.object(a);
-    if (!partial or body.get("name") != .undef) if (try v.str(r, body.get("name"), "name", .{ .min = 1, .max = 64, .optional = partial })) |x| try out.set(a, "name", x);
-    if (body.get("description") != .undef) try out.set(a, "description", try v.reqStr(r, body.get("description"), "description", .{ .max = 500 }));
-    if (!partial or body.get("model") != .undef) if (try v.str(r, body.get("model"), "model", .{ .min = 3, .max = 120, .pattern = modelPattern, .optional = partial })) |x| try out.set(a, "model", x);
-    if (body.get("systemPrompt") != .undef) try out.set(a, "systemPrompt", try v.reqStr(r, body.get("systemPrompt"), "systemPrompt", .{ .max = 20000, .trim = false }));
-    if (body.get("temperature") != .undef) try out.set(a, "temperature", (try v.num(r, body.get("temperature"), "temperature", .{ .min = 0, .max = 2 })).?);
-    if (body.get("maxTokens") != .undef) try out.set(a, "maxTokens", try v.reqInt(r, body.get("maxTokens"), "maxTokens", .{ .min = 16, .max = 32000 }));
-    if (body.get("contextMessages") != .undef) try out.set(a, "contextMessages", try v.reqInt(r, body.get("contextMessages"), "contextMessages", .{ .min = 1, .max = 100 }));
-    if (body.get("greeting") != .undef) try out.set(a, "greeting", try v.reqStr(r, body.get("greeting"), "greeting", .{ .max = 2000 }));
-    inline for (.{ "public", "allowGroups", "vision" }) |k| if (body.get(k) != .undef) try out.set(a, k, try v.reqBool(r, body.get(k), k));
+    if (!partial or body.get("name") != .undef) if (try v.str(r, body.get("name"), "name", .{ .min = 1, .max = 64, .optional = partial })) |x| try out.set("name", x);
+    if (body.get("description") != .undef) try out.set("description", try v.reqStr(r, body.get("description"), "description", .{ .max = 500 }));
+    if (!partial or body.get("model") != .undef) if (try v.str(r, body.get("model"), "model", .{ .min = 3, .max = 120, .pattern = modelPattern, .optional = partial })) |x| try out.set("model", x);
+    if (body.get("systemPrompt") != .undef) try out.set("systemPrompt", try v.reqStr(r, body.get("systemPrompt"), "systemPrompt", .{ .max = 20000, .trim = false }));
+    if (body.get("temperature") != .undef) try out.set("temperature", (try v.num(r, body.get("temperature"), "temperature", .{ .min = 0, .max = 2 })).?);
+    if (body.get("maxTokens") != .undef) try out.set("maxTokens", try v.reqInt(r, body.get("maxTokens"), "maxTokens", .{ .min = 16, .max = 32000 }));
+    if (body.get("contextMessages") != .undef) try out.set("contextMessages", try v.reqInt(r, body.get("contextMessages"), "contextMessages", .{ .min = 1, .max = 100 }));
+    if (body.get("greeting") != .undef) try out.set("greeting", try v.reqStr(r, body.get("greeting"), "greeting", .{ .max = 2000 }));
+    inline for (.{ "public", "allowGroups", "vision" }) |k| if (body.get(k) != .undef) try out.set(k, try v.reqBool(r, body.get(k), k));
     if (body.get("starters") != .undef) {
         const st = body.get("starters");
         try r.ensure(st == .arr and st.len() <= 6, "starters must be a list of up to 6 prompts", 400, null);
         var list = try Val.array(a);
-        for (st.items()) |x| try list.push(a, .{ .str = try v.reqStr(r, x, "starter", .{ .min = 1, .max = 120 }) });
-        try out.put(a, "starters", list);
+        for (st.items()) |x| try list.push(Val{ .str = try v.reqStr(r, x, "starter", .{ .min = 1, .max = 120 }) });
+        try out.set("starters", list);
     }
     return out;
 }
@@ -83,13 +83,13 @@ pub fn describeBot(r: *Rq, bot: Val, bot_user: Val) !Val {
         .name = bot_user.get("displayName"),
         .username = if (bot_user.get("username").truthy()) bot_user.get("username") else Val.null,
         .avatar = if (bot_user.get("avatar").truthy()) Val{ .str = try r.str(bot_user.get("avatar")) } else Val.null,
-        .description = if (bot_user.path("botInfo.description").truthy()) bot_user.path("botInfo.description") else Val.s(""),
+        .description = if (bot_user.path("botInfo.description").truthy()) bot_user.path("botInfo.description") else Val.string(""),
         .model = bot.get("model"),
-        .systemPrompt = if (bot.get("systemPrompt").truthy()) bot.get("systemPrompt") else Val.s(""),
-        .temperature = orDefault(bot.get("temperature"), Val.n(0.7)),
-        .maxTokens = orDefault(bot.get("maxTokens"), Val.n(1024)),
-        .contextMessages = orDefault(bot.get("contextMessages"), Val.n(20)),
-        .greeting = if (bot.get("greeting").truthy()) bot.get("greeting") else Val.s(""),
+        .systemPrompt = if (bot.get("systemPrompt").truthy()) bot.get("systemPrompt") else Val.string(""),
+        .temperature = orDefault(bot.get("temperature"), Val.number(0.7)),
+        .maxTokens = orDefault(bot.get("maxTokens"), Val.number(1024)),
+        .contextMessages = orDefault(bot.get("contextMessages"), Val.number(20)),
+        .greeting = if (bot.get("greeting").truthy()) bot.get("greeting") else Val.string(""),
         .starters = if (bot.get("starters").truthy()) bot.get("starters") else try Val.array(a),
         .public = bot.get("public").truthy(),
         .allowGroups = !(bot.get("allowGroups") == .bool and !bot.get("allowGroups").bool),
@@ -115,19 +115,19 @@ pub fn createBot(r: *Rq, owner: Val, body: Val, app_id: Val) !Val {
         .appId = app_id,
         .displayName = name,
         .displayNameLower = try v.jsLower(a, name),
-        .bio = if (f.get("description").truthy()) f.get("description") else Val.s(""),
+        .bio = if (f.get("description").truthy()) f.get("description") else Val.string(""),
         .avatar = Val.null,
         .privacy = try auth.defaultPrivacy(a),
         .settings = try Val.object(a),
         .createdAt = now,
         .lastSeenAt = now,
-        .botInfo = .{ .ownerId = owner.get("_id"), .description = if (f.get("description").truthy()) f.get("description") else Val.s(""), .model = f.get("model"), .starters = if (f.get("starters").truthy()) f.get("starters") else try Val.array(a) },
+        .botInfo = .{ .ownerId = owner.get("_id"), .description = if (f.get("description").truthy()) f.get("description") else Val.string(""), .model = f.get("model"), .starters = if (f.get("starters").truthy()) f.get("starters") else try Val.array(a) },
     });
     if (body.get("username").truthy()) {
         const un = try v.reqStr(r, body.get("username"), "username", .{ .pattern = v.isUsername });
         try r.ensure(std.ascii.endsWithIgnoreCase(un, "bot"), "Bot usernames must end in \"bot\"", 400, null);
-        try user_doc.set(a, "username", un);
-        try user_doc.set(a, "usernameLower", try v.jsLower(a, un));
+        try user_doc.set("username", un);
+        try user_doc.set("usernameLower", try v.jsLower(a, un));
     }
     const id = col().users.insertOne(a, user_doc) catch |e| {
         if (e == error.DuplicateKey) return r.fail(409, "That username is taken", "username_taken");
@@ -139,11 +139,11 @@ pub fn createBot(r: *Rq, owner: Val, body: Val, app_id: Val) !Val {
         .ownerId = owner.get("_id"),
         .appId = app_id,
         .model = f.get("model"),
-        .systemPrompt = if (f.get("systemPrompt").truthy()) f.get("systemPrompt") else Val.s("You are a helpful, friendly assistant. Answer clearly and concisely."),
-        .temperature = orDefault(f.get("temperature"), Val.n(0.7)),
-        .maxTokens = orDefault(f.get("maxTokens"), Val.n(1024)),
-        .contextMessages = orDefault(f.get("contextMessages"), Val.n(20)),
-        .greeting = if (f.get("greeting").truthy()) f.get("greeting") else Val.s(""),
+        .systemPrompt = if (f.get("systemPrompt").truthy()) f.get("systemPrompt") else Val.string("You are a helpful, friendly assistant. Answer clearly and concisely."),
+        .temperature = orDefault(f.get("temperature"), Val.number(0.7)),
+        .maxTokens = orDefault(f.get("maxTokens"), Val.number(1024)),
+        .contextMessages = orDefault(f.get("contextMessages"), Val.number(20)),
+        .greeting = if (f.get("greeting").truthy()) f.get("greeting") else Val.string(""),
         .public = orDefault(f.get("public"), Val.False),
         .allowGroups = orDefault(f.get("allowGroups"), Val.True),
         .vision = orDefault(f.get("vision"), Val.False),
@@ -166,35 +166,35 @@ pub fn updateBot(r: *Rq, bot: Val, body: Val) !Val {
     }
     const bot_set = try val.from(a, .{ .updatedAt = A.now() });
     const user_set = try Val.object(a);
-    inline for (.{ "model", "systemPrompt", "temperature", "maxTokens", "contextMessages", "greeting", "public", "allowGroups", "vision", "starters" }) |k| if (f.get(k) != .undef) try bot_set.put(a, k, f.get(k));
+    inline for (.{ "model", "systemPrompt", "temperature", "maxTokens", "contextMessages", "greeting", "public", "allowGroups", "vision", "starters" }) |k| if (f.get(k) != .undef) try bot_set.set(k, f.get(k));
     if (f.get("name").truthy()) {
-        try user_set.put(a, "displayName", f.get("name"));
-        try user_set.set(a, "displayNameLower", try v.jsLower(a, f.get("name").str));
+        try user_set.set("displayName", f.get("name"));
+        try user_set.set("displayNameLower", try v.jsLower(a, f.get("name").str));
     }
     if (f.get("description") != .undef) {
-        try user_set.put(a, "botInfo.description", f.get("description"));
-        try user_set.put(a, "bio", f.get("description"));
+        try user_set.set("botInfo.description", f.get("description"));
+        try user_set.set("bio", f.get("description"));
     }
-    if (f.get("model").truthy()) try user_set.put(a, "botInfo.model", f.get("model"));
-    if (f.get("starters").truthy()) try user_set.put(a, "botInfo.starters", f.get("starters"));
+    if (f.get("model").truthy()) try user_set.set("botInfo.model", f.get("model"));
+    if (f.get("starters").truthy()) try user_set.set("botInfo.starters", f.get("starters"));
     if (body.get("apiKey") != .undef) {
         const api_key: ?[]const u8 = if (body.get("apiKey").truthy()) try v.reqStr(r, body.get("apiKey"), "apiKey", .{ .min = 10, .max = 300 }) else null;
-        try bot_set.put(a, "apiKeySealed", try A.seal(a, api_key));
-        try bot_set.put(a, "keyHint", try A.hint(a, api_key));
+        try bot_set.set("apiKeySealed", try A.seal(a, api_key));
+        try bot_set.set("keyHint", try A.hint(a, api_key));
     }
     if (body.get("avatar") != .undef) {
         if (body.get("avatar").truthy()) {
             const m = try col().media.findOne(a, .{ ._id = try v.reqId(r, body.get("avatar"), "avatar"), .ownerId = bot.get("ownerId"), .status = "ready" }, .{});
             try r.ensure(m != null and std.mem.startsWith(u8, m.?.get("mime").asStr() orelse "", "image/"), "Avatar must be an image you uploaded", 400, null);
             _ = try col().media.updateOne(a, .{ ._id = m.?.get("_id") }, .{ .@"$set" = .{ .public = true } }, .{});
-            try user_set.put(a, "avatar", m.?.get("_id"));
-        } else try user_set.put(a, "avatar", .null);
+            try user_set.set("avatar", m.?.get("_id"));
+        } else try user_set.set("avatar", .null);
     }
     if (body.get("username") != .undef and body.get("username").truthy()) {
         const un = try v.reqStr(r, body.get("username"), "username", .{ .pattern = v.isUsername });
         try r.ensure(std.ascii.endsWithIgnoreCase(un, "bot"), "Bot usernames must end in \"bot\"", 400, null);
-        try user_set.set(a, "username", un);
-        try user_set.set(a, "usernameLower", try v.jsLower(a, un));
+        try user_set.set("username", un);
+        try user_set.set("usernameLower", try v.jsLower(a, un));
     }
     _ = try col().bots.updateOne(a, .{ ._id = bot.get("_id") }, .{ .@"$set" = bot_set }, .{});
     if (user_set.len() > 0) _ = col().users.updateOne(a, .{ ._id = bot.get("_id") }, .{ .@"$set" = user_set }, .{}) catch |e| {
@@ -227,7 +227,7 @@ pub fn listModels(r: *Rq) !Val {
     }
     const url = try r.fmt("{s}/models", .{A.app.config.openrouter_url});
     var list = try Val.array(a);
-    if (fetch.fetch(a, url, .{ .timeout_ms = 10_000, .follow = true })) |res| {
+    if (A.app.fetch.fetch(a, url, .{ .timeout_ms = 10_000, .follow = true })) |res| {
         const json = val.parseJson(a, res.body) catch Val.null;
         for (json.get("data").items()) |m| {
             const pr = m.get("pricing");
@@ -237,7 +237,7 @@ pub fn listModels(r: *Rq) !Val {
             for (m.path("architecture.input_modalities").items()) |x| if (eq(x, "image")) {
                 vision = true;
             };
-            try list.push(a, try val.from(a, .{
+            try list.push(try val.from(a, .{
                 .id = m.get("id"),
                 .name = m.get("name"),
                 .context = m.get("context_length"),
@@ -247,7 +247,7 @@ pub fn listModels(r: *Rq) !Val {
                 .completionPrice = if (pr.truthy()) Val{ .num = completion * 1e6 } else Val.null,
             }));
         }
-        std.mem.sort(Val, list.arr.items, {}, struct {
+        std.mem.sort(Val, list.arr.items.items, {}, struct {
             fn lt(_: void, x: Val, y: Val) bool {
                 // Close to localeCompare: case is ignored.
                 return std.ascii.orderIgnoreCase(x.get("name").asStr() orelse "", y.get("name").asStr() orelse "") == .lt;
@@ -264,7 +264,7 @@ pub fn listModels(r: *Rq) !Val {
     }
     if (models_json) |j| return val.parseJson(a, j);
     for ([_][]const u8{ "openai/gpt-4o-mini", "anthropic/claude-sonnet-4.5", "google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct" }) |id| {
-        try list.push(a, try val.from(a, .{ .id = id, .name = id, .context = Val.null, .vision = false, .free = false }));
+        try list.push(try val.from(a, .{ .id = id, .name = id, .context = Val.null, .vision = false, .free = false }));
     }
     return list;
 }
@@ -332,7 +332,7 @@ fn buildContext(r: *Rq, bot: Val, bot_user: Val, chat: Val, upto_seq: i64) !Val 
     var full: []const u8 = system;
     if (multi) full = try r.fmt("{s}\nThis is a group conversation; user messages start with the sender's name.", .{full});
     full = try r.fmt("{s}\nFormat replies with Markdown when it helps (lists, **bold**, `code`, fenced code blocks).", .{full});
-    try messages.push(a, try val.from(a, .{ .role = "system", .content = full }));
+    try messages.push(try val.from(a, .{ .role = "system", .content = full }));
     for (rows) |m| {
         const mine = val.same(m.get("senderId"), bot_user.get("_id"));
         const text_part = if (m.get("text").truthy()) m.get("text").str else "";
@@ -351,16 +351,16 @@ fn buildContext(r: *Rq, bot: Val, bot_user: Val, chat: Val, upto_seq: i64) !Val 
         };
         if (!mine and bot.get("vision").truthy() and has_photo) {
             var content = try Val.array(a);
-            try content.push(a, try val.from(a, .{ .type = "text", .text = if (text.len > 0) text else "What is in this image?" }));
+            try content.push(try val.from(a, .{ .type = "text", .text = if (text.len > 0) text else "What is in this image?" }));
             var n: usize = 0;
             for (m.get("media").items()) |x| {
                 if (!eq(x.get("kind"), "photo") or n >= 4) continue;
                 n += 1;
-                if (try imagePart(r, x.get("id"))) |p| try content.push(a, p);
+                if (try imagePart(r, x.get("id"))) |p| try content.push(p);
             }
-            try messages.push(a, try val.from(a, .{ .role = "user", .content = content }));
+            try messages.push(try val.from(a, .{ .role = "user", .content = content }));
         } else if (text.len > 0) {
-            try messages.push(a, try val.from(a, .{ .role = if (mine) "assistant" else "user", .content = text }));
+            try messages.push(try val.from(a, .{ .role = if (mine) "assistant" else "user", .content = text }));
         }
     }
     return messages;
@@ -403,13 +403,13 @@ fn complete(r: *Rq, api_key: []const u8, bot: Val, messages: Val, g: *Generating
     const body = try val.stringify(a, try val.from(a, .{
         .model = bot.get("model"),
         .messages = messages,
-        .temperature = orDefault(bot.get("temperature"), Val.n(0.7)),
-        .max_tokens = orDefault(bot.get("maxTokens"), Val.n(1024)),
+        .temperature = orDefault(bot.get("temperature"), Val.number(0.7)),
+        .max_tokens = orDefault(bot.get("maxTokens"), Val.number(1024)),
         .stream = true,
         .usage = .{ .include = true },
     }));
     const url = try r.fmt("{s}/chat/completions", .{A.app.config.openrouter_url});
-    var req = try A.app.client.request(.POST, try std.Uri.parse(url), .{
+    var req = try A.app.fetch.http.request(.POST, try std.Uri.parse(url), .{
         .keep_alive = false,
         .headers = .{ .accept_encoding = .omit, .content_type = .{ .override = "application/json" } },
         .extra_headers = &.{
@@ -514,8 +514,8 @@ fn generate(r: *Rq, bot: Val, bot_user: Val, chat: Val, trigger_seq: i64, existi
     if (existing) |e| {
         _ = try store.update(r, chat, e.get("_id"), try val.from(a, .{ .@"$set" = .{ .text = "", .streaming = true }, .@"$unset" = .{ .@"error" = "", .entities = "" } }));
         msg = try val.clone(a, e);
-        try msg.set(a, "text", "");
-        try msg.set(a, "streaming", true);
+        try msg.set("text", "");
+        try msg.set("streaming", true);
         msg.del("error");
         rt.toChatEach(a, chat.get("_id"), "message.edit", MsgCtx{ .doc = msg, .chat = chat }, messageFor);
     } else {
@@ -553,22 +553,22 @@ fn generate(r: *Rq, bot: Val, bot_user: Val, chat: Val, trigger_seq: i64, existi
 
     const text = s.text.items;
     const set = try Val.object(a);
-    try set.set(a, "text", if (text.len > 0) text else if (err_text != null) "" else "…");
+    try set.set("text", if (text.len > 0) text else if (err_text != null) "" else "…");
     if (err_text) |e| {
-        try set.set(a, "error", v.sliceUtf16(e, 500));
-        if (text.len == 0) try set.set(a, "text", try r.fmt("⚠️ {s}", .{e}));
+        try set.set("error", v.sliceUtf16(e, 500));
+        if (text.len == 0) try set.set("text", try r.fmt("⚠️ {s}", .{e}));
     }
     if (stopped) {
         const b = try val.clone(a, if (msg.get("bot").truthy()) msg.get("bot") else try Val.object(a));
-        try b.set(a, "stopped", true);
-        try b.put(a, "model", bot.get("model"));
-        try b.set(a, "markdown", true);
-        try set.put(a, "bot", b);
+        try b.set("stopped", true);
+        try b.set("model", bot.get("model"));
+        try b.set("markdown", true);
+        try set.set("bot", b);
     }
-    try set.set(a, "search", v.sliceUtf16(try v.jsLower(a, set.get("text").str), 4000));
+    try set.set("search", v.sliceUtf16(try v.jsLower(a, set.get("text").str), 4000));
     const final = (try store.update(r, chat, msg.get("_id"), try val.from(a, .{ .@"$set" = set, .@"$unset" = .{ .streaming = "" } }))) orelse blk: {
         const f = try val.clone(a, msg);
-        for (set.keys()) |kv| try f.put(a, kv.k, kv.v);
+        for (set.keys(), set.vals()) |kv_k, kv_v| try f.set(kv_k, kv_v);
         f.del("streaming");
         break :blk f;
     };

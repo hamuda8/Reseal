@@ -67,14 +67,14 @@ fn listBots(q: *Req) !void {
     const r = &q.r;
     const a = r.a;
     const f = try val.from(a, .{ .ownerId = q.user().get("_id") });
-    if (q.qv("appId").truthy()) try f.set(a, "appId", try v.reqId(r, q.qv("appId"), "appId"));
+    if (q.qv("appId").truthy()) try f.set("appId", try v.reqId(r, q.qv("appId"), "appId"));
     const bots = try col().bots.find(a, f, .{ .sort = .{ .createdAt = -1 } });
     var ids: std.ArrayList(Val) = .empty;
     for (bots) |b| try ids.append(a, b.get("_id"));
     const users = try col().users.find(a, .{ ._id = .{ .@"$in" = ids.items }, .deletedAt = .{ .@"$exists" = false } }, .{});
     var out = try Val.array(a);
     for (bots) |b| for (users) |u| if (val.same(u.get("_id"), b.get("_id"))) {
-        try out.push(a, try ai.describeBot(r, b, u));
+        try out.push(try ai.describeBot(r, b, u));
         break;
     };
     return q.json(.{ .bots = out });
@@ -91,7 +91,7 @@ fn discover(q: *Req) !void {
     var out = try Val.array(a);
     for (bots) |b| for (users) |u| if (val.same(u.get("_id"), b.get("_id"))) {
         const d = try ai.describeBot(r, b, u);
-        try out.push(a, try val.from(a, .{ .id = d.get("id"), .name = d.get("name"), .username = d.get("username"), .avatar = d.get("avatar"), .description = d.get("description"), .model = d.get("model"), .starters = d.get("starters") }));
+        try out.push(try val.from(a, .{ .id = d.get("id"), .name = d.get("name"), .username = d.get("username"), .avatar = d.get("avatar"), .description = d.get("description"), .model = d.get("model"), .starters = d.get("starters") }));
         break;
     };
     return q.json(.{ .bots = out });
@@ -130,7 +130,7 @@ fn listApps(q: *Req) !void {
     const a = q.r.a;
     const rows = try col().apps.find(a, .{ .ownerId = q.user().get("_id"), .deletedAt = .{ .@"$exists" = false } }, .{ .sort = .{ .createdAt = -1 } });
     var out = try Val.array(a);
-    for (rows) |x| try out.push(a, try apps.describeApp(&q.r, x, null));
+    for (rows) |x| try out.push(try apps.describeApp(&q.r, x, null));
     return q.json(.{ .apps = out });
 }
 
@@ -201,7 +201,7 @@ fn webhookTest(q: *Req) !void {
         .data = .{ .message = "Hello from Reseal 👋" },
     }));
     const out = try val.from(a, .{ .ok = res.ok, .status = res.status });
-    if (res.@"error") |e| try out.set(a, "error", e);
+    if (res.@"error") |e| try out.set("error", e);
     return q.json(out);
 }
 
@@ -229,7 +229,7 @@ fn deliveries(q: *Req) !void {
     const a = r.a;
     const rows = try col().webhookDeliveries.find(a, .{ .appId = app_doc.get("_id") }, .{ .sort = .{ .createdAt = -1 }, .limit = 100 });
     var out = try Val.array(a);
-    for (rows) |d| try out.push(a, try val.from(a, .{
+    for (rows) |d| try out.push(try val.from(a, .{
         .id = try r.str(d.get("_id")),
         .event = d.get("event"),
         .status = d.get("status"),
@@ -257,11 +257,11 @@ fn appUsers(q: *Req) !void {
     const r = &q.r;
     const a = r.a;
     const f = try val.from(a, .{ .appId = app_doc.get("_id"), .kind = "app", .deletedAt = .{ .@"$exists" = false } });
-    if (q.qv("role").truthy()) try f.set(a, "role", try v.reqOneOf(r, q.qv("role"), "role", &.{ "user", "agent" }));
-    if (q.query("q")) |text| if (text.len > 0) try f.set(a, "displayNameLower", .{ .@"$regex" = try account.escapeRe(a, try v.jsLower(a, text)) });
+    if (q.qv("role").truthy()) try f.set("role", try v.reqOneOf(r, q.qv("role"), "role", &.{ "user", "agent" }));
+    if (q.query("q")) |text| if (text.len > 0) try f.set("displayNameLower", .{ .@"$regex" = try account.escapeRe(a, try v.jsLower(a, text)) });
     const rows = try col().users.find(a, f, .{ .sort = .{ .createdAt = -1 }, .limit = 100 });
     var out = try Val.array(a);
-    for (rows) |u| try out.push(a, try apps.describeAppUser(r, u));
+    for (rows) |u| try out.push(try apps.describeAppUser(r, u));
     return q.json(.{ .users = out, .total = try col().users.count(a, f, .{}) });
 }
 
@@ -270,7 +270,7 @@ fn appTeams(q: *Req) !void {
     const r = &q.r;
     const rows = try col().teams.find(r.a, .{ .appId = app_doc.get("_id") }, .{ .sort = .{ .createdAt = -1 }, .limit = 100 });
     var out = try Val.array(r.a);
-    for (rows) |t| try out.push(r.a, try teams.describeTeam(r, t));
+    for (rows) |t| try out.push(try teams.describeTeam(r, t));
     return q.json(.{ .teams = out, .total = try col().teams.count(r.a, .{ .appId = app_doc.get("_id") }, .{}) });
 }
 

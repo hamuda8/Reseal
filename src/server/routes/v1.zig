@@ -86,21 +86,21 @@ fn chatRef(r: *Rq, app_doc: Val, ref: []const u8) !Val {
     const a = r.a;
     const f = try val.from(a, .{ .appId = app_doc.get("_id") });
     if (std.mem.startsWith(u8, ref, "ext:")) {
-        try f.set(a, "externalId", ref[4..]);
+        try f.set("externalId", ref[4..]);
     } else {
         const id = v.oidStr(ref) orelse return r.fail(404, "Chat not found", "chat_not_found");
-        try f.set(a, "_id", id);
+        try f.set("_id", id);
     }
-    try f.set(a, "deletedAt", .{ .@"$exists" = false });
+    try f.set("deletedAt", .{ .@"$exists" = false });
     return (try col().chats.findOne(a, f, .{})) orelse r.fail(404, "Chat not found", "chat_not_found");
 }
 
 fn userRef(r: *Rq, app_doc: Val, ref: []const u8) !Val {
     const a = r.a;
     const f = try Val.object(a);
-    if (std.mem.startsWith(u8, ref, "id:")) try f.put(a, "_id", if (v.oidStr(ref[3..])) |x| Val{ .id = x } else Val.null) else try f.set(a, "externalId", ref);
-    try f.put(a, "appId", app_doc.get("_id"));
-    try f.set(a, "deletedAt", .{ .@"$exists" = false });
+    if (std.mem.startsWith(u8, ref, "id:")) try f.set("_id", if (v.oidStr(ref[3..])) |x| Val{ .id = x } else Val.null) else try f.set("externalId", ref);
+    try f.set("appId", app_doc.get("_id"));
+    try f.set("deletedAt", .{ .@"$exists" = false });
     return (try col().users.findOne(a, f, .{})) orelse r.fail(404, try r.fmt("User \"{s}\" not found. Create it with POST /api/v1/users first.", .{ref}), "user_not_found");
 }
 
@@ -134,9 +134,8 @@ fn systemUser(r: *Rq, app_doc: Val) !Val {
 
 fn teamInfo(r: *Rq, c: Val, out: Val) !void {
     if (!c.get("teamId").truthy()) return;
-    const a = r.a;
-    try out.set(a, "team", .{ .id = try sn(r, c.get("teamId")), .externalId = if (c.get("teamExternalId").truthy()) c.get("teamExternalId") else Val.null });
-    try out.set(a, "visitor", .{ .id = try sn(r, c.get("visitorId")), .externalId = if (c.get("visitorExternalId").truthy()) c.get("visitorExternalId") else Val.null });
+    try out.set("team", .{ .id = try sn(r, c.get("teamId")), .externalId = if (c.get("teamExternalId").truthy()) c.get("teamExternalId") else Val.null });
+    try out.set("visitor", .{ .id = try sn(r, c.get("visitorId")), .externalId = if (c.get("visitorExternalId").truthy()) c.get("visitorExternalId") else Val.null });
 }
 
 fn chatOut(r: *Rq, chat: Val) !Val {
@@ -150,7 +149,7 @@ fn chatOut(r: *Rq, chat: Val) !Val {
         .type = chat.get("type"),
         .externalId = if (chat.get("externalId").truthy()) chat.get("externalId") else Val.null,
         .title = if (chat.get("title").truthy()) chat.get("title") else Val.null,
-        .about = if (chat.get("about").truthy()) chat.get("about") else Val.s(""),
+        .about = if (chat.get("about").truthy()) chat.get("about") else Val.string(""),
         .encrypted = chat.get("encrypted").truthy(),
         .metadata = if (chat.get("metadata").truthy()) chat.get("metadata") else Val.null,
         .memberCount = chat.get("memberCount"),
@@ -165,7 +164,7 @@ fn chatOut(r: *Rq, chat: Val) !Val {
         for (users) |x| if (val.same(x.get("_id"), m.get("userId"))) {
             u = x;
         };
-        try list.push(a, try val.from(a, .{
+        try list.push(try val.from(a, .{
             .id = try sn(r, m.get("userId")),
             .externalId = if (u.get("externalId").truthy()) u.get("externalId") else Val.null,
             .name = u.get("displayName"),
@@ -174,7 +173,7 @@ fn chatOut(r: *Rq, chat: Val) !Val {
             .lastReadSeq = m.get("lastReadSeq").asInt() orelse 0,
         }));
     }
-    try out.put(a, "members", list);
+    try out.set("members", list);
     return out;
 }
 
@@ -203,7 +202,7 @@ fn bulkUsers(q: *Req) !void {
     const list = q.b("users");
     try r.ensure(list == .arr and list.len() <= 100, "users must be a list of up to 100", 400, null);
     var out = try Val.array(r.a);
-    for (list.items()) |u| try out.push(r.a, try apps.describeAppUser(r, try apps.upsertAppUser(r, q.app_, u)));
+    for (list.items()) |u| try out.push(try apps.describeAppUser(r, try apps.upsertAppUser(r, q.app_, u)));
     return q.json(.{ .users = out });
 }
 
@@ -215,7 +214,7 @@ fn patchUser(q: *Req) !void {
     const r = &q.r;
     const user = try userRef(r, q.app_, q.param("ref"));
     const body = try val.clone(r.a, try q.bodyObj());
-    try body.put(r.a, "externalId", user.get("externalId"));
+    try body.set("externalId", user.get("externalId"));
     return q.json(.{ .user = try apps.describeAppUser(r, try apps.upsertAppUser(r, q.app_, body)) });
 }
 
@@ -233,7 +232,7 @@ fn deleteUser(q: *Req) !void {
 fn tokens(q: *Req) !void {
     const r = &q.r;
     const user = try userRef(r, q.app_, q.param("ref"));
-    const ttl = try v.reqInt(r, if (q.b("ttlSeconds").isNullish()) Val.n(3600) else q.b("ttlSeconds"), "ttlSeconds", .{ .min = 60, .max = 30 * 86400 });
+    const ttl = try v.reqInt(r, if (q.b("ttlSeconds").isNullish()) Val.number(3600) else q.b("ttlSeconds"), "ttlSeconds", .{ .min = 60, .max = 30 * 86400 });
     const t = try auth.issueUserToken(r, user, ttl, q.app_.get("_id"), "api");
     return q.json(.{ .token = t.token, .expiresAt = t.expiresAt, .user = try apps.describeAppUser(r, user) });
 }
@@ -264,9 +263,9 @@ fn userChats(q: *Req) !void {
         };
         const o = try val.from(a, .{ .id = try sn(r, c.get("_id")), .type = c.get("type"), .externalId = if (c.get("externalId").truthy()) c.get("externalId") else Val.null, .title = if (c.get("title").truthy()) c.get("title") else Val.null, .metadata = if (c.get("metadata").truthy()) c.get("metadata") else Val.null });
         try teamInfo(r, c, o);
-        try o.put(a, "unread", .{ .num = unread });
-        try o.put(a, "lastMessageAt", c.get("lastMessageAt"));
-        try out.push(a, o);
+        try o.set("unread", Val{ .num = unread });
+        try o.set("lastMessageAt", c.get("lastMessageAt"));
+        try out.push(o);
     }
     return q.json(.{ .chats = out, .unreadTotal = total });
 }
@@ -286,10 +285,10 @@ fn userUnread(q: *Req) !void {
 
 fn listTeams(q: *Req) !void {
     const r = &q.r;
-    const limit = try v.reqInt(r, if (q.qv("limit") != .undef) q.qv("limit") else Val.n(100), "limit", .{ .min = 1, .max = 500 });
+    const limit = try v.reqInt(r, if (q.qv("limit") != .undef) q.qv("limit") else Val.number(100), "limit", .{ .min = 1, .max = 500 });
     const rows = try col().teams.find(r.a, .{ .appId = q.app_.get("_id") }, .{ .sort = .{ .createdAt = -1 }, .limit = limit });
     var out = try Val.array(r.a);
-    for (rows) |t| try out.push(r.a, try teams.describeTeam(r, t));
+    for (rows) |t| try out.push(try teams.describeTeam(r, t));
     return q.json(.{ .teams = out });
 }
 
@@ -349,7 +348,7 @@ fn createChat(q: *Req) !void {
     const a = r.a;
     const app_doc = q.app_;
     const b = try q.bodyObj();
-    const type_ = try v.reqOneOf(r, if (b.get("type").truthy()) b.get("type") else Val.s("group"), "type", &.{ "private", "group", "channel", "support", "team" });
+    const type_ = try v.reqOneOf(r, if (b.get("type").truthy()) b.get("type") else Val.string("group"), "type", &.{ "private", "group", "channel", "support", "team" });
     const external_id = try v.str(r, b.get("externalId"), "externalId", .{ .max = 128, .optional = true });
     const ext: ?[]const u8 = if (external_id) |e| (if (e.len > 0) e else null) else null;
     if (std.mem.eql(u8, type_, "team")) {
@@ -377,15 +376,15 @@ fn createChat(q: *Req) !void {
     } else {
         const owner = if (b.get("owner").truthy()) try userRef(r, app_doc, try refStr(r, b.get("owner"))) else members.items[0];
         var others = try Val.array(a);
-        for (members.items) |m| if (!val.same(m.get("_id"), owner.get("_id"))) try others.push(a, .{ .str = try r.str(m.get("_id")) });
-        const body = try val.from(a, .{ .type = type_, .title = if (b.get("title").truthy()) b.get("title") else Val.s("Chat"), .about = b.get("about"), .members = others, .metadata = b.get("metadata") });
-        if (b.get("encrypted") != .undef) try body.set(a, "encrypted", try v.reqBool(r, b.get("encrypted"), "encrypted"));
+        for (members.items) |m| if (!val.same(m.get("_id"), owner.get("_id"))) try others.push(Val{ .str = try r.str(m.get("_id")) });
+        const body = try val.from(a, .{ .type = type_, .title = if (b.get("title").truthy()) b.get("title") else Val.string("Chat"), .about = b.get("about"), .members = others, .metadata = b.get("metadata") });
+        if (b.get("encrypted") != .undef) try body.set("encrypted", try v.reqBool(r, b.get("encrypted"), "encrypted"));
         chat = (try chats.createGroup(r, owner, body)).chat;
     }
     const set = try Val.object(a);
-    if (ext) |e| try set.set(a, "externalId", e);
-    if (b.get("metadata") != .undef) try set.put(a, "metadata", (try v.meta(r, b.get("metadata"))) orelse .undef);
-    if (b.get("title").truthy() and !std.mem.eql(u8, type_, "group") and !std.mem.eql(u8, type_, "channel")) try set.set(a, "title", try v.reqStr(r, b.get("title"), "title", .{ .max = 128 }));
+    if (ext) |e| try set.set("externalId", e);
+    if (b.get("metadata") != .undef) try set.set("metadata", (try v.meta(r, b.get("metadata"))) orelse .undef);
+    if (b.get("title").truthy() and !std.mem.eql(u8, type_, "group") and !std.mem.eql(u8, type_, "channel")) try set.set("title", try v.reqStr(r, b.get("title"), "title", .{ .max = 128 }));
     if (set.len() > 0) _ = col().chats.updateOne(a, .{ ._id = chat.get("_id") }, .{ .@"$set" = set }, .{}) catch |e| {
         if (e == error.DuplicateKey) {
             const existing = (try col().chats.findOne(a, .{ .appId = app_doc.get("_id"), .externalId = ext orelse "" }, .{})) orelse return e;
@@ -405,9 +404,9 @@ fn patchChat(q: *Req) !void {
     const a = r.a;
     const chat = try chatRef(r, q.app_, q.param("ref"));
     const set = try Val.object(a);
-    if (q.b("title") != .undef) try set.set(a, "title", try v.reqStr(r, q.b("title"), "title", .{ .min = 1, .max = 128 }));
-    if (q.b("about") != .undef) try set.set(a, "about", try v.reqStr(r, q.b("about"), "about", .{ .max = 1000 }));
-    if (q.b("metadata") != .undef) try set.put(a, "metadata", (try v.meta(r, q.b("metadata"))) orelse .undef);
+    if (q.b("title") != .undef) try set.set("title", try v.reqStr(r, q.b("title"), "title", .{ .min = 1, .max = 128 }));
+    if (q.b("about") != .undef) try set.set("about", try v.reqStr(r, q.b("about"), "about", .{ .max = 1000 }));
+    if (q.b("metadata") != .undef) try set.set("metadata", (try v.meta(r, q.b("metadata"))) orelse .undef);
     if (set.len() > 0) _ = try col().chats.updateOne(a, .{ ._id = chat.get("_id") }, .{ .@"$set" = set }, .{});
     const fresh = (try col().chats.findOne(a, .{ ._id = chat.get("_id") }, .{})) orelse chat;
     for (rt.onlineMemberVals(a, chat.get("_id"))) |uid| try chats.pushChat(r, fresh, .{ .id = v.oid(uid).? }, "chat.update");
@@ -420,7 +419,7 @@ fn deleteChat(q: *Req) !void {
     const chat = try chatRef(r, q.app_, q.param("ref"));
     const owner = try col().members.findOne(a, .{ .chatId = chat.get("_id"), .status = "active" }, .{ .sort = .{ .role = 1 } });
     const m = try val.clone(a, owner orelse try Val.object(a));
-    try m.set(a, "role", "owner");
+    try m.set("role", "owner");
     try chats.deleteChat(r, chat, m, try val.from(a, .{ ._id = if (owner) |o| o.get("userId") else Val.undef }));
     return q.json(.{ .ok = true });
 }
@@ -436,7 +435,7 @@ fn addChatMembers(q: *Req) !void {
     const owner = (try col().members.findOne(a, .{ .chatId = chat.get("_id"), .status = "active", .role = "owner" }, .{})) orelse (try col().members.findOne(a, .{ .chatId = chat.get("_id"), .status = "active" }, .{})) orelse return r.fail(400, "The chat has no members to act for", null);
     const actor = (try col().users.findOne(a, .{ ._id = owner.get("userId") }, .{})) orelse Val.null;
     const m = try val.clone(a, owner);
-    try m.set(a, "role", "owner");
+    try m.set("role", "owner");
     var ids: std.ArrayList(Val) = .empty;
     for (users.items) |u| try ids.append(a, u.get("_id"));
     const result = try chats.addMembers(r, chat, m, actor, ids.items);
@@ -461,8 +460,8 @@ fn removeChatMember(q: *Req) !void {
     } else {
         const actor = if (owner) |o| (try col().users.findOne(a, .{ ._id = o.get("userId") }, .{})) orelse Val.null else user;
         const m = try val.clone(a, owner orelse try Val.object(a));
-        try m.set(a, "role", "owner");
-        try m.set(a, "status", "active");
+        try m.set("role", "owner");
+        try m.set("status", "active");
         try chats.removeMember(r, chat, m, actor, user.get("_id"), if (q.query("ban")) |x| std.mem.eql(u8, x, "true") else false);
     }
     return q.json(.{ .ok = true });
@@ -472,7 +471,7 @@ fn listMessages(q: *Req) !void {
     const r = &q.r;
     const a = r.a;
     const chat = try chatRef(r, q.app_, q.param("ref"));
-    const limit = try v.reqInt(r, if (q.qv("limit") != .undef) q.qv("limit") else Val.n(50), "limit", .{ .min = 1, .max = 100 });
+    const limit = try v.reqInt(r, if (q.qv("limit") != .undef) q.qv("limit") else Val.number(50), "limit", .{ .min = 1, .max = 100 });
     const has_after = q.qv("after").truthy();
     const docs = try store.list(r, chat, .{
         .after = if (has_after) try v.reqInt(r, q.qv("after"), "after", .{ .min = 0 }) else null,
@@ -493,9 +492,9 @@ fn listMessages(q: *Req) !void {
             for (users) |u| if (val.same(u.get("_id"), d.get("senderId")) and u.get("externalId").truthy()) {
                 ext = u.get("externalId");
             };
-            try m.set(a, "sender", .{ .id = try sn(r, d.get("senderId")), .externalId = ext });
-        } else try m.put(a, "sender", .null);
-        try out.push(a, m);
+            try m.set("sender", .{ .id = try sn(r, d.get("senderId")), .externalId = ext });
+        } else try m.set("sender", .null);
+        try out.push(m);
     }
     return q.json(.{ .encrypted = chat.get("encrypted").truthy(), .messages = out });
 }
@@ -515,7 +514,7 @@ fn postMessage(q: *Req) !void {
     const sender = try systemUser(r, q.app_);
     const content = try msgs.cleanContent(r, chat, b, .api);
     for ([_][]const u8{ "replyToId", "fwdFrom", "fwdChat", "fwdCopy" }) |k| content.del(k);
-    try content.set(a, "system", true);
+    try content.set("system", true);
     const doc = try msgs.publishRaw(r, chat, sender, content, false);
     return q.json(.{ .message = try ser.message(a, doc, .null, chat) });
 }

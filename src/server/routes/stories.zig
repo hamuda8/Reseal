@@ -35,7 +35,7 @@ pub fn handle(q: *Req) !bool {
 
 fn listOut(q: *Req, list: []const Val) !Val {
     var out = try Val.array(q.r.a);
-    for (list) |st| try out.push(q.r.a, try stories.storyFor(&q.r, st, q.user().get("_id")));
+    for (list) |st| try out.push(try stories.storyFor(&q.r, st, q.user().get("_id")));
     return out;
 }
 
@@ -59,7 +59,6 @@ fn feed(q: *Req) !void {
 /// Who a new story can be shared with, with their public keys.
 fn audience(q: *Req) !void {
     const r = &q.r;
-    const a = r.a;
     try apps.assertFeature(r, q.user(), "stories", "Glimpses are turned off in this app");
     const aud = try stories.audienceOf(r, q.user());
     const out = try account.usersFor(r, q.user(), aud.users, false);
@@ -73,8 +72,8 @@ fn audience(q: *Req) !void {
         for (aud.chat_ids) |x| if (std.mem.eql(u8, x, id)) {
             chat = true;
         };
-        try u.set(a, "contact", contact);
-        try u.set(a, "chat", chat);
+        try u.set("contact", contact);
+        try u.set("chat", chat);
     }
     return q.json(.{ .users = out });
 }
@@ -129,7 +128,7 @@ fn views(q: *Req) !void {
     while (i > 0) {
         i -= 1;
         for (serialized.items()) |u| if (val.same(u.get("id"), vs[i].get("userId"))) {
-            try out.push(a, try val.from(a, .{ .user = u, .at = vs[i].get("at") }));
+            try out.push(try val.from(a, .{ .user = u, .at = vs[i].get("at") }));
             break;
         };
     }

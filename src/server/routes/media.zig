@@ -10,7 +10,7 @@ const calls = @import("../calls.zig");
 const ai = @import("../ai.zig");
 const push = @import("../push.zig");
 const preview = @import("../preview.zig");
-const fetch = @import("../lib/fetch.zig");
+
 const account = @import("account.zig");
 const val = A.val;
 const Val = A.Val;
@@ -174,7 +174,7 @@ fn linkPreview(q: *Req) !void {
         // Images load through Reseal so the linked site never sees the reader's address.
         const img = p.get("image").str;
         const sig = try A.hmacHex(r.a, &A.app.config.sign_key, try r.fmt("img:{s}", .{img}));
-        try p.set(r.a, "imageProxy", try r.fmt("/api/link-preview/image?u={s}&s={s}", .{ try web.encodeComponent(r.a, img), sig[0..24] }));
+        try p.set("imageProxy", try r.fmt("/api/link-preview/image?u={s}&s={s}", .{ try web.encodeComponent(r.a, img), sig[0..24] }));
     }
     return q.json(.{ .preview = p });
 }
@@ -189,8 +189,8 @@ fn previewImage(q: *Req) !void {
     const s = q.query("s") orelse "";
     const want = try A.hmacHex(r.a, &A.app.config.sign_key, try r.fmt("img:{s}", .{u}));
     if (u.len == 0 or !A.safeEqual(want[0..24], s)) return q.end(404);
-    fetch.assertPublicUrl(u) catch return q.end(404);
-    const res = fetch.fetch(r.a, u, .{ .timeout_ms = 8000, .follow = true, .user_agent = "ResealBot/1.0", .max_bytes = 3 * 1024 * 1024 }) catch |e| {
+    A.app.fetch.assertPublicUrl(u) catch return q.end(404);
+    const res = A.app.fetch.fetch(r.a, u, .{ .timeout_ms = 8000, .follow = true, .user_agent = "ResealBot/1.0", .max_bytes = 3 * 1024 * 1024 }) catch |e| {
         if (e == error.ResponseTooLarge) return q.end(413);
         return q.end(404);
     };

@@ -45,7 +45,7 @@ pub fn chatFor(r: *Rq, chat_in: Val, user_id: Val, membership_: ?Val) !Val {
             const contact = try col().contacts.findOne(a, .{ .userId = pu.get("_id"), .contactId = user_id }, .{ .projection = .{ ._id = 1 } });
             const mine = try col().contacts.findOne(a, .{ .userId = user_id, .contactId = pu.get("_id") }, .{ .projection = .{ .name = 1 } });
             peer = try ser.user(a, pu, user_id, .{ .is_contact = contact != null });
-            if (mine) |m| if (m.get("name").truthy()) try peer.put(a, "contactName", m.get("name"));
+            if (mine) |m| if (m.get("name").truthy()) try peer.set("contactName", m.get("name"));
         };
     }
     const call = try col().calls.findOne(a, .{ .chatId = chat.get("_id"), .status = .{ .@"$in" = .{ "ringing", "active" } } }, .{ .projection = .{ .video = 1, .participants = 1, .status = 1, .group = 1 } });
@@ -90,7 +90,7 @@ fn memberDoc(r: *Rq, chat: Val, user_id: Val, role: []const u8, extra: ?Val) !Va
     const now = A.now();
     const seq = chat.get("seq").asInt() orelse 0;
     const doc = try val.from(a, .{ .chatId = chat.get("_id"), .userId = user_id, .chatType = chat.get("type"), .role = role, .status = "active", .joinedAt = now, .joinedSeq = seq, .lastReadSeq = seq, .unread = 0, .mentions = 0, .lastActivityAt = now });
-    if (extra) |x| for (x.keys()) |kv| try doc.put(a, kv.k, kv.v);
+    if (extra) |x| for (x.keys(), x.vals()) |kv_k, kv_v| try doc.set(kv_k, kv_v);
     return doc;
 }
 
@@ -133,12 +133,12 @@ pub fn openPrivate(r: *Rq, user: Val, other_id: Val) !Val {
         .memberCount = 2,
         .lastMessageAt = now,
     });
-    if (is_bot) try chat.put(a, "botId", other.get("_id"));
+    if (is_bot) try chat.set("botId", other.get("_id"));
     _ = col().chats.insertOne(a, chat) catch |e| {
         if (e == error.DuplicateKey) return (try col().chats.findOne(a, .{ .pairKey = key }, .{})) orelse .null;
         return e;
     };
-    try col().members.insertMany(a, &.{ try memberDoc(r, chat, user.get("_id"), "member", null), try memberDoc(r, chat, other.get("_id"), "member", null) });
+    _ = try col().members.insertMany(a, &.{ try memberDoc(r, chat, user.get("_id"), "member", null), try memberDoc(r, chat, other.get("_id"), "member", null) });
     rt.joinedChat(user.get("_id"), chat.get("_id"), chat.get("type"));
     rt.joinedChat(other.get("_id"), chat.get("_id"), chat.get("type"));
     try events.emit(a, .chat_created, try val.from(a, .{ .chat = chat, .creator = user, .memberIds = .{ user.get("_id"), other.get("_id") } }));
@@ -159,7 +159,7 @@ fn filterInvitees(r: *Rq, actor: Val, ids: []const Val) !struct { allowed: []Val
             continue;
         }
         if (try access.isBlocked(r, u.get("_id"), actor.get("_id")) or !(try access.allowedByPrivacy(r, u, actor.get("_id"), "groups"))) {
-            try skipped.push(a, try r.sn(u.get("_id")));
+            try skipped.push(try r.sn(u.get("_id")));
             continue;
         }
         try allowed.append(a, u);
@@ -169,7 +169,7 @@ fn filterInvitees(r: *Rq, actor: Val, ids: []const Val) !struct { allowed: []Val
 
 pub fn createGroup(r: *Rq, user: Val, body: Val) !struct { chat: Val, skipped: Val } {
     const a = r.a;
-    const type_ = try v.reqOneOf(r, if (body.get("type").truthy()) body.get("type") else Val.s("group"), "type", &.{ "group", "channel" });
+    const type_ = try v.reqOneOf(r, if (body.get("type").truthy()) body.get("type") else Val.string("group"), "type", &.{ "group", "channel" });
     const title = try v.reqStr(r, body.get("title"), "title", .{ .min = 1, .max = 128 });
     const about = (try v.str(r, body.get("about"), "about", .{ .max = 1000, .optional = true })) orelse "";
     // Content checks (Wufour Moderation): titles and descriptions are readable even in encrypted groups.
@@ -201,23 +201,23 @@ pub fn createGroup(r: *Rq, user: Val, body: Val) !struct { chat: Val, skipped: V
         .historyVisible = true,
         .pinned = try Val.array(a),
     });
-    if (std.mem.eql(u8, type_, "group")) try chat.put(a, "permissions", try access.defaultGroupPermissions(a));
-    if (body.get("avatar").truthy()) try chat.put(a, "avatar", try ownAvatar(r, user, body.get("avatar")));
-    if (body.get("metadata").truthy()) try chat.put(a, "metadata", (try v.meta(r, body.get("metadata"))) orelse .undef);
+    if (std.mem.eql(u8, type_, "group")) try chat.set("permissions", try access.defaultGroupPermissions(a));
+    if (body.get("avatar").truthy()) try chat.set("avatar", try ownAvatar(r, user, body.get("avatar")));
+    if (body.get("metadata").truthy()) try chat.set("metadata", (try v.meta(r, body.get("metadata"))) orelse .undef);
     _ = try col().chats.insertOne(a, chat);
     if (body.get("username").truthy()) _ = try setChatUsername(r, chat, body.get("username"));
 
     var members: std.ArrayList(Val) = .empty;
     try members.append(a, try memberDoc(r, chat, user.get("_id"), "owner", null));
     for (inv.allowed) |u| try members.append(a, try memberDoc(r, chat, u.get("_id"), if (std.mem.eql(u8, type_, "channel")) "subscriber" else "member", try val.from(a, .{ .invitedBy = user.get("_id") })));
-    try col().members.insertMany(a, members.items);
+    _ = try col().members.insertMany(a, members.items);
     for (members.items) |m| rt.joinedChat(m.get("userId"), chat.get("_id"), chat.get("type"));
 
     _ = try msgs.serviceMessage(r, chat, user.get("_id"), if (std.mem.eql(u8, type_, "channel")) "channel_created" else "group_created", try val.from(a, .{ .title = title }), false);
     const fresh = (try col().chats.findOne(a, .{ ._id = chat.get("_id") }, .{})) orelse chat;
     for (members.items) |m| try pushChat(r, fresh, m.get("userId"), "chat.new");
     var ids = try Val.array(a);
-    for (members.items) |m| try ids.push(a, m.get("userId"));
+    for (members.items) |m| try ids.push(m.get("userId"));
     try events.emit(a, .chat_created, try val.from(a, .{ .chat = fresh, .creator = user, .memberIds = ids }));
     return .{ .chat = fresh, .skipped = inv.skipped };
 }
@@ -277,12 +277,12 @@ pub fn openSupport(r: *Rq, user: Val, app_doc: Val) !Val {
         .lastMessageAt = now,
         .visitorId = user.get("_id"),
     });
-    if (bot_id) |b| try chat.put(a, "botId", b);
+    if (bot_id) |b| try chat.set("botId", b);
     var staff_ids: std.ArrayList(Val) = .empty;
     try staff_ids.appendSlice(a, agent_ids.items);
     if (bot_id) |b| try staff_ids.append(a, b);
     const staff = try col().users.find(a, .{ ._id = .{ .@"$in" = staff_ids.items } }, .{ .projection = .{ ._id = 1 } });
-    try chat.set(a, "memberCount", 1 + staff.len);
+    try chat.set("memberCount", 1 + staff.len);
     _ = col().chats.insertOne(a, chat) catch |e| {
         if (e == error.DuplicateKey) return (try col().chats.findOne(a, .{ .pairKey = key }, .{})) orelse .null;
         return e;
@@ -290,11 +290,11 @@ pub fn openSupport(r: *Rq, user: Val, app_doc: Val) !Val {
     var members: std.ArrayList(Val) = .empty;
     try members.append(a, try memberDoc(r, chat, user.get("_id"), "member", null));
     for (staff) |u| try members.append(a, try memberDoc(r, chat, u.get("_id"), "admin", try val.from(a, .{ .rights = try access.defaultAdminRights(a) })));
-    try col().members.insertMany(a, members.items);
+    _ = try col().members.insertMany(a, members.items);
     for (members.items) |m| rt.joinedChat(m.get("userId"), chat.get("_id"), chat.get("type"));
     for (members.items) |m| if (!val.same(m.get("userId"), user.get("_id"))) try pushChat(r, chat, m.get("userId"), "chat.new");
     var ids = try Val.array(a);
-    for (members.items) |m| try ids.push(a, m.get("userId"));
+    for (members.items) |m| try ids.push(m.get("userId"));
     try events.emit(a, .chat_created, try val.from(a, .{ .chat = chat, .creator = user, .memberIds = ids }));
     return chat;
 }
@@ -337,7 +337,7 @@ pub fn activate(r: *Rq, chat: Val, user_id: Val, role: []const u8, extra: ?Val, 
         const rest = try val.clone(a, doc);
         rest.del("chatId");
         rest.del("userId");
-        try rest.set(a, "clearedSeq", e.get("clearedSeq").asInt() orelse 0);
+        try rest.set("clearedSeq", e.get("clearedSeq").asInt() orelse 0);
         _ = try col().members.updateOne(a, .{ ._id = e.get("_id") }, .{ .@"$set" = rest, .@"$unset" = .{ .leftAt = "", .bannedUntil = "" } }, .{});
     } else _ = try col().members.insertOne(a, doc);
     _ = try col().chats.updateOne(a, .{ ._id = chat.get("_id") }, .{ .@"$inc" = .{ .memberCount = 1 } }, .{});
@@ -363,13 +363,13 @@ pub fn addMembers(r: *Rq, chat: Val, member: Val, actor: Val, user_ids: []const 
     for (inv.allowed) |u| {
         const banned = try col().members.findOne(a, .{ .chatId = chat.get("_id"), .userId = u.get("_id"), .status = "banned" }, .{});
         if (banned != null and !access.can(chat, member, "banUsers")) {
-            try inv.skipped.push(a, try r.sn(u.get("_id")));
+            try inv.skipped.push(try r.sn(u.get("_id")));
             continue;
         }
         if (try activate(r, chat, u.get("_id"), if (std.mem.eql(u8, t, "channel")) "subscriber" else "member", try val.from(a, .{ .invitedBy = actor.get("_id") }), actor.get("_id"))) try added.append(a, u.get("_id"));
     }
     var added_s = try Val.array(a);
-    for (added.items) |x| try added_s.push(a, try r.sn(x));
+    for (added.items) |x| try added_s.push(try r.sn(x));
     if (added.items.len > 0) {
         _ = try msgs.serviceMessage(r, chat, actor.get("_id"), "members_added", try val.from(a, .{ .targetIds = added.items }), false);
         const fresh = (try col().chats.findOne(a, .{ ._id = chat.get("_id") }, .{})) orelse chat;
@@ -539,12 +539,12 @@ pub fn updateChat(r: *Rq, chat: Val, member: Val, user: Val, body: Val) !Val {
     if (body.get("title") != .undef) {
         try access.assertCan(r, chat, member, "changeInfo", info_msg);
         const title = try v.reqStr(r, body.get("title"), "title", .{ .min = 1, .max = 128 });
-        try set.set(a, "title", title);
+        try set.set("title", title);
         if (!access.eq(chat.get("title"), title) and !is_saved) try notices.append(a, .{ .action = "title_changed", .extra = try val.from(a, .{ .title = title }) });
     }
     if (body.get("about") != .undef) {
         try access.assertCan(r, chat, member, "changeInfo", info_msg);
-        try set.set(a, "about", try v.reqStr(r, body.get("about"), "about", .{ .max = if (is_saved) 300 else 1000 }));
+        try set.set("about", try v.reqStr(r, body.get("about"), "about", .{ .max = if (is_saved) 300 else 1000 }));
     }
     if (set.get("title") != .undef or set.get("about") != .undef) {
         // Content checks (Wufour Moderation)
@@ -553,7 +553,7 @@ pub fn updateChat(r: *Rq, chat: Val, member: Val, user: Val, body: Val) !Val {
     if (body.get("avatar") != .undef) {
         try access.assertCan(r, chat, member, "changeInfo", info_msg);
         const avatar = if (body.get("avatar").truthy()) try ownAvatar(r, user, body.get("avatar")) else Val.null;
-        try set.put(a, "avatar", avatar);
+        try set.set("avatar", avatar);
         try notices.append(a, .{ .action = if (avatar.truthy()) "avatar_changed" else "avatar_removed", .extra = try Val.object(a) });
     }
     if (body.get("username") != .undef) {
@@ -570,46 +570,46 @@ pub fn updateChat(r: *Rq, chat: Val, member: Val, user: Val, body: Val) !Val {
         try admin_only(r, admin);
         _ = try v.reqObj(r, body.get("permissions"), "permissions");
         const perms = try access.defaultGroupPermissions(a);
-        for (chat.get("permissions").keys()) |kv| try perms.put(a, kv.k, kv.v);
-        for (access.MEMBER_PERMISSIONS) |k| if (body.path("permissions").get(k) == .bool) try perms.put(a, k, body.path("permissions").get(k));
-        try set.put(a, "permissions", perms);
+        for (chat.get("permissions").keys(), chat.get("permissions").vals()) |kv_k, kv_v| try perms.set(kv_k, kv_v);
+        for (access.MEMBER_PERMISSIONS) |k| if (body.path("permissions").get(k) == .bool) try perms.set(k, body.path("permissions").get(k));
+        try set.set("permissions", perms);
     }
     if (body.get("slowMode") != .undef) {
         try admin_only(r, admin);
-        try set.set(a, "slowMode", try v.oneOfNum(r, body.get("slowMode"), "slowMode", &.{ 0, 10, 30, 60, 300, 900, 3600 }));
+        try set.set("slowMode", try v.oneOfNum(r, body.get("slowMode"), "slowMode", &.{ 0, 10, 30, 60, 300, 900, 3600 }));
     }
     if (body.get("ttl") != .undef) {
         if (!eq(chat.get("type"), "private") and !is_saved) try admin_only(r, admin);
         const ttl = try v.oneOfNum(r, body.get("ttl"), "ttl", &.{ 0, 30, 300, 3600, 86400, 604800, 2592000 });
-        try set.set(a, "ttl", ttl);
+        try set.set("ttl", ttl);
         if (ttl != (chat.get("ttl").asInt() orelse 0)) try notices.append(a, .{ .action = "ttl_changed", .extra = try val.from(a, .{ .ttl = ttl }) });
     }
     inline for (.{ "historyVisible", "signMessages", "joinApproval", "protectedContent" }) |k| {
         if (body.get(k) != .undef) {
             try admin_only(r, admin);
-            try set.set(a, k, try v.reqBool(r, body.get(k), k));
+            try set.set(k, try v.reqBool(r, body.get(k), k));
         }
     }
     if (body.get("reactions") != .undef) {
         try admin_only(r, admin);
         const list = body.get("reactions");
         try r.ensure(list == .null or (list == .arr and list.len() <= 100), "reactions must be null or a list", 400, null);
-        if (list == .null) try set.put(a, "reactions", .null) else {
+        if (list == .null) try set.set("reactions", .null) else {
             var out = try Val.array(a);
-            for (list.items()) |e| try out.push(a, .{ .str = try v.reqStr(r, e, "reaction", .{ .min = 1, .max = 16 }) });
-            try set.put(a, "reactions", out);
+            for (list.items()) |e| try out.push(Val{ .str = try v.reqStr(r, e, "reaction", .{ .min = 1, .max = 16 }) });
+            try set.set("reactions", out);
         }
     }
     if (body.get("metadata") != .undef) {
         try admin_only(r, admin);
-        try set.put(a, "metadata", (try v.meta(r, body.get("metadata"))) orelse .undef);
+        try set.set("metadata", (try v.meta(r, body.get("metadata"))) orelse .undef);
     }
     if (set.len() > 0) _ = try col().chats.updateOne(a, .{ ._id = chat.get("_id") }, .{ .@"$set" = set }, .{});
     const fresh = (try col().chats.findOne(a, .{ ._id = chat.get("_id") }, .{})) orelse chat;
     for (notices.items) |n| _ = try msgs.serviceMessage(r, fresh, user.get("_id"), n.action, n.extra, false);
     for (rt.onlineMemberVals(a, chat.get("_id"))) |uid| try pushChat(r, fresh, idv(v.oid(uid).?), "chat.update");
     var changes = try Val.array(a);
-    for (set.keys()) |kv| try changes.push(a, .{ .str = kv.k });
+    for (set.keys()) |kv_k| try changes.push(Val{ .str = kv_k });
     try events.emit(a, .chat_updated, try val.from(a, .{ .chat = fresh, .by = user, .changes = changes }));
     return fresh;
 }
@@ -632,11 +632,11 @@ pub fn setAdmin(r: *Rq, chat: Val, member: Val, actor: Val, target_id: Val, body
             var x = if (given.get(k) == .bool) given.get(k) else defaults.get(k);
             // An admin can only hand out rights they have themselves.
             if (!eq(member.get("role"), "owner") and !member.path("rights").get(k).truthy()) x = Val.False;
-            try rights.put(a, k, x);
+            try rights.set(k, x);
         }
         const title = try v.str(r, body.get("title"), "title", .{ .max = 16, .optional = true });
         const set = try val.from(a, .{ .role = "admin", .rights = rights, .promotedBy = actor.get("_id") });
-        if (title) |t| try set.set(a, "title", t);
+        if (title) |t| try set.set("title", t);
         _ = try col().members.updateOne(a, .{ ._id = target.get("_id") }, .{ .@"$set" = set }, .{});
     }
     const fresh = (try col().chats.findOne(a, .{ ._id = chat.get("_id") }, .{})) orelse chat;
@@ -651,7 +651,7 @@ pub fn transferOwnership(r: *Rq, chat: Val, member: Val, actor: Val, target_id: 
     try r.ensure(target != null and !eq(target.?.get("role"), "subscriber"), "Promote this person to admin first", 400, null);
     _ = try col().members.updateOne(a, .{ ._id = target.?.get("_id") }, .{ .@"$set" = .{ .role = "owner" }, .@"$unset" = .{ .rights = "" } }, .{});
     const rights = try access.defaultAdminRights(a);
-    try rights.set(a, "addAdmins", true);
+    try rights.set("addAdmins", true);
     _ = try col().members.updateOne(a, .{ ._id = member.get("_id") }, .{ .@"$set" = .{ .role = "admin", .rights = rights } }, .{});
     const fresh = (try col().chats.findOne(a, .{ ._id = chat.get("_id") }, .{})) orelse chat;
     try pushChat(r, fresh, target_id, "chat.update");
@@ -671,7 +671,7 @@ pub fn createInvite(r: *Rq, chat: Val, member: Val, user: Val, body: Val) !Val {
         .createdAt = A.now(),
         .name = if (name) |n| (if (n.len > 0) Val{ .str = n } else Val.null) else Val.null,
         .expiresAt = if (body.get("expiresAt").truthy()) Val{ .date = try v.reqInt(r, body.get("expiresAt"), "expiresAt", .{ .min = @floatFromInt(A.nowMs()) }) } else Val.null,
-        .usageLimit = if (try v.int(r, body.get("usageLimit"), "usageLimit", .{ .min = 1, .max = 100000, .optional = true })) |x| Val.n(x) else Val.null,
+        .usageLimit = if (try v.int(r, body.get("usageLimit"), "usageLimit", .{ .min = 1, .max = 100000, .optional = true })) |x| Val.number(x) else Val.null,
         .requestApproval = body.get("requestApproval").isTrue(),
         .uses = 0,
         .revoked = false,

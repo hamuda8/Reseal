@@ -76,11 +76,11 @@ pub const Req = struct {
     }
 
     pub fn setHeader(q: *Req, name: []const u8, value: []const u8) !void {
-        try q.ctx.setHeader(name, try headerSafe(q.r.a, value));
+        try q.ctx.setHeader(name, value);
     }
 
     pub fn addHeader(q: *Req, name: []const u8, value: []const u8) !void {
-        try q.ctx.response_headers.append(q.r.a, .{ .name = name, .value = try headerSafe(q.r.a, value) });
+        try q.ctx.addHeader(name, value);
     }
 
     /// `res.json(value)` with status 200.
@@ -99,7 +99,7 @@ pub const Req = struct {
     }
 
     pub fn redirect(q: *Req, location: []const u8) !void {
-        try q.ctx.setHeader("location", try headerSafe(q.r.a, location));
+        try q.ctx.setHeader("location", location);
         // Express's res.redirect body for non-HTML clients.
         return q.send(302, "text/plain; charset=utf-8", try std.fmt.allocPrint(q.r.a, "Found. Redirecting to {s}", .{location}));
     }
@@ -107,8 +107,7 @@ pub const Req = struct {
     /// `res.status(status).end()`: no body, no content type.
     pub fn end(q: *Req, status: u16) !void {
         q.status = status;
-        q.ctx.responded = true;
-        try q.ctx.request.respond("", .{ .status = @fromBackingInt(@intCast(status)), .extra_headers = q.ctx.response_headers.items });
+        return q.ctx.end(@fromBackingInt(@intCast(status)));
     }
 
     /// Path match (Express style). Sets the params on success.
@@ -171,54 +170,18 @@ pub const Req = struct {
         return if (q.secure()) "https" else "http";
     }
 
-    /// The whole body, up to `limit` bytes (413 beyond it).
+    /// The whole body, up to `limit` bytes (413 beyond it). zig-core reads bodies on any
+    /// method (Express does; Reseal's clients send JSON with DELETE) and reads away or closes
+    /// on an oversized one, so the client sees the 413.
     pub fn rawBody(q: *Req, limit: usize) ![]const u8 {
         if (q.raw) |x| return x;
-        const req = q.ctx.request;
-        if (!req.head.method.requestHasBody()) {
-            // std.http reads no body for DELETE (and GET, OPTIONS); Express does, and Reseal's
-            // clients send JSON with DELETE. Read it here; left unread it would also be taken for
-            // the next request on the connection.
-            if (req.head.transfer_encoding == .none and (req.head.content_length orelse 0) == 0) {
-                q.raw = "";
-                return "";
-            }
-            req.writeExpectContinue() catch return q.r.fail(400, "The request body could not be read", "bad_request");
-            var buf: [4096]u8 = undefined;
-            const rd = req.server.reader.bodyReader(&buf, req.head.transfer_encoding, req.head.content_length);
-            const data = rd.allocRemaining(q.r.a, .limited(limit)) catch |e| switch (e) {
-                error.StreamTooLong => {
-                    q.ctx.close_connection = true;
-                    return q.r.fail(413, "That request is too large", "too_large");
-                },
-                else => {
-                    q.ctx.close_connection = true;
-                    return q.r.fail(400, "The request body could not be read", "bad_request");
-                },
-            };
-            q.raw = data;
-            return data;
-        }
-        q.ctx.max_body = limit;
+        if (q.ctx.raw_body == null and q.ctx.body_error == null) q.ctx.max_body = limit;
         const data = q.ctx.body() catch |e| switch (e) {
-            // The rest of the body is still on the connection. Read it away (as Node does) so the
-            // client sees the 413 instead of a reset; past 64 MiB just close the connection.
-            error.PayloadTooLarge => {
-                const total = req.head.content_length orelse std.math.maxInt(u64);
-                if (total > 64 * 1024 * 1024) {
-                    q.ctx.close_connection = true;
-                } else {
-                    _ = req.server.reader.interface.discardRemaining() catch {
-                        q.ctx.close_connection = true;
-                    };
-                }
-                return q.r.fail(413, "That request is too large", "too_large");
-            },
-            else => {
-                q.ctx.close_connection = true;
-                return q.r.fail(400, "The request body could not be read", "bad_request");
-            },
+            error.PayloadTooLarge => return q.r.fail(413, "That request is too large", "too_large"),
+            else => return q.r.fail(400, "The request body could not be read", "bad_request"),
         };
+        // Read earlier under a larger limit (a body on GET or DELETE is read before routing).
+        if (data.len > limit) return q.r.fail(413, "That request is too large", "too_large");
         q.raw = data;
         return data;
     }
@@ -259,42 +222,12 @@ pub const Req = struct {
 
     /// A cookie as wufour-auth's parseCookies reads it (value percent-decoded).
     pub fn cookie(q: *Req, name: []const u8) ?[]const u8 {
-        for (q.ctx.headers) |h| {
-            if (!std.ascii.eqlIgnoreCase(h.name, "cookie")) continue;
-            var it = std.mem.splitScalar(u8, h.value, ';');
-            var found: ?[]const u8 = null;
-            while (it.next()) |part| {
-                const eq = std.mem.indexOfScalar(u8, part, '=') orelse continue;
-                const k = std.mem.trim(u8, part[0..eq], " ");
-                if (!std.mem.eql(u8, k, name)) continue;
-                const v = std.mem.trim(u8, part[eq + 1 ..], " ");
-                found = decodeComponent(q.r.a, v) catch v;
-            }
-            if (found) |f| return f;
-        }
-        return null;
+        return q.ctx.cookie(name);
     }
 };
 
 /// decodeURIComponent (no `+` → space).
-pub fn decodeComponent(a: std.mem.Allocator, s: []const u8) ![]const u8 {
-    if (std.mem.indexOfScalar(u8, s, '%') == null) return s;
-    var out = try a.alloc(u8, s.len);
-    var n: usize = 0;
-    var i: usize = 0;
-    while (i < s.len) : (n += 1) {
-        if (s[i] == '%') {
-            if (i + 3 > s.len) return error.BadEncoding;
-            out[n] = std.fmt.parseInt(u8, s[i + 1 .. i + 3], 16) catch return error.BadEncoding;
-            i += 3;
-        } else {
-            out[n] = s[i];
-            i += 1;
-        }
-    }
-    if (!std.unicode.utf8ValidateSlice(out[0..n])) return error.BadEncoding;
-    return out[0..n];
-}
+pub const decodeComponent = http.decodeComponent;
 
 /// encodeURIComponent
 pub fn encodeComponent(a: std.mem.Allocator, s: []const u8) ![]const u8 {
@@ -343,19 +276,8 @@ pub fn sendError(q: *Req, err: anyerror) !void {
         std.log.err("{s} {s}: {t}", .{ @tagName(q.method), q.path, err });
     }
     const body = try Val.object(q.r.a);
-    try body.set(q.r.a, "message", message);
-    try body.set(q.r.a, "code", code);
-    if (extra) |x| for (x.keys()) |kv| try body.put(q.r.a, kv.k, kv.v);
+    try body.set("message", message);
+    try body.set("code", code);
+    if (extra) |x| for (x.keys(), x.vals()) |kv_k, kv_v| try body.set(kv_k, kv_v);
     return q.jsonStatus(status, .{ .@"error" = body });
-}
-
-/// A header value without CR or LF: std.http asserts on them (a crash, not an error), and
-/// redirect targets and file names can carry them from the request.
-pub fn headerSafe(a: std.mem.Allocator, value: []const u8) ![]const u8 {
-    if (std.mem.indexOfAny(u8, value, "\r\n") == null) return value;
-    const out = try a.dupe(u8, value);
-    for (out) |*c| if (c.* == '\r' or c.* == '\n') {
-        c.* = ' ';
-    };
-    return out;
 }

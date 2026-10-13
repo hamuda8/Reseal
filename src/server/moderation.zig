@@ -11,7 +11,7 @@
 
 const std = @import("std");
 const A = @import("app.zig");
-const fetch = @import("lib/fetch.zig");
+
 const val = A.val;
 const Val = A.Val;
 const Rq = A.Rq;
@@ -41,22 +41,22 @@ fn subjectOf(r: *Rq, user: ?Val) !Val {
 pub fn check(r: *Rq, user: ?Val, context: Val, texts: Val, images: ?[]const struct { id: []const u8, bytes: []const u8 }) !Val {
     const a = r.a;
     var items = try Val.array(a);
-    for (texts.keys()) |kv| {
-        const t = kv.v.asStr() orelse continue;
+    for (texts.keys(), texts.vals()) |kv_k, kv_v| {
+        const t = kv_v.asStr() orelse continue;
         if (@import("validate.zig").jsTrim(t).len == 0) continue;
-        try items.push(a, try val.from(a, .{ .id = kv.k, .kind = "text", .text = t, .field = kv.k }));
+        try items.push(try val.from(a, .{ .id = kv_k, .kind = "text", .text = t, .field = kv_k }));
     }
     if (images) |list| for (list) |img| {
         const enc = try a.alloc(u8, std.base64.standard.Encoder.calcSize(img.bytes.len));
         _ = std.base64.standard.Encoder.encode(enc, img.bytes);
-        try items.push(a, try val.from(a, .{ .id = img.id, .kind = "image", .data = enc, .field = img.id }));
+        try items.push(try val.from(a, .{ .id = img.id, .kind = "image", .data = enc, .field = img.id }));
     };
     const allow = try val.from(a, .{ .layer = 3, .reasons = try Val.array(a), .warning = Val.null, .skipped = true });
     if (items.len() == 0 or !enabled()) return allow;
 
     const host = try std.mem.replaceOwned(u8, a, A.app.config.moderation_host, "://localhost", "://127.0.0.1");
     const body = try val.stringify(a, try val.from(a, .{ .app = "reseal", .subject = try subjectOf(r, user), .context = context, .items = items }));
-    const res = fetch.fetch(a, try r.fmt("{s}/api/v1/check", .{host}), .{
+    const res = A.app.fetch.fetch(a, try r.fmt("{s}/api/v1/check", .{host}), .{
         .method = .POST,
         .body = body,
         .content_type = "application/json",
@@ -84,7 +84,7 @@ pub fn check(r: *Rq, user: ?Val, context: Val, texts: Val, images: ?[]const stru
             for (reasons.items()) |x| if (val.same(x, reason)) {
                 dup = true;
             };
-            if (!dup) try reasons.push(a, reason);
+            if (!dup) try reasons.push(reason);
         }
     }
     return val.from(a, .{ .layer = layer, .reasons = reasons, .warning = json.get("warning"), .result = json });

@@ -4,7 +4,7 @@
 const std = @import("std");
 const Io = std.Io;
 const A = @import("app.zig");
-const fetch = @import("lib/fetch.zig");
+
 const v = @import("validate.zig");
 const val = A.val;
 const Val = A.Val;
@@ -105,8 +105,8 @@ fn fetchLimited(r: *Rq, url_in: []const u8) !struct { url: []const u8, html: []c
     var url = url_in;
     var hops: usize = 0;
     while (true) : (hops += 1) {
-        try fetch.assertPublicUrl(url);
-        const res = try fetch.fetch(r.a, url, .{
+        try A.app.fetch.assertPublicUrl(url);
+        const res = try A.app.fetch.fetch(r.a, url, .{
             .timeout_ms = 6000,
             .max_bytes = 4 << 20,
             .user_agent = "Mozilla/5.0 (compatible; ResealBot/1.0; +link-preview)",

@@ -99,7 +99,7 @@ pub fn completeUpload(r: *Rq, user: Val, media_id: Val, body: Val) !Val {
     const chunks = m.get("chunks").asInt() orelse 0;
     try r.ensure(count == chunks, try r.fmt("Upload incomplete: {d} of {d} chunks received", .{ count, chunks }), 409, "incomplete");
     const set = try val.from(a, .{ .status = "ready", .completedAt = A.now() });
-    if (body.get("sha256").asStr()) |h| if (h.len == 64 and isLowerHex(h)) try set.set(a, "sha256", h);
+    if (body.get("sha256").asStr()) |h| if (h.len == 64 and isLowerHex(h)) try set.set("sha256", h);
     // Content checks (Wufour Moderation) on readable images before the file becomes usable.
     // Files encrypted on the device are opaque bytes and are skipped.
     if (!m.get("encrypted").truthy() and std.mem.startsWith(u8, m.get("mime").asStr() orelse "", "image/") and (m.get("size").asInt() orelse 0) <= 5 * 1024 * 1024) {
@@ -115,11 +115,11 @@ pub fn completeUpload(r: *Rq, user: Val, media_id: Val, body: Val) !Val {
             };
             return e;
         };
-        try set.put(a, "moderation", try moderation.stamp(a, outcome));
+        try set.set("moderation", try moderation.stamp(a, outcome));
     }
     _ = try col().media.updateOne(a, .{ ._id = media_id }, .{ .@"$set" = set, .@"$unset" = .{ .received = "" } }, .{});
     const out = try val.clone(a, m);
-    for (set.keys()) |kv| try out.put(a, kv.k, kv.v);
+    for (set.keys(), set.vals()) |kv_k, kv_v| try out.set(kv_k, kv_v);
     return out;
 }
 
@@ -166,22 +166,22 @@ pub fn readChunk(r: *Rq, m: Val, n: i64) !?[]const u8 {
 pub fn stream(q: *web.Req, m: Val, download: bool) !void {
     const r = &q.r;
     const a = r.a;
-    const total = m.get("storedSize").asInt() orelse 0;
-    var start: i64 = 0;
-    var end_: i64 = total - 1;
+    const total: u64 = @intCast(@max(0, m.get("storedSize").asInt() orelse 0));
+    var start: u64 = 0;
+    var len: u64 = total;
     var status: u16 = 200;
-    if (q.header("range")) |range| if (parseRange(range)) |rg| if (rg.from != null or rg.to != null) {
-        if (rg.from) |f| {
-            start = f;
-            if (rg.to) |t| end_ = @min(t, total - 1);
-        } else start = @max(0, total - rg.to.?);
-        if (start > end_ or start >= total) {
-            try q.setHeader("content-range", try r.fmt("bytes */{d}", .{total}));
-            return q.end(416);
-        }
-        status = 206;
-        try q.setHeader("content-range", try r.fmt("bytes {d}-{d}/{d}", .{ start, end_, total }));
-    };
+    switch (q.ctx.range(total)) {
+        .full => {},
+        .unsatisfiable => {
+            q.status = 416;
+            return q.ctx.unsatisfiable(total);
+        },
+        .partial => |p| {
+            status = 206;
+            start = p.start;
+            len = try q.ctx.partial(p.start, p.last, total);
+        },
+    }
     const mime = m.get("mime").asStr() orelse "application/octet-stream";
     const inline_ = !download and !m.get("encrypted").truthy() and inlineSafe(mime);
     const id = try r.str(m.get("_id"));
@@ -196,59 +196,31 @@ pub fn stream(q: *web.Req, m: Val, download: bool) !void {
         const name = if (m.get("name").truthy()) try r.str(m.get("name")) else try r.fmt("file-{s}", .{id});
         try q.setHeader("content-disposition", try r.fmt("attachment; filename=\"{s}\"", .{try safeName(a, name)}));
     }
-    const len: u64 = if (total == 0) 0 else @intCast(end_ - start + 1);
     q.status = status;
-    q.ctx.responded = true;
     var buf: [16 * 1024]u8 = undefined;
-    if (q.method == .HEAD) {
-        // std's streaming writer expects every promised byte; a HEAD answer has none, so the
-        // length goes out as a plain header on an otherwise empty response.
-        try q.addHeader("content-length", try r.fmt("{d}", .{len}));
-        var head = try q.ctx.request.respondStreaming(&buf, .{ .respond_options = .{ .status = @fromBackingInt(@intCast(status)), .extra_headers = q.ctx.response_headers.items, .transfer_encoding = .none } });
-        return head.end();
-    }
-    var body = try q.ctx.request.respondStreaming(&buf, .{ .content_length = len, .respond_options = .{ .status = @fromBackingInt(@intCast(status)), .extra_headers = q.ctx.response_headers.items } });
-    if (len == 0) return body.end();
+    // HEAD gets the headers only; a missing or short chunk ends the connection rather than
+    // promise bytes that never come.
+    var body = try q.ctx.startBody(&buf, @fromBackingInt(@intCast(status)), null, len);
+    if (len == 0 or q.method == .HEAD) return body.finish();
+    const end_ = start + len - 1;
     // Each stored chunk is chunkSize bytes, plus a 16-byte tag when encrypted.
-    const stride = (m.get("chunkSize").asInt() orelse CHUNK) + @as(i64, if (m.get("encrypted").truthy()) GCM_TAG else 0);
-    const first = @divFloor(start, stride);
-    const last = @divFloor(end_, stride);
+    const stride: u64 = @intCast((m.get("chunkSize").asInt() orelse CHUNK) + @as(i64, if (m.get("encrypted").truthy()) GCM_TAG else 0));
+    const first = start / stride;
+    const last = end_ / stride;
     var n = first;
     var chunk_arena = std.heap.ArenaAllocator.init(A.app.gpa);
     defer chunk_arena.deinit();
-    var sent: u64 = 0;
     while (n <= last) : (n += 1) {
         _ = chunk_arena.reset(.retain_capacity);
         var cr: Rq = .{ .a = chunk_arena.allocator() };
-        const data = (try readChunk(&cr, m, n)) orelse break;
+        const data = (try readChunk(&cr, m, @intCast(n))) orelse break;
         const from: usize = if (n == first) @intCast(start - n * stride) else 0;
         const to: usize = if (n == last) @intCast(end_ - n * stride + 1) else data.len;
         const lo = @min(from, data.len);
         const hi = @max(lo, @min(to, data.len));
-        const part = data[lo..@min(hi, lo + (len - sent))];
-        try body.writer.writeAll(part);
-        sent += part.len;
+        try body.write(data[lo..hi]);
     }
-    if (sent != len) {
-        // A chunk is missing or short: end the connection rather than promise bytes that never
-        // come (std asserts on that).
-        body.writer.flush() catch {};
-        q.ctx.close_connection = true;
-        return;
-    }
-    try body.end();
-}
-
-/// /^bytes=(\d*)-(\d*)$/
-fn parseRange(h: []const u8) ?struct { from: ?i64, to: ?i64 } {
-    if (!std.mem.startsWith(u8, h, "bytes=")) return null;
-    const rest = h[6..];
-    const dash = std.mem.indexOfScalar(u8, rest, '-') orelse return null;
-    const f = rest[0..dash];
-    const t = rest[dash + 1 ..];
-    for (f) |c| if (!std.ascii.isDigit(c)) return null;
-    for (t) |c| if (!std.ascii.isDigit(c)) return null;
-    return .{ .from = if (f.len > 0) (std.fmt.parseInt(i64, f, 10) catch null) else null, .to = if (t.len > 0) (std.fmt.parseInt(i64, t, 10) catch null) else null };
+    try body.finish();
 }
 
 /// name.replace(/[^\w.\- ]+/g, '_')

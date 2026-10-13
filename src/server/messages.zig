@@ -83,17 +83,17 @@ fn cleanEntities(r: *Rq, list: Val, text_len: usize) !?Val {
         const l = try v.reqInt(r, e.get("l"), "entity length", .{ .min = 1, .max = tl });
         try r.ensure(o + l <= text_len, "entity is outside the text", 400, null);
         const x = try val.from(a, .{ .t = t, .o = o, .l = l });
-        if (e.get("url") != .undef) try x.set(a, "url", try v.str(r, e.get("url"), "entity url", .{ .max = 2048, .pattern = entityUrl }));
-        if (e.get("lang") != .undef) try x.set(a, "lang", try v.str(r, e.get("lang"), "entity lang", .{ .max = 32 }));
-        if (e.get("userId") != .undef) try x.set(a, "userId", try r.str(idv(try v.reqId(r, e.get("userId"), "entity userId"))));
-        try out.push(a, x);
+        if (e.get("url") != .undef) try x.set("url", try v.str(r, e.get("url"), "entity url", .{ .max = 2048, .pattern = entityUrl }));
+        if (e.get("lang") != .undef) try x.set("lang", try v.str(r, e.get("lang"), "entity lang", .{ .max = 32 }));
+        if (e.get("userId") != .undef) try x.set("userId", try r.str(idv(try v.reqId(r, e.get("userId"), "entity userId"))));
+        try out.push(x);
     }
     return out;
 }
 
 fn optVal(x: anytype) Val {
     return switch (@typeInfo(@TypeOf(x))) {
-        .optional => if (x) |y| (if (@TypeOf(y) == []const u8) Val{ .str = y } else Val.n(y)) else .undef,
+        .optional => if (x) |y| (if (@TypeOf(y) == []const u8) Val{ .str = y } else Val.number(y)) else .undef,
         else => unreachable,
     };
 }
@@ -102,9 +102,9 @@ fn cleanMediaItem(r: *Rq, m: Val, i: usize) !Val {
     const a = r.a;
     _ = try v.reqObj(r, m, try r.fmt("media[{d}]", .{i}));
     const out = try Val.object(a);
-    try out.put(a, "id", idv(try v.reqId(r, m.get("id"), "media id")));
-    try out.set(a, "kind", try v.reqOneOf(r, m.get("kind"), "media kind", &MEDIA_KINDS));
-    try out.set(a, "mime", (try v.str(r, m.get("mime"), "mime", .{ .max = 120, .optional = true })) orelse "application/octet-stream");
+    try out.set("id", idv(try v.reqId(r, m.get("id"), "media id")));
+    try out.set("kind", try v.reqOneOf(r, m.get("kind"), "media kind", &MEDIA_KINDS));
+    try out.set("mime", (try v.str(r, m.get("mime"), "mime", .{ .max = 120, .optional = true })) orelse "application/octet-stream");
     const fields = .{
         .{ "name", optVal(try v.str(r, m.get("name"), "file name", .{ .max = 255, .optional = true })) },
         .{ "size", optVal(try v.int(r, m.get("size"), "size", .{ .min = 0, .max = @floatFromInt(A.app.config.max_upload_bytes), .optional = true })) },
@@ -117,7 +117,7 @@ fn cleanMediaItem(r: *Rq, m: Val, i: usize) !Val {
         .{ "title", optVal(try v.str(r, m.get("title"), "title", .{ .max = 200, .optional = true })) },
         .{ "performer", optVal(try v.str(r, m.get("performer"), "performer", .{ .max = 200, .optional = true })) },
     };
-    inline for (fields) |f| if (f[1] != .undef) try out.put(a, f[0], f[1]);
+    inline for (fields) |f| if (f[1] != .undef) try out.set(f[0], f[1]);
     return out;
 }
 
@@ -130,23 +130,23 @@ fn cleanPoll(r: *Rq, p: Val, encrypted: bool) !Val {
     const out = try val.from(a, .{ .multiple = multiple, .quiz = quiz, .anonymous = !(p.get("anonymous") == .bool and !p.get("anonymous").bool), .closed = false, .votes = try Val.array(a) });
     if (encrypted) {
         // The question and options are inside the encrypted envelope; the server only counts votes.
-        try out.set(a, "optionCount", try v.reqInt(r, p.get("optionCount"), "poll optionCount", .{ .min = 2, .max = Limits.poll_options }));
+        try out.set("optionCount", try v.reqInt(r, p.get("optionCount"), "poll optionCount", .{ .min = 2, .max = Limits.poll_options }));
     } else {
-        try out.set(a, "question", try v.reqStr(r, p.get("question"), "poll question", .{ .min = 1, .max = 300 }));
+        try out.set("question", try v.reqStr(r, p.get("question"), "poll question", .{ .min = 1, .max = 300 }));
         try r.ensure(p.get("options") == .arr, "poll options must be a list", 400, null);
         var opts = try Val.array(a);
-        for (p.get("options").items(), 0..) |o, i| try opts.push(a, .{ .str = try v.reqStr(r, o, try r.fmt("option {d}", .{i + 1}), .{ .min = 1, .max = 100 }) });
-        try out.put(a, "options", opts);
+        for (p.get("options").items(), 0..) |o, i| try opts.push(Val{ .str = try v.reqStr(r, o, try r.fmt("option {d}", .{i + 1}), .{ .min = 1, .max = 100 }) });
+        try out.set("options", opts);
         try r.ensure(opts.len() >= 2 and opts.len() <= Limits.poll_options, try r.fmt("A poll needs 2 to {d} options", .{Limits.poll_options}), 400, null);
-        try out.set(a, "optionCount", opts.len());
+        try out.set("optionCount", opts.len());
         if (quiz) {
-            try out.set(a, "correct", try v.reqInt(r, p.get("correct"), "correct option", .{ .min = 0, .max = @floatFromInt(opts.len() - 1) }));
-            try out.put(a, "explanation", optVal(try v.str(r, p.get("explanation"), "explanation", .{ .max = 200, .optional = true })));
+            try out.set("correct", try v.reqInt(r, p.get("correct"), "correct option", .{ .min = 0, .max = @floatFromInt(opts.len() - 1) }));
+            try out.set("explanation", optVal(try v.str(r, p.get("explanation"), "explanation", .{ .max = 200, .optional = true })));
         }
     }
     if (p.get("closeAt").truthy()) {
         const t: f64 = @floatFromInt(A.nowMs());
-        try out.put(a, "closeAt", .{ .date = try v.reqInt(r, p.get("closeAt"), "closeAt", .{ .min = t, .max = t + 30 * 86400_000 }) });
+        try out.set("closeAt", Val{ .date = try v.reqInt(r, p.get("closeAt"), "closeAt", .{ .min = t, .max = t + 30 * 86400_000 }) });
     }
     return out;
 }
@@ -163,11 +163,11 @@ fn cleanButtons(r: *Rq, rows: Val) !?Val {
             _ = try v.reqObj(r, b, "button");
             const x = try val.from(a, .{ .text = try v.reqStr(r, b.get("text"), "button text", .{ .min = 1, .max = 64 }) });
             if (b.get("url").truthy()) {
-                try x.set(a, "url", try v.str(r, b.get("url"), "button url", .{ .max = 2048, .pattern = httpUrl }));
-            } else try x.set(a, "data", try v.reqStr(r, b.get("data"), "button data", .{ .min = 1, .max = 128 }));
-            try o_row.push(a, x);
+                try x.set("url", try v.str(r, b.get("url"), "button url", .{ .max = 2048, .pattern = httpUrl }));
+            } else try x.set("data", try v.reqStr(r, b.get("data"), "button data", .{ .min = 1, .max = 128 }));
+            try o_row.push(x);
         }
-        try out.push(a, o_row);
+        try out.push(o_row);
     }
     return out;
 }
@@ -193,8 +193,8 @@ pub fn cleanContent(r: *Rq, chat: Val, input: Val, origin: Origin) !Val {
     if (encrypted) {
         _ = try v.reqObj(r, input.get("enc"), "enc");
         try r.ensure(input.get("text") == .undef and input.get("media") == .undef, "Encrypted chats only accept encrypted content", 400, "encrypted_only");
-        try out.put(a, "enc", try cleanEnc(r, input.get("enc")));
-        if (input.get("mediaIds") != .undef) try out.set(a, "mediaIds", try idList(a, try v.reqIds(r, input.get("mediaIds"), "mediaIds", 10)));
+        try out.set("enc", try cleanEnc(r, input.get("enc")));
+        if (input.get("mediaIds") != .undef) try out.set("mediaIds", try idList(a, try v.reqIds(r, input.get("mediaIds"), "mediaIds", 10)));
     } else {
         try r.ensure(input.get("enc") == .undef, "This chat is not end-to-end encrypted", 400, null);
         const has_media = input.get("media").len() > 0;
@@ -202,8 +202,8 @@ pub fn cleanContent(r: *Rq, chat: Val, input: Val, origin: Origin) !Val {
         if (try v.str(r, input.get("text"), "text", .{ .max = max_text, .optional = true, .trim = false })) |text| {
             if (v.jsTrim(text).len > 0) {
                 const t = v.trimEnd(text);
-                try out.set(a, "text", t);
-                if (try cleanEntities(r, input.get("entities"), v.utf16Len(t))) |ents| if (ents.len() > 0) try out.put(a, "entities", ents);
+                try out.set("text", t);
+                if (try cleanEntities(r, input.get("entities"), v.utf16Len(t))) |ents| if (ents.len() > 0) try out.set("entities", ents);
             }
         }
         if (input.get("media") != .undef) {
@@ -213,16 +213,16 @@ pub fn cleanContent(r: *Rq, chat: Val, input: Val, origin: Origin) !Val {
             var ids = try Val.array(a);
             for (media.items(), 0..) |m, i| {
                 const c = try cleanMediaItem(r, m, i);
-                try list.push(a, c);
-                try ids.push(a, c.get("id"));
+                try list.push(c);
+                try ids.push(c.get("id"));
             }
-            try out.put(a, "media", list);
-            try out.put(a, "mediaIds", ids);
+            try out.set("media", list);
+            try out.set("mediaIds", ids);
         }
         if (input.get("location") != .undef) {
             const l = input.get("location");
             _ = try v.reqObj(r, l, "location");
-            try out.set(a, "location", .{
+            try out.set("location", .{
                 .lat = (try v.num(r, l.get("lat"), "latitude", .{ .min = -90, .max = 90 })).?,
                 .lng = (try v.num(r, l.get("lng"), "longitude", .{ .min = -180, .max = 180 })).?,
                 .title = optVal(try v.str(r, l.get("title"), "location title", .{ .max = 120, .optional = true })),
@@ -233,7 +233,7 @@ pub fn cleanContent(r: *Rq, chat: Val, input: Val, origin: Origin) !Val {
         if (input.get("contact") != .undef) {
             const c = input.get("contact");
             _ = try v.reqObj(r, c, "contact");
-            try out.set(a, "contact", .{
+            try out.set("contact", .{
                 .name = try v.reqStr(r, c.get("name"), "contact name", .{ .min = 1, .max = 128 }),
                 .phone = optVal(try v.str(r, c.get("phone"), "phone", .{ .max = 40, .optional = true })),
                 .username = optVal(try v.str(r, c.get("username"), "username", .{ .max = 32, .optional = true })),
@@ -243,12 +243,12 @@ pub fn cleanContent(r: *Rq, chat: Val, input: Val, origin: Origin) !Val {
         if (input.get("sticker") != .undef) {
             const st = input.get("sticker");
             _ = try v.reqObj(r, st, "sticker");
-            try out.set(a, "sticker", .{ .emoji = try v.reqStr(r, st.get("emoji"), "sticker emoji", .{ .min = 1, .max = 16 }), .set = optVal(try v.str(r, st.get("set"), "sticker set", .{ .max = 64, .optional = true })) });
+            try out.set("sticker", .{ .emoji = try v.reqStr(r, st.get("emoji"), "sticker emoji", .{ .min = 1, .max = 16 }), .set = optVal(try v.str(r, st.get("set"), "sticker set", .{ .max = 64, .optional = true })) });
         }
         if (!input.get("preview").isNullish()) {
             const p = input.get("preview");
             _ = try v.reqObj(r, p, "preview");
-            try out.set(a, "preview", .{
+            try out.set("preview", .{
                 .url = try v.reqStr(r, p.get("url"), "preview url", .{ .max = 2048, .pattern = httpUrl }),
                 .title = optVal(try v.str(r, p.get("title"), "preview title", .{ .max = 300, .optional = true })),
                 .description = optVal(try v.str(r, p.get("description"), "preview description", .{ .max = 600, .optional = true })),
@@ -257,34 +257,34 @@ pub fn cleanContent(r: *Rq, chat: Val, input: Val, origin: Origin) !Val {
             });
         }
         if (origin != .user) {
-            if (try cleanButtons(r, input.get("buttons"))) |b| try out.put(a, "buttons", b);
+            if (try cleanButtons(r, input.get("buttons"))) |b| try out.set("buttons", b);
         }
     }
-    if (input.get("poll") != .undef) try out.put(a, "poll", try cleanPoll(r, input.get("poll"), encrypted));
-    if (input.get("metadata") != .undef) try out.put(a, "metadata", (try v.meta(r, input.get("metadata"))) orelse .undef);
+    if (input.get("poll") != .undef) try out.set("poll", try cleanPoll(r, input.get("poll"), encrypted));
+    if (input.get("metadata") != .undef) try out.set("metadata", (try v.meta(r, input.get("metadata"))) orelse .undef);
     if (input.get("tags") != .undef) {
         const tags = input.get("tags");
         try r.ensure(tags == .arr and tags.len() <= 6, "tags must be a short list", 400, null);
         var list = try Val.array(a);
         for (tags.items()) |t| {
             const x = try v.reqOneOf(r, t, "tag", &TAGS);
-            if (!containsStr(list, x)) try list.push(a, .{ .str = x });
+            if (!containsStr(list, x)) try list.push(Val{ .str = x });
         }
-        try out.put(a, "tags", list);
+        try out.set("tags", list);
     }
-    if (input.get("mentions") != .undef) try out.put(a, "mentions", try idList(a, try v.reqIds(r, input.get("mentions"), "mentions", 50)));
-    if (!input.get("replyTo").isNullish()) try out.put(a, "replyToId", idv(try v.reqId(r, input.get("replyTo"), "replyTo")));
+    if (input.get("mentions") != .undef) try out.set("mentions", try idList(a, try v.reqIds(r, input.get("mentions"), "mentions", 50)));
+    if (!input.get("replyTo").isNullish()) try out.set("replyToId", idv(try v.reqId(r, input.get("replyTo"), "replyTo")));
     if (!input.get("fwd").isNullish() and !encrypted) {
         const f = input.get("fwd");
         _ = try v.reqObj(r, f, "fwd");
-        try out.put(a, "fwdFrom", idv(try v.reqId(r, f.get("messageId"), "fwd.messageId")));
-        if (!f.get("chatId").isNullish()) try out.put(a, "fwdChat", idv(try v.reqId(r, f.get("chatId"), "fwd.chatId")));
+        try out.set("fwdFrom", idv(try v.reqId(r, f.get("messageId"), "fwd.messageId")));
+        if (!f.get("chatId").isNullish()) try out.set("fwdChat", idv(try v.reqId(r, f.get("chatId"), "fwd.chatId")));
     }
     if (!input.get("forwarded").isNullish() and !encrypted) {
         // A copy forwarded by the client (from an encrypted chat). The label is informational.
         const f = input.get("forwarded");
         _ = try v.reqObj(r, f, "forwarded");
-        try out.set(a, "fwdCopy", .{
+        try out.set("fwdCopy", .{
             .fromName = if (try v.str(r, f.get("fromName"), "forwarded.fromName", .{ .max = 128, .optional = true })) |x| (if (x.len > 0) Val{ .str = x } else Val.null) else Val.null,
             .fromUserId = if (f.get("fromUserId").truthy()) idv(try v.reqId(r, f.get("fromUserId"), "forwarded.fromUserId")) else Val.null,
             .date = if (f.get("date").truthy()) Val{ .date = try v.reqInt(r, f.get("date"), "forwarded.date", .{ .min = 0 }) } else Val.null,
@@ -293,20 +293,20 @@ pub fn cleanContent(r: *Rq, chat: Val, input: Val, origin: Origin) !Val {
     if (!encrypted) {
         // Tags drive the shared-media tabs; for readable chats the server derives them itself.
         var tags = try Val.array(a);
-        for (out.get("tags").items()) |t| try tags.push(a, t);
-        for (out.get("media").items()) |m| if (!containsStr(tags, m.get("kind").str)) try tags.push(a, m.get("kind"));
+        for (out.get("tags").items()) |t| try tags.push(t);
+        for (out.get("media").items()) |m| if (!containsStr(tags, m.get("kind").str)) try tags.push(m.get("kind"));
         var link = out.get("preview").truthy();
         for (out.get("entities").items()) |e| if (eq(e.get("t"), "link") or eq(e.get("t"), "textlink")) {
             link = true;
         };
-        if (link and !containsStr(tags, "link")) try tags.push(a, Val.s("link"));
-        if (out.get("poll").truthy() and !containsStr(tags, "poll")) try tags.push(a, Val.s("poll"));
-        if (out.get("location").truthy() and !containsStr(tags, "location")) try tags.push(a, Val.s("location"));
-        if (out.get("contact").truthy() and !containsStr(tags, "contact")) try tags.push(a, Val.s("contact"));
+        if (link and !containsStr(tags, "link")) try tags.push(Val.string("link"));
+        if (out.get("poll").truthy() and !containsStr(tags, "poll")) try tags.push(Val.string("poll"));
+        if (out.get("location").truthy() and !containsStr(tags, "location")) try tags.push(Val.string("location"));
+        if (out.get("contact").truthy() and !containsStr(tags, "contact")) try tags.push(Val.string("contact"));
         if (tags.len() > 0) {
             var filtered = try Val.array(a);
-            for (tags.items()) |t| if (inList(t.str, &TAGS)) try filtered.push(a, t);
-            try out.put(a, "tags", filtered);
+            for (tags.items()) |t| if (inList(t.str, &TAGS)) try filtered.push(t);
+            try out.set("tags", filtered);
         }
     }
     const has = out.get("enc").truthy() or out.get("text").truthy() or out.get("media").truthy() or out.get("location").truthy() or
@@ -322,7 +322,7 @@ fn containsStr(list: Val, x: []const u8) bool {
 
 pub fn idList(a: Allocator, ids: []const A.ObjectId) !Val {
     var out = try Val.array(a);
-    for (ids) |x| try out.push(a, idv(x));
+    for (ids) |x| try out.push(idv(x));
     return out;
 }
 
@@ -376,17 +376,17 @@ fn resolveForward(r: *Rq, sender: Val, fwd_from: Val, fwd_chat: Val) !struct { f
     const fwd = if (original.get("fwd").truthy()) original.get("fwd") else try val.from(a, .{
         .fromUserId = if (orig_sender) |os| (if (std.mem.eql(u8, os.path("privacy.forwards").asStr() orelse "everyone", "everyone")) original.get("senderId") else Val.null) else Val.null,
         .fromChatId = if (channel) source.get("_id") else Val.null,
-        .fromName = if (channel) source.get("title") else if (orig_sender) |os| (if (os.get("displayName").truthy()) os.get("displayName") else Val.s("Deleted account")) else Val.s("Deleted account"),
+        .fromName = if (channel) source.get("title") else if (orig_sender) |os| (if (os.get("displayName").truthy()) os.get("displayName") else Val.string("Deleted account")) else Val.string("Deleted account"),
         .fromMessageId = if (channel) original.get("_id") else Val.null,
         .date = original.get("createdAt"),
     });
     const copy = try Val.object(a);
-    inline for (.{ "text", "entities", "media", "mediaIds", "location", "contact", "sticker", "tags", "preview" }) |k| if (original.get(k) != .undef) try copy.put(a, k, original.get(k));
+    inline for (.{ "text", "entities", "media", "mediaIds", "location", "contact", "sticker", "tags", "preview" }) |k| if (original.get(k) != .undef) try copy.set(k, original.get(k));
     if (original.get("poll").truthy()) {
         const p = try val.clone(a, original.get("poll"));
-        try p.put(a, "votes", try Val.array(a));
-        try p.set(a, "closed", false);
-        try copy.put(a, "poll", p);
+        try p.set("votes", try Val.array(a));
+        try p.set("closed", false);
+        try copy.set("poll", p);
     }
     return .{ .fwd = fwd, .copy = copy };
 }
@@ -441,33 +441,33 @@ pub fn sendMessage(r: *Rq, chat: Val, sender: Val, input: Val, o: SendOpts) !Val
     try claimMedia(r, content.get("mediaIds"), sender, chat);
 
     const doc = try val.from(a, .{ .chatId = chat.get("_id"), .senderId = sender.get("_id"), .kind = "message", .createdAt = now, .reactions = try Val.object(a) });
-    if (client_id) |cid| try doc.set(a, "clientId", cid);
-    if (moderation_stamp) |m| try doc.put(a, "moderation", m);
-    for (content.keys()) |kv| {
-        if (inList(kv.k, &.{ "replyToId", "fwdFrom", "fwdChat", "fwdCopy" })) continue;
-        try doc.put(a, kv.k, kv.v);
+    if (client_id) |cid| try doc.set("clientId", cid);
+    if (moderation_stamp) |m| try doc.set("moderation", m);
+    for (content.keys(), content.vals()) |kv_k, kv_v| {
+        if (inList(kv_k, &.{ "replyToId", "fwdFrom", "fwdChat", "fwdCopy" })) continue;
+        try doc.set(kv_k, kv_v);
     }
     const fc = content.get("fwdCopy");
-    if (fc.truthy()) try doc.set(a, "fwd", .{ .fromUserId = fc.get("fromUserId"), .fromChatId = Val.null, .fromName = fc.get("fromName"), .fromMessageId = Val.null, .date = fc.get("date") });
+    if (fc.truthy()) try doc.set("fwd", .{ .fromUserId = fc.get("fromUserId"), .fromChatId = Val.null, .fromName = fc.get("fromName"), .fromMessageId = Val.null, .date = fc.get("date") });
     const reply = try resolveReply(r, chat, content.get("replyToId"));
-    if (reply) |rp| try doc.set(a, "replyTo", .{ .id = rp.get("_id"), .seq = rp.get("seq") });
+    if (reply) |rp| try doc.set("replyTo", .{ .id = rp.get("_id"), .seq = rp.get("seq") });
     if (content.get("fwdFrom").truthy()) {
         const f = try resolveForward(r, sender, content.get("fwdFrom"), content.get("fwdChat"));
-        for (f.copy.keys()) |kv| try doc.put(a, kv.k, kv.v);
-        try doc.put(a, "fwd", f.fwd);
+        for (f.copy.keys(), f.copy.vals()) |kv_k, kv_v| try doc.set(kv_k, kv_v);
+        try doc.set("fwd", f.fwd);
         if (f.copy.get("mediaIds").truthy()) try claimMedia(r, f.copy.get("mediaIds"), sender, chat);
     }
-    if (!chat.get("encrypted").truthy() and doc.get("text").truthy()) try doc.set(a, "search", v.sliceUtf16(try v.jsLower(a, doc.get("text").str), 4000));
-    if (input.get("silent").isTrue()) try doc.set(a, "silent", true);
+    if (!chat.get("encrypted").truthy() and doc.get("text").truthy()) try doc.set("search", v.sliceUtf16(try v.jsLower(a, doc.get("text").str), 4000));
+    if (input.get("silent").isTrue()) try doc.set("silent", true);
 
     const ttl: i64 = if (input.get("ttl") != .undef) (try v.int(r, input.get("ttl"), "ttl", .{ .min = 0, .max = 365 * 86400 })) orelse 0 else chat.get("ttl").asInt() orelse 0;
-    if (ttl != 0) try doc.set(a, "ttl", ttl);
+    if (ttl != 0) try doc.set("ttl", ttl);
 
     if (reply) |rp| if (rp.get("senderId").truthy() and !val.same(rp.get("senderId"), sender.get("_id"))) {
         var list = try Val.array(a);
-        for (doc.get("mentions").items()) |m| if (!containsSame(list, m)) try list.push(a, m);
-        if (!containsSame(list, rp.get("senderId"))) try list.push(a, rp.get("senderId"));
-        try doc.put(a, "mentions", list);
+        for (doc.get("mentions").items()) |m| if (!containsSame(list, m)) try list.push(m);
+        if (!containsSame(list, rp.get("senderId"))) try list.push(rp.get("senderId"));
+        try doc.set("mentions", list);
     };
 
     // "Send when online": the message waits until the other person opens Reseal.
@@ -476,20 +476,20 @@ pub fn sendMessage(r: *Rq, chat: Val, sender: Val, input: Val, o: SendOpts) !Val
     if (wait_for != null or !input.get("scheduledAt").isNullish()) {
         if (wait_for) |w| {
             // It goes out anyway after a year, and shows up (and can be sent now) with the scheduled ones.
-            try doc.put(a, "waitFor", w);
-            try doc.put(a, "scheduledAt", .{ .date = A.nowMs() + 365 * 86400_000 });
+            try doc.set("waitFor", w);
+            try doc.set("scheduledAt", Val{ .date = A.nowMs() + 365 * 86400_000 });
         } else {
             const t: f64 = @floatFromInt(A.nowMs());
-            try doc.put(a, "scheduledAt", .{ .date = try v.reqInt(r, input.get("scheduledAt"), "scheduledAt", .{ .min = t + 5_000, .max = t + 365 * 86400_000 }) });
+            try doc.set("scheduledAt", Val{ .date = try v.reqInt(r, input.get("scheduledAt"), "scheduledAt", .{ .min = t + 5_000, .max = t + 365 * 86400_000 }) });
         }
-        try doc.put(a, "seq", .null);
+        try doc.set("seq", .null);
         try store.insert(r, chat, doc);
         _ = rt.toUser(a, sender.get("_id"), "message.scheduled", try ser.message(a, doc, sender.get("_id"), chat));
         return doc;
     }
 
-    try doc.set(a, "seq", try nextSeq(r, chat.get("_id")));
-    try stampExpiry(a, doc);
+    try doc.set("seq", try nextSeq(r, chat.get("_id")));
+    try stampExpiry(doc);
     store.insert(r, chat, doc) catch |e| {
         if (e == error.DuplicateKey) if (client_id) |cid| return (try store.byClientId(r, chat, sender.get("_id"), cid)) orelse e;
         return e;
@@ -504,10 +504,10 @@ fn containsSame(list: Val, x: Val) bool {
 }
 
 /// Self-destructing messages: the timer starts when the message goes out.
-fn stampExpiry(a: Allocator, doc: Val) !void {
+fn stampExpiry(doc: Val) !void {
     const ttl = doc.get("ttl").asInt() orelse 0;
     const ca = doc.get("createdAt");
-    if (ttl != 0 and ca == .date) try doc.put(a, "expiresAt", .{ .date = ca.date + ttl * 1000 });
+    if (ttl != 0 and ca == .date) try doc.set("expiresAt", Val{ .date = ca.date + ttl * 1000 });
 }
 
 /// Who a "send when online" message waits for, or null when they are online already. Only
@@ -524,7 +524,7 @@ fn whenOnlineTarget(r: *Rq, chat: Val, sender: Val) !?Val {
 }
 
 fn nextSeq(r: *Rq, chat_id: Val) !i64 {
-    const updated = (try col().chats.findOneAndUpdate(r.a, .{ ._id = chat_id }, .{ .@"$inc" = .{ .seq = 1 } }, .{ .projection = .{ .seq = 1 } })) orelse return error.ChatGone;
+    const updated = (try col().chats.findOneAndUpdate(r.a, .{ ._id = chat_id }, .{ .@"$inc" = .{ .seq = 1 } }, .{ .returnDocument = .after, .projection = .{ .seq = 1 } })) orelse return error.ChatGone;
     return updated.get("seq").asInt() orelse 0;
 }
 
@@ -553,15 +553,15 @@ fn afterPublish(r: *Rq, chat: Val, doc: Val, sender: ?Val, quiet: bool) !void {
         _ = try col().members.updateMany(a, others, .{ .@"$inc" = .{ .unread = 1 }, .@"$set" = .{ .lastActivityAt = now }, .@"$unset" = .{ .hiddenAt = "" } }, .{});
         if (doc.get("mentions").len() > 0) {
             var targets = try Val.array(a);
-            for (doc.get("mentions").items()) |m| if (!val.same(m, sender_id)) try targets.push(a, m);
+            for (doc.get("mentions").items()) |m| if (!val.same(m, sender_id)) try targets.push(m);
             const f = try val.clone(a, others);
-            try f.set(a, "userId", .{ .@"$in" = targets });
+            try f.set("userId", .{ .@"$in" = targets });
             _ = try col().members.updateMany(a, f, .{ .@"$inc" = .{ .mentions = 1 } }, .{});
         }
         // A new message brings an archived chat back, unless it is muted.
         const f = try val.clone(a, others);
-        try f.set(a, "archived", true);
-        try f.set(a, "$or", .{ .{ .mutedUntil = Val.null }, .{ .mutedUntil = .{ .@"$lt" = now } }, .{ .mutedUntil = .{ .@"$exists" = false } } });
+        try f.set("archived", true);
+        try f.set("$or", .{ .{ .mutedUntil = Val.null }, .{ .mutedUntil = .{ .@"$lt" = now } }, .{ .mutedUntil = .{ .@"$exists" = false } } });
         _ = try col().members.updateMany(a, f, .{ .@"$set" = .{ .archived = false } }, .{});
     } else {
         _ = try col().members.updateMany(a, others, .{ .@"$set" = .{ .lastActivityAt = now } }, .{});
@@ -577,7 +577,7 @@ fn afterPublish(r: *Rq, chat: Val, doc: Val, sender: ?Val, quiet: bool) !void {
     rt.toChatEach(a, chat.get("_id"), "message", MsgCtx{ .doc = doc, .chat = chat }, messageFor);
     if (doc.get("reminder").truthy()) if (sender) |s_| {
         // Reminders show the Saved chat as unread until you look at it.
-        if (try col().members.findOneAndUpdate(a, .{ .chatId = chat.get("_id"), .userId = s_.get("_id") }, .{ .@"$set" = .{ .markedUnread = true } }, .{})) |mine| {
+        if (try col().members.findOneAndUpdate(a, .{ .chatId = chat.get("_id"), .userId = s_.get("_id") }, .{ .@"$set" = .{ .markedUnread = true } }, .{ .returnDocument = .after })) |mine| {
             _ = rt.toUser(a, s_.get("_id"), "chat.state", try val.from(a, .{ .chatId = try r.str(chat.get("_id")), .me = (try ser.chat(a, chat, mine, s_.get("_id"), .{})).get("me") }));
         }
     };
@@ -589,9 +589,9 @@ fn afterPublish(r: *Rq, chat: Val, doc: Val, sender: ?Val, quiet: bool) !void {
 pub fn publishRaw(r: *Rq, chat: Val, sender: Val, fields: Val, quiet: bool) !Val {
     const a = r.a;
     const doc = try val.from(a, .{ .chatId = chat.get("_id"), .senderId = sender.get("_id"), .kind = "message", .createdAt = A.now(), .reactions = try Val.object(a) });
-    for (fields.keys()) |kv| try doc.put(a, kv.k, kv.v);
-    if (!chat.get("encrypted").truthy() and doc.get("text").truthy()) try doc.set(a, "search", v.sliceUtf16(try v.jsLower(a, doc.get("text").str), 4000));
-    try doc.set(a, "seq", try nextSeq(r, chat.get("_id")));
+    for (fields.keys(), fields.vals()) |kv_k, kv_v| try doc.set(kv_k, kv_v);
+    if (!chat.get("encrypted").truthy() and doc.get("text").truthy()) try doc.set("search", v.sliceUtf16(try v.jsLower(a, doc.get("text").str), 4000));
+    try doc.set("seq", try nextSeq(r, chat.get("_id")));
     try store.insert(r, chat, doc);
     try afterPublish(r, chat, doc, sender, quiet);
     return doc;
@@ -603,25 +603,25 @@ pub fn lastMessageSummary(r: *Rq, doc: Val, chat: ?Val) !Val {
     const a = r.a;
     const out = try val.from(a, .{ .id = doc.get("_id"), .seq = doc.get("seq"), .senderId = doc.get("senderId"), .kind = doc.get("kind"), .createdAt = doc.get("createdAt") });
     if (chat != null and store.isAppChat(chat.?)) {
-        inline for (.{ "service", "tags", "ttl" }) |k| if (doc.get(k) != .undef) try out.put(a, k, doc.get(k));
-        if (eq(doc.get("kind"), "message")) try out.set(a, "contentInApp", true);
+        inline for (.{ "service", "tags", "ttl" }) |k| if (doc.get(k) != .undef) try out.set(k, doc.get(k));
+        if (eq(doc.get("kind"), "message")) try out.set("contentInApp", true);
         return out;
     }
-    inline for (.{ "enc", "service", "tags", "sticker", "fwd", "ttl" }) |k| if (doc.get(k) != .undef) try out.put(a, k, doc.get(k));
-    if (doc.get("text").truthy()) try out.set(a, "text", v.sliceUtf16(doc.get("text").str, 300));
+    inline for (.{ "enc", "service", "tags", "sticker", "fwd", "ttl" }) |k| if (doc.get(k) != .undef) try out.set(k, doc.get(k));
+    if (doc.get("text").truthy()) try out.set("text", v.sliceUtf16(doc.get("text").str, 300));
     if (doc.get("entities").truthy()) {
         var list = try Val.array(a);
-        for (doc.get("entities").items()) |e| if ((e.get("o").asNum() orelse 0) < 300) try list.push(a, e);
-        try out.put(a, "entities", list);
+        for (doc.get("entities").items()) |e| if ((e.get("o").asNum() orelse 0) < 300) try list.push(e);
+        try out.set("entities", list);
     }
     if (doc.get("media").truthy()) {
         var list = try Val.array(a);
-        for (doc.get("media").items()) |m| try list.push(a, try val.from(a, .{ .kind = m.get("kind"), .name = m.get("name"), .thumb = Val.undef, .duration = m.get("duration") }));
-        try out.put(a, "media", list);
+        for (doc.get("media").items()) |m| try list.push(try val.from(a, .{ .kind = m.get("kind"), .name = m.get("name"), .thumb = Val.undef, .duration = m.get("duration") }));
+        try out.set("media", list);
     }
-    if (doc.get("poll").truthy()) try out.set(a, "poll", .{ .question = doc.path("poll.question"), .optionCount = doc.path("poll.optionCount"), .quiz = doc.path("poll.quiz") });
-    if (doc.get("location").truthy()) try out.set(a, "location", .{ .title = doc.path("location.title") });
-    if (doc.get("contact").truthy()) try out.set(a, "contact", .{ .name = doc.path("contact.name") });
+    if (doc.get("poll").truthy()) try out.set("poll", .{ .question = doc.path("poll.question"), .optionCount = doc.path("poll.optionCount"), .quiz = doc.path("poll.quiz") });
+    if (doc.get("location").truthy()) try out.set("location", .{ .title = doc.path("location.title") });
+    if (doc.get("contact").truthy()) try out.set("contact", .{ .name = doc.path("contact.name") });
     return out;
 }
 
@@ -640,7 +640,7 @@ pub fn fillLastMessages(r: *Rq, chats: []Val) !void {
             try done.append(a, j);
         };
         var ids = try Val.array(a);
-        for (group.items) |j| try ids.push(a, try r.sn(chats[j].path("lastMessage.id")));
+        for (group.items) |j| try ids.push(try r.sn(chats[j].path("lastMessage.id")));
         const res = store.callApp(r, c.get("appId"), "get", try val.from(a, .{ .ids = ids }), null) catch {
             r.err = null;
             continue;
@@ -649,7 +649,7 @@ pub fn fillLastMessages(r: *Rq, chats: []Val) !void {
             for (res.get("messages").items()) |rec| {
                 const d = (store.fromRecord(r, rec) catch null) orelse continue;
                 if (val.same(d.get("_id"), chats[j].path("lastMessage.id")) and val.same(d.get("chatId"), chats[j].get("_id"))) {
-                    try chats[j].put(a, "lastMessage", try lastMessageSummary(r, d, null));
+                    try chats[j].set("lastMessage", try lastMessageSummary(r, d, null));
                     break;
                 }
             }
@@ -662,10 +662,10 @@ pub fn serviceMessage(r: *Rq, chat: Val, actor_id: Val, action: []const u8, extr
     const a = r.a;
     const actor: Val = if (actor_id.truthy()) actor_id else .null;
     const service = try val.from(a, .{ .action = action, .actorId = actor });
-    for (extra.keys()) |kv| try service.put(a, kv.k, kv.v);
-    try service.put(a, "notify", if (notify) Val.True else Val.undef);
+    for (extra.keys(), extra.vals()) |kv_k, kv_v| try service.set(kv_k, kv_v);
+    try service.set("notify", if (notify) Val.True else Val.undef);
     const doc = try val.from(a, .{ .chatId = chat.get("_id"), .senderId = actor, .kind = "service", .service = service, .createdAt = A.now() });
-    try doc.set(a, "seq", try nextSeq(r, chat.get("_id")));
+    try doc.set("seq", try nextSeq(r, chat.get("_id")));
     try store.insert(r, chat, doc);
     try afterPublish(r, chat, doc, if (actor_id.truthy()) try val.from(a, .{ ._id = actor_id }) else null, false);
     return doc;
@@ -687,8 +687,8 @@ pub fn history(r: *Rq, chat: Val, member: Val, o: HistoryOpts) ![]Val {
     const lim = @min(@max(o.limit, 1), 100);
     const floor = visibleFrom(chat, member);
     const filter = try val.from(a, .{ .hiddenFor = .{ .@"$ne" = member.get("userId") } });
-    if (o.kind) |k| try filter.set(a, "kind", k);
-    if (o.tag) |t| try filter.set(a, "tags", t);
+    if (o.kind) |k| try filter.set("kind", k);
+    if (o.tag) |t| try filter.set("tags", t);
     if (o.around) |around| {
         const half = @divFloor(lim, 2);
         const older = try store.list(r, chat, .{ .filter = filter, .after = floor, .before = around + 1, .limit = half + 1 });
@@ -728,33 +728,33 @@ pub fn editMessage(r: *Rq, chat: Val, member: Val, user: Val, message_id: Val, i
     if (chat.get("encrypted").truthy()) {
         _ = try v.reqObj(r, input.get("enc"), "enc");
         const enc = try cleanEnc(r, input.get("enc"));
-        try set.put(a, "enc", enc);
+        try set.set("enc", enc);
         try r.ensure((enc.get("e").asInt() orelse 0) >= (chat.get("keyEpoch").asInt() orelse 0) - 1, "Encryption keys changed. Refresh and try again", 409, "stale_epoch");
-        if (input.get("tags") != .undef) try set.put(a, "tags", input.get("tags"));
+        if (input.get("tags") != .undef) try set.set("tags", input.get("tags"));
     } else {
         const max_text: usize = if (msg.get("media").len() > 0) Limits.caption_length else Limits.text_length;
         const text = try v.str(r, input.get("text"), "text", .{ .max = max_text, .optional = true, .trim = false });
         if (text != null and v.jsTrim(text.?).len > 0) {
             const t = v.trimEnd(text.?);
-            try set.set(a, "text", t);
-            try set.set(a, "search", v.sliceUtf16(try v.jsLower(a, t), 4000));
+            try set.set("text", t);
+            try set.set("search", v.sliceUtf16(try v.jsLower(a, t), 4000));
             // Content checks (Wufour Moderation): only reached in readable chats.
-            try set.put(a, "moderation", try moderation.stamp(a, try moderation.check(r, user, try val.from(a, .{ .type = "message", .id = try r.str(chat.get("_id")), .field = "edit" }), try val.from(a, .{ .text = t }), null)));
+            try set.set("moderation", try moderation.stamp(a, try moderation.check(r, user, try val.from(a, .{ .type = "message", .id = try r.str(chat.get("_id")), .field = "edit" }), try val.from(a, .{ .text = t }), null)));
             if (try cleanEntities(r, input.get("entities"), v.utf16Len(t))) |ents| {
-                if (ents.len() > 0) try set.put(a, "entities", ents) else try unset.set(a, "entities", "");
-            } else try unset.set(a, "entities", "");
+                if (ents.len() > 0) try set.set("entities", ents) else try unset.set("entities", "");
+            } else try unset.set("entities", "");
         } else {
             try r.ensure(msg.get("media").len() > 0 or msg.get("poll").truthy(), "The message is empty", 400, "empty_message");
-            try unset.set(a, "text", "");
-            try unset.set(a, "entities", "");
-            try unset.set(a, "search", "");
+            try unset.set("text", "");
+            try unset.set("entities", "");
+            try unset.set("search", "");
         }
-        if (input.get("preview") == .null) try unset.set(a, "preview", "");
-        if (input.get("buttons") != .undef and msg.get("buttons").truthy()) try set.put(a, "buttons", (try cleanButtons(r, input.get("buttons"))) orelse .undef);
+        if (input.get("preview") == .null) try unset.set("preview", "");
+        if (input.get("buttons") != .undef and msg.get("buttons").truthy()) try set.set("buttons", (try cleanButtons(r, input.get("buttons"))) orelse .undef);
     }
-    if (msg.get("seq") != .null) try set.put(a, "editedAt", A.now());
+    if (msg.get("seq") != .null) try set.set("editedAt", A.now());
     const upd = try val.from(a, .{ .@"$set" = set });
-    if (unset.len() > 0) try upd.put(a, "$unset", unset);
+    if (unset.len() > 0) try upd.set("$unset", unset);
     const updated = (try store.update(r, chat, msg.get("_id"), upd)) orelse return r.fail(404, "Message not found", "message_not_found");
 
     if (updated.get("seq") == .null) {
@@ -781,7 +781,7 @@ pub fn deleteMessages(r: *Rq, chat: Val, member: Val, user: Val, ids: []const Va
         var strs = try Val.array(a);
         for (found) |m| {
             try mine.append(a, m.get("_id"));
-            try strs.push(a, try r.sn(m.get("_id")));
+            try strs.push(try r.sn(m.get("_id")));
         }
         try store.updateMany(r, chat, mine.items, try val.from(a, .{ .@"$addToSet" = .{ .hiddenFor = user.get("_id") } }));
         _ = rt.toUser(a, user.get("_id"), "message.delete", try val.from(a, .{ .chatId = cid, .ids = strs, .forEveryone = false }));
@@ -796,7 +796,7 @@ pub fn deleteMessages(r: *Rq, chat: Val, member: Val, user: Val, ids: []const Va
     var published: std.ArrayList(Val) = .empty;
     var allowed_strs = try Val.array(a);
     for (allowed.items) |m| {
-        try allowed_strs.push(a, try r.sn(m.get("_id")));
+        try allowed_strs.push(try r.sn(m.get("_id")));
         if (m.get("seq") == .null) try scheduled.append(a, m.get("_id")) else try published.append(a, m);
     }
     if (scheduled.items.len > 0) _ = try col().messages.deleteMany(a, .{ ._id = .{ .@"$in" = scheduled.items }, .chatId = chat.get("_id") });
@@ -806,7 +806,7 @@ pub fn deleteMessages(r: *Rq, chat: Val, member: Val, user: Val, ids: []const Va
         var max_seq: i64 = 0;
         for (published.items) |m| {
             try pids.append(a, m.get("_id"));
-            try pstrs.push(a, try r.sn(m.get("_id")));
+            try pstrs.push(try r.sn(m.get("_id")));
             max_seq = @max(max_seq, m.get("seq").asInt() orelse 0);
         }
         try store.updateMany(r, chat, pids.items, try val.from(a, .{
@@ -821,7 +821,7 @@ pub fn deleteMessages(r: *Rq, chat: Val, member: Val, user: Val, ids: []const Va
     }
     if (scheduled.items.len > 0) {
         var sstrs = try Val.array(a);
-        for (scheduled.items) |x| try sstrs.push(a, try r.sn(x));
+        for (scheduled.items) |x| try sstrs.push(try r.sn(x));
         _ = rt.toUser(a, user.get("_id"), "message.delete", try val.from(a, .{ .chatId = cid, .ids = sstrs, .scheduled = true }));
     }
     return val.from(a, .{ .deleted = allowed_strs });
@@ -841,8 +841,8 @@ pub fn refreshLastMessage(r: *Rq, chat: Val) !void {
 pub fn recountUnread(r: *Rq, chat: Val, user_ids: ?[]const Val, below_seq: ?i64) !void {
     const a = r.a;
     const filter = try val.from(a, .{ .chatId = chat.get("_id"), .status = "active" });
-    if (user_ids) |ids| try filter.set(a, "userId", .{ .@"$in" = ids });
-    if (below_seq) |b| try filter.set(a, "lastReadSeq", .{ .@"$lt" = b });
+    if (user_ids) |ids| try filter.set("userId", .{ .@"$in" = ids });
+    if (below_seq) |b| try filter.set("lastReadSeq", .{ .@"$lt" = b });
     const members = try col().members.find(a, filter, .{ .projection = .{ .userId = 1, .lastReadSeq = 1, .clearedSeq = 1 }, .limit = 500 });
     if (members.len == 0) return;
     const fromOf = struct {
@@ -866,8 +866,8 @@ pub fn recountUnread(r: *Rq, chat: Val, user_ids: ?[]const Val, below_seq: ?i64)
             };
         } else {
             const f = try val.clone(a, mine);
-            try f.set(a, "deletedAt", .{ .@"$exists" = false });
-            try f.set(a, "kind", "message");
+            try f.set("deletedAt", .{ .@"$exists" = false });
+            try f.set("kind", "message");
             unread = try store.count(r, chat, f, fromOf(m));
         }
         _ = try col().members.updateOne(a, .{ ._id = m.get("_id") }, .{ .@"$set" = .{ .unread = unread } }, .{});
@@ -908,7 +908,7 @@ fn isEmoji(s: []const u8) bool {
 const ReactCtx = struct { chat: Val, id: Val, reactions: Val, actor: []const u8, emoji: []const u8, on: bool, author: Val, channel: bool };
 
 fn reactionsFor(c: ReactCtx, a: Allocator, uid: []const u8) anyerror!?Val {
-    return try val.from(a, .{ .chatId = try val.str(a, c.chat.get("_id")), .id = try val.str(a, c.id), .reactions = try ser.reactionsOf(a, c.reactions, .{ .str = uid }, c.channel), .actorId = c.actor, .emoji = c.emoji, .on = c.on, .authorId = c.author });
+    return try val.from(a, .{ .chatId = try val.toStr(a, c.chat.get("_id")), .id = try val.toStr(a, c.id), .reactions = try ser.reactionsOf(a, c.reactions, .{ .str = uid }, c.channel), .actorId = c.actor, .emoji = c.emoji, .on = c.on, .authorId = c.author });
 }
 
 pub fn react(r: *Rq, chat: Val, user: Val, message_id: Val, emoji_v: Val, add: bool) !Val {
@@ -922,20 +922,20 @@ pub fn react(r: *Rq, chat: Val, user: Val, message_id: Val, emoji_v: Val, add: b
     var updated: ?Val = null;
     if (add) {
         var mine: std.ArrayList([]const u8) = .empty;
-        for (msg.get("reactions").keys()) |kv| if (containsSame(kv.v, user.get("_id"))) try mine.append(a, kv.k);
+        for (msg.get("reactions").keys(), msg.get("reactions").vals()) |kv_k, kv_v| if (containsSame(kv_v, user.get("_id"))) try mine.append(a, kv_k);
         // Up to three different reactions per person; the oldest one makes room.
         const ops = try Val.object(a);
         const add_set = try Val.object(a);
-        try add_set.put(a, key, user.get("_id"));
-        try ops.put(a, "$addToSet", add_set);
+        try add_set.set(key, user.get("_id"));
+        try ops.set("$addToSet", add_set);
         var has_it = false;
         for (mine.items) |e| if (std.mem.eql(u8, e, emoji)) {
             has_it = true;
         };
         if (mine.items.len >= 3 and !has_it) {
             const pull = try Val.object(a);
-            try pull.put(a, try r.fmt("reactions.{s}", .{mine.items[0]}), user.get("_id"));
-            try ops.put(a, "$pull", pull);
+            try pull.set(try r.fmt("reactions.{s}", .{mine.items[0]}), user.get("_id"));
+            try ops.set("$pull", pull);
         }
         updated = try store.update(r, chat, msg.get("_id"), ops);
         if (!val.same(msg.get("senderId"), user.get("_id")) and msg.get("senderId").truthy()) {
@@ -943,13 +943,13 @@ pub fn react(r: *Rq, chat: Val, user: Val, message_id: Val, emoji_v: Val, add: b
         }
     } else {
         const pull = try Val.object(a);
-        try pull.put(a, key, user.get("_id"));
+        try pull.set(key, user.get("_id"));
         updated = try store.update(r, chat, msg.get("_id"), try val.from(a, .{ .@"$pull" = pull }));
     }
     var u = updated orelse return r.fail(404, "Message not found", "message_not_found");
     // Remove empty reaction lists so they do not pile up.
     const unset = try Val.object(a);
-    for (u.get("reactions").keys()) |kv| if (kv.v.len() == 0) try unset.set(a, try r.fmt("reactions.{s}", .{kv.k}), "");
+    for (u.get("reactions").keys(), u.get("reactions").vals()) |kv_k, kv_v| if (kv_v.len() == 0) try unset.set(try r.fmt("reactions.{s}", .{kv_k}), "");
     if (unset.len() > 0) {
         if (try store.update(r, chat, msg.get("_id"), try val.from(a, .{ .@"$unset" = unset }))) |x| u = x;
     }
@@ -974,7 +974,7 @@ pub fn vote(r: *Rq, chat: Val, user: Val, message_id: Val, options: Val) !Val {
         for (chosen.items()) |c| if (c.num == @as(f64, @floatFromInt(x))) {
             dup = true;
         };
-        if (!dup) try chosen.push(a, Val.n(x));
+        if (!dup) try chosen.push(Val.number(x));
     }
     var previous = false;
     for (poll.get("votes").items()) |x| if (val.same(x.get("u"), user.get("_id"))) {
@@ -1006,7 +1006,7 @@ pub fn closePoll(r: *Rq, chat: Val, member: Val, user: Val, message_id: Val) !Va
 const PollCtx = struct { chat: Val, msg: Val };
 
 fn pollFor(c: PollCtx, a: Allocator, uid: []const u8) anyerror!?Val {
-    return try val.from(a, .{ .chatId = try val.str(a, c.chat.get("_id")), .id = try val.str(a, c.msg.get("_id")), .poll = try ser.poll(a, c.msg.get("poll"), .{ .str = uid }) });
+    return try val.from(a, .{ .chatId = try val.toStr(a, c.chat.get("_id")), .id = try val.toStr(a, c.msg.get("_id")), .poll = try ser.poll(a, c.msg.get("poll"), .{ .str = uid }) });
 }
 
 fn broadcastPoll(r: *Rq, chat: Val, updated: Val) !Val {
@@ -1021,7 +1021,7 @@ pub fn pollVoters(r: *Rq, chat: Val, message_id: Val) !Val {
     try r.ensure(msg.get("poll").truthy(), "Poll not found", 404, "poll_not_found");
     try r.ensure(msg.path("poll.anonymous") == .bool and !msg.path("poll.anonymous").bool, "This poll is anonymous", 403, "anonymous");
     var out = try Val.array(a);
-    for (msg.path("poll.votes").items()) |x| try out.push(a, try val.from(a, .{ .userId = try r.sn(x.get("u")), .options = x.get("o"), .at = x.get("at") }));
+    for (msg.path("poll.votes").items()) |x| try out.push(try val.from(a, .{ .userId = try r.sn(x.get("u")), .options = x.get("o"), .at = x.get("at") }));
     return out;
 }
 
@@ -1033,7 +1033,7 @@ pub fn pin(r: *Rq, chat: Val, member: Val, user: Val, message_id: Val, silent: b
     if (!unpin) _ = try col().chats.updateOne(a, .{ ._id = chat.get("_id") }, .{ .@"$push" = .{ .pinned = .{ .@"$each" = .{msg.get("_id")}, .@"$position" = 0, .@"$slice" = 100 } } }, .{});
     const fresh = (try col().chats.findOne(a, .{ ._id = chat.get("_id") }, .{ .projection = .{ .pinned = 1 } })) orelse Val.null;
     var pinned = try Val.array(a);
-    for (fresh.get("pinned").items()) |p| try pinned.push(a, try r.sn(p));
+    for (fresh.get("pinned").items()) |p| try pinned.push(try r.sn(p));
     rt.toChat(a, chat.get("_id"), "chat.pins", try val.from(a, .{ .chatId = try r.str(chat.get("_id")), .pinned = pinned }), null);
     if (!unpin and !silent and !eq(chat.get("type"), "saved")) {
         _ = try serviceMessage(r, chat, user.get("_id"), "pinned", try val.from(a, .{ .messageId = msg.get("_id"), .seq = msg.get("seq") }), true);
@@ -1083,11 +1083,11 @@ pub fn markRead(r: *Rq, chat: Val, member: Val, user: Val, seq: i64) !Val {
     }), @max(last_read, member.get("clearedSeq").asInt() orelse 0));
     const set = try val.from(a, .{ .lastReadSeq = last_read, .unread = unread, .markedUnread = false });
     if (unread == 0) {
-        try set.set(a, "mentions", 0);
-        try set.set(a, "reactionsUnread", 0);
+        try set.set("mentions", 0);
+        try set.set("reactionsUnread", 0);
     }
     _ = try col().members.updateOne(a, .{ ._id = member.get("_id") }, .{ .@"$set" = set }, .{});
-    const mentions: Val = if (set.get("mentions") != .undef) set.get("mentions") else if (!member.get("mentions").isNullish()) member.get("mentions") else Val.n(0);
+    const mentions: Val = if (set.get("mentions") != .undef) set.get("mentions") else if (!member.get("mentions").isNullish()) member.get("mentions") else Val.number(0);
     _ = rt.toUser(a, user.get("_id"), "chat.read", try val.from(a, .{ .chatId = try r.str(chat.get("_id")), .lastReadSeq = last_read, .unread = unread, .mentions = mentions }));
     const receipts = !(user.path("privacy.readReceipts") == .bool and !user.path("privacy.readReceipts").bool);
     if (up_to > last and receipts and !eq(chat.get("type"), "channel")) {
@@ -1108,7 +1108,7 @@ pub fn readers(r: *Rq, chat: Val, user: Val, message_id: Val) !Val {
     for (rows) |x| try ids.append(a, x.get("userId"));
     const users = try col().users.find(a, .{ ._id = .{ .@"$in" = ids.items }, .@"privacy.readReceipts" = .{ .@"$ne" = false } }, .{ .projection = .{ ._id = 1 } });
     var out = try Val.array(a);
-    for (users) |u| try out.push(a, try r.sn(u.get("_id")));
+    for (users) |u| try out.push(try r.sn(u.get("_id")));
     return out;
 }
 
@@ -1167,10 +1167,10 @@ fn publishOne(r: *Rq, msg: Val) !void {
     const sent = try val.clone(a, msg);
     sent.del("scheduledAt");
     sent.del("waitFor");
-    try sent.set(a, "seq", seq);
-    try sent.put(a, "createdAt", created);
-    if (reminder) try sent.set(a, "reminder", true);
-    try stampExpiry(a, sent);
+    try sent.set("seq", seq);
+    try sent.set("createdAt", created);
+    if (reminder) try sent.set("reminder", true);
+    try stampExpiry(sent);
     if (store.isAppChat(c)) {
         // Sent now, so it leaves Reseal for the app's storage. If the app cannot take it, it stays
         // scheduled and is retried.
@@ -1181,8 +1181,8 @@ fn publishOne(r: *Rq, msg: Val) !void {
         _ = try col().messages.deleteOne(a, .{ ._id = msg.get("_id") });
     } else {
         const set = try val.from(a, .{ .seq = seq, .createdAt = created });
-        if (reminder) try set.set(a, "reminder", true);
-        if (sent.get("expiresAt").truthy()) try set.put(a, "expiresAt", sent.get("expiresAt"));
+        if (reminder) try set.set("reminder", true);
+        if (sent.get("expiresAt").truthy()) try set.set("expiresAt", sent.get("expiresAt"));
         _ = try col().messages.updateOne(a, .{ ._id = msg.get("_id") }, .{ .@"$set" = set }, .{});
     }
     _ = rt.toUser(a, msg.get("senderId"), "message.delete", try val.from(a, .{ .chatId = cid, .ids = .{try r.str(msg.get("_id"))}, .scheduled = true, .published = true }));
@@ -1225,7 +1225,7 @@ fn afterExpiry(r: *Rq, chat: Val, list: []const Val) !void {
     var max_seq: i64 = 0;
     for (list) |m| {
         try ids.append(a, m.get("_id"));
-        try strs.push(a, try r.sn(m.get("_id")));
+        try strs.push(try r.sn(m.get("_id")));
         max_seq = @max(max_seq, m.get("seq").asInt() orelse 0);
     }
     _ = try col().chats.updateOne(a, .{ ._id = chat.get("_id") }, .{ .@"$pull" = .{ .pinned = .{ .@"$in" = ids.items } } }, .{});

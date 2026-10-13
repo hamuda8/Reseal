@@ -12,7 +12,7 @@
 const std = @import("std");
 const Io = std.Io;
 const A = @import("app.zig");
-const fetch = @import("lib/fetch.zig");
+
 const webhooks = @import("webhooks.zig");
 const val = A.val;
 const Val = A.Val;
@@ -30,7 +30,7 @@ pub fn isAppChat(chat: Val) bool {
 
 fn isOperatorObject(c: Val) bool {
     if (c != .obj) return false;
-    for (c.keys()) |kv| if (kv.k.len > 0 and kv.k[0] == '$') return true;
+    for (c.keys()) |kv_k| if (kv_k.len > 0 and kv_k[0] == '$') return true;
     return false;
 }
 
@@ -75,9 +75,9 @@ fn order(x: Val, y: Val) ?f64 {
 
 fn matchCond(a: Allocator, v: Val, cond: Val) bool {
     if (!isOperatorObject(cond)) return eqAny(a, v, cond);
-    for (cond.keys()) |kv| {
-        const op = kv.k;
-        const arg = kv.v;
+    for (cond.keys(), cond.vals()) |kv_k, kv_v| {
+        const op = kv_k;
+        const arg = kv_v;
         const ok = if (std.mem.eql(u8, op, "$exists"))
             (v != .undef) == arg.truthy()
         else if (std.mem.eql(u8, op, "$ne"))
@@ -112,7 +112,7 @@ fn matchCond(a: Allocator, v: Val, cond: Val) bool {
 }
 
 pub fn matches(a: Allocator, doc: Val, filter: Val) bool {
-    for (filter.keys()) |kv| if (!matchCond(a, doc.path(kv.k), kv.v)) return false;
+    for (filter.keys(), filter.vals()) |kv_k, kv_v| if (!matchCond(a, doc.path(kv_k), kv_v)) return false;
     return true;
 }
 
@@ -124,13 +124,13 @@ fn setPath(a: Allocator, doc: Val, p: []const u8, value: Val) !void {
         var child = o.get(key);
         if (child.isNullish()) {
             child = try Val.object(a);
-            try o.put(a, key, child);
+            try o.set(key, child);
         }
         if (child != .obj) return; // cannot descend into a primitive; Mongo would refuse too
         o = child;
         key = next;
     }
-    if (o == .obj) try o.put(a, key, value);
+    if (o == .obj) try o.set(key, value);
 }
 
 fn unsetPath(doc: Val, p: []const u8) void {
@@ -141,40 +141,40 @@ fn unsetPath(doc: Val, p: []const u8) void {
 
 /// Applies Mongo update operators ($set, $unset, $inc, $addToSet, $pull, $push) in place.
 pub fn applyUpdate(a: Allocator, doc: Val, ops: Val) !void {
-    for (ops.keys()) |op| {
-        for (op.v.keys()) |f| {
-            const cur = doc.path(f.k);
-            if (std.mem.eql(u8, op.k, "$set")) {
-                try setPath(a, doc, f.k, f.v);
-            } else if (std.mem.eql(u8, op.k, "$unset")) {
-                unsetPath(doc, f.k);
-            } else if (std.mem.eql(u8, op.k, "$inc")) {
+    for (ops.keys(), ops.vals()) |op_k, op_v| {
+        for (op_v.keys(), op_v.vals()) |f_k, f_v| {
+            const cur = doc.path(f_k);
+            if (std.mem.eql(u8, op_k, "$set")) {
+                try setPath(a, doc, f_k, f_v);
+            } else if (std.mem.eql(u8, op_k, "$unset")) {
+                unsetPath(doc, f_k);
+            } else if (std.mem.eql(u8, op_k, "$inc")) {
                 const base: f64 = if (cur.truthy()) (cur.asNum() orelse 0) else 0;
-                try setPath(a, doc, f.k, .{ .num = base + (f.v.asNum() orelse 0) });
-            } else if (std.mem.eql(u8, op.k, "$addToSet")) {
+                try setPath(a, doc, f_k, .{ .num = base + (f_v.asNum() orelse 0) });
+            } else if (std.mem.eql(u8, op_k, "$addToSet")) {
                 var arr = if (cur == .arr) cur else try Val.array(a);
                 var found = false;
-                for (arr.items()) |x| if (same(a, x, f.v)) {
+                for (arr.items()) |x| if (same(a, x, f_v)) {
                     found = true;
                 };
-                if (!found) try arr.push(a, f.v);
-                try setPath(a, doc, f.k, arr);
-            } else if (std.mem.eql(u8, op.k, "$push")) {
+                if (!found) try arr.push(f_v);
+                try setPath(a, doc, f_k, arr);
+            } else if (std.mem.eql(u8, op_k, "$push")) {
                 var arr = if (cur == .arr) cur else try Val.array(a);
-                const each = f.v.get("$each");
-                if (f.v == .obj and each == .arr) {
-                    for (each.items()) |x| try arr.push(a, x);
-                } else try arr.push(a, f.v);
-                try setPath(a, doc, f.k, arr);
-            } else if (std.mem.eql(u8, op.k, "$pull")) {
+                const each = f_v.get("$each");
+                if (f_v == .obj and each == .arr) {
+                    for (each.items()) |x| try arr.push(x);
+                } else try arr.push(f_v);
+                try setPath(a, doc, f_k, arr);
+            } else if (std.mem.eql(u8, op_k, "$pull")) {
                 if (cur == .arr) {
-                    const by_fields = f.v == .obj;
+                    const by_fields = f_v == .obj;
                     var kept = try Val.array(a);
                     for (cur.items()) |x| {
-                        const drop = if (by_fields) matches(a, x, f.v) else same(a, x, f.v);
-                        if (!drop) try kept.push(a, x);
+                        const drop = if (by_fields) matches(a, x, f_v) else same(a, x, f_v);
+                        if (!drop) try kept.push(x);
                     }
-                    try setPath(a, doc, f.k, kept);
+                    try setPath(a, doc, f_k, kept);
                 }
             } else return error.UnsupportedUpdate;
         }
@@ -277,10 +277,10 @@ pub fn callApp(r: *Rq, app_id: Val, op: []const u8, body: Val, override: ?Overri
         secret = app_.secret.?;
     }
     const full = try val.from(a, .{ .op = op, .appId = try r.sn(app_id) });
-    for (body.keys()) |kv| try full.put(a, kv.k, kv.v);
+    for (body.keys(), body.vals()) |kv_k, kv_v| try full.set(kv_k, kv_v);
     const payload = try val.stringify(a, full);
-    fetch.assertPublicUrl(url) catch |e| return r.fail(502, try r.fmt("The app's message storage did not answer ({s})", .{fetch.urlErrorMessage(e)}), "storage_unavailable");
-    const res = fetch.fetch(a, url, .{
+    A.app.fetch.assertPublicUrl(url) catch |e| return r.fail(502, try r.fmt("The app's message storage did not answer ({s})", .{A.urlErrorMessage(e)}), "storage_unavailable");
+    const res = A.app.fetch.fetch(a, url, .{
         .method = .POST,
         .body = payload,
         .content_type = "application/json",
@@ -290,7 +290,7 @@ pub fn callApp(r: *Rq, app_id: Val, op: []const u8, body: Val, override: ?Overri
             .{ .name = "Reseal-Operation", .value = op },
             .{ .name = "Reseal-Signature", .value = try webhooks.signature(a, secret, payload) },
         },
-    }) catch |e| return r.fail(502, try r.fmt("The app's message storage did not answer ({s})", .{fetch.urlErrorMessage(e)}), "storage_unavailable");
+    }) catch |e| return r.fail(502, try r.fmt("The app's message storage did not answer ({s})", .{A.urlErrorMessage(e)}), "storage_unavailable");
     if (res.status < 200 or res.status >= 300) return r.fail(502, try r.fmt("The app's message storage answered HTTP {d}", .{res.status}), "storage_error");
     const out = val.parseJson(a, res.body) catch return Val.object(a);
     return if (out.isNullish()) Val.object(a) else out;
@@ -300,7 +300,7 @@ fn remoteGet(r: *Rq, chat: Val, ids: []const Val) ![]Val {
     const a = r.a;
     if (ids.len == 0) return &.{};
     var id_list = try Val.array(a);
-    for (ids) |id| try id_list.push(a, try r.sn(id));
+    for (ids) |id| try id_list.push(try r.sn(id));
     const res = try callApp(r, chat.get("appId"), "get", try val.from(a, .{ .chatId = try r.sn(chat.get("_id")), .ids = id_list }), null);
     var out: std.ArrayList(Val) = .empty;
     for (res.get("messages").items()) |rec| {
@@ -314,7 +314,7 @@ fn remotePut(r: *Rq, chat: Val, docs: []const Val) !void {
     if (docs.len == 0) return;
     const a = r.a;
     var recs = try Val.array(a);
-    for (docs) |d| try recs.push(a, try toRecord(r, d));
+    for (docs) |d| try recs.push(try toRecord(r, d));
     _ = try callApp(r, chat.get("appId"), "put", try val.from(a, .{ .chatId = try r.sn(chat.get("_id")), .messages = recs }), null);
 }
 
@@ -367,7 +367,7 @@ pub fn byClientId(r: *Rq, chat: Val, sender_id: Val, client_id: []const u8) !?Va
 
 /// Stores a new message. Messages that are not sent yet (seq: null) always wait in Reseal.
 pub fn insert(r: *Rq, chat: Val, doc: Val) !void {
-    try A.db.ensureId(r.a, A.app.io, doc);
+    _ = try A.db.ensureId(A.app.io, doc);
     if (!isAppChat(chat) or doc.get("seq") == .null) {
         _ = try A.app.col.messages.insertOne(r.a, doc);
     } else try remotePut(r, chat, &.{doc});
@@ -376,7 +376,7 @@ pub fn insert(r: *Rq, chat: Val, doc: Val) !void {
 /// Updates one message with Mongo operators; the updated document, or null.
 pub fn update(r: *Rq, chat: Val, id: Val, ops: Val) !?Val {
     const a = r.a;
-    const pending = try A.app.col.messages.findOneAndUpdate(a, .{ ._id = id, .chatId = chat.get("_id") }, ops, .{});
+    const pending = try A.app.col.messages.findOneAndUpdate(a, .{ ._id = id, .chatId = chat.get("_id") }, ops, .{ .returnDocument = .after });
     if (pending != null or !isAppChat(chat)) return pending;
     const m = stripeOf(id);
     m.lockUncancelable(A.app.io);
@@ -417,11 +417,11 @@ pub const ListOpts = struct {
 pub fn list(r: *Rq, chat: Val, o: ListOpts) ![]Val {
     const a = r.a;
     const seq = try val.from(a, .{ .@"$ne" = Val.null });
-    if (o.after) |x| try seq.set(a, "$gt", x);
-    if (o.before) |x| try seq.set(a, "$lt", x);
+    if (o.after) |x| try seq.set("$gt", x);
+    if (o.before) |x| try seq.set("$lt", x);
     const q = try val.from(a, .{ .chatId = chat.get("_id") });
-    if (o.filter) |f| for (f.keys()) |kv| try q.put(a, kv.k, kv.v);
-    try q.put(a, "seq", seq);
+    if (o.filter) |f| for (f.keys(), f.vals()) |kv_k, kv_v| try q.set(kv_k, kv_v);
+    try q.set("seq", seq);
     if (!isAppChat(chat)) {
         return A.app.col.messages.find(a, q, .{ .sort = .{ .seq = @as(i32, if (o.asc) 1 else -1) }, .limit = o.limit });
     }
@@ -431,14 +431,14 @@ pub fn list(r: *Rq, chat: Val, o: ListOpts) ![]Val {
     var lo = o.after;
     var hi = o.before;
     const match_filter = try val.clone(a, if (o.filter) |f| f else try Val.object(a));
-    try match_filter.put(a, "seq", seq);
+    try match_filter.set("seq", seq);
     var round: usize = 0;
     while (round < 20 and out.items.len < o.limit) : (round += 1) {
         const want = @max(PAGE, o.limit - @as(i64, @intCast(out.items.len)));
         const res = try callApp(r, chat.get("appId"), "list", try val.from(a, .{
             .chatId = try r.sn(chat.get("_id")),
-            .afterSeq = if (lo) |x| Val.n(x) else Val.null,
-            .beforeSeq = if (hi) |x| Val.n(x) else Val.null,
+            .afterSeq = if (lo) |x| Val.number(x) else Val.null,
+            .beforeSeq = if (hi) |x| Val.number(x) else Val.null,
             .order = if (o.asc) "asc" else "desc",
             .limit = want,
         }), null);
@@ -467,8 +467,8 @@ pub fn count(r: *Rq, chat: Val, filter: Val, after: i64) !i64 {
     const cap: i64 = 9999;
     if (!isAppChat(chat)) {
         const q = try val.from(a, .{ .chatId = chat.get("_id") });
-        for (filter.keys()) |kv| try q.put(a, kv.k, kv.v);
-        try q.set(a, "seq", .{ .@"$gt" = after });
+        for (filter.keys(), filter.vals()) |kv_k, kv_v| try q.set(kv_k, kv_v);
+        try q.set("seq", .{ .@"$gt" = after });
         return A.app.col.messages.count(a, q, .{ .limit = cap });
     }
     if ((chat.get("seq").asInt() orelse 0) <= after) return 0;
@@ -487,7 +487,7 @@ pub fn remove(r: *Rq, chat: Val, ids: []const Val) !void {
     _ = try A.app.col.messages.deleteMany(a, .{ ._id = .{ .@"$in" = ids }, .chatId = chat.get("_id") });
     if (isAppChat(chat)) {
         var list_ = try Val.array(a);
-        for (ids) |id| try list_.push(a, try r.sn(id));
+        for (ids) |id| try list_.push(try r.sn(id));
         _ = try callApp(r, chat.get("appId"), "delete", try val.from(a, .{ .chatId = try r.sn(chat.get("_id")), .ids = list_ }), null);
     }
 }
@@ -508,7 +508,7 @@ pub fn searchApp(r: *Rq, app_id: Val, chat_ids: []const Val, query: []const u8) 
     const a = r.a;
     if (chat_ids.len == 0) return &.{};
     var ids = try Val.array(a);
-    for (chat_ids) |c| try ids.push(a, try r.sn(c));
+    for (chat_ids) |c| try ids.push(try r.sn(c));
     const res = callApp(r, app_id, "search", try val.from(a, .{ .chatIds = ids, .query = query, .limit = 50 }), null) catch return &.{};
     var out: std.ArrayList(Val) = .empty;
     for (res.get("messages").items()) |rec| {

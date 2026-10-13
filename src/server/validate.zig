@@ -160,7 +160,7 @@ pub fn ids(r: *Rq, value: Val, name: []const u8, max: usize, optional: bool) !?[
     var out: std.ArrayList(ObjectId) = .empty;
     var seen: std.StringHashMapUnmanaged(void) = .empty;
     for (value.items()) |x| {
-        const key = try val.str(r.a, x);
+        const key = try val.toStr(r.a, x);
         if (seen.contains(key)) continue;
         try seen.put(r.a, key, {});
         try out.append(r.a, (try id(r, .{ .str = key }, name, false)).?);
@@ -223,10 +223,10 @@ pub fn meta(r: *Rq, value: Val) !?Val {
 
 fn keysOk(v: Val) bool {
     switch (v) {
-        .obj => for (v.keys()) |kv| {
-            if (kv.k.len > 0 and kv.k[0] == '$') return false;
-            if (std.mem.indexOfScalar(u8, kv.k, '.') != null) return false;
-            if (!keysOk(kv.v)) return false;
+        .obj => for (v.keys(), v.vals()) |kv_k, kv_v| {
+            if (kv_k.len > 0 and kv_k[0] == '$') return false;
+            if (std.mem.indexOfScalar(u8, kv_k, '.') != null) return false;
+            if (!keysOk(kv_v)) return false;
         },
         .arr => for (v.items()) |x| if (!keysOk(x)) return false,
         else => {},
@@ -262,7 +262,7 @@ pub fn toNumber(v: Val) f64 {
             break :blk std.fmt.parseFloat(f64, t) catch std.math.nan(f64);
         },
         .date => |ms| @floatFromInt(ms),
-        .arr => |l| if (l.items.len == 0) 0 else if (l.items.len == 1) toNumber(l.items[0]) else std.math.nan(f64),
+        .arr => |l| if (l.items.items.len == 0) 0 else if (l.items.items.len == 1) toNumber(l.items.items[0]) else std.math.nan(f64),
         else => std.math.nan(f64),
     };
 }

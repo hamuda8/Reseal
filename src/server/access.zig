@@ -40,7 +40,7 @@ fn in(x: []const u8, list: []const []const u8) bool {
 
 /// A chat or 404.
 pub fn getChat(r: *Rq, chat_id: Val) !Val {
-    const id = v.oid(.{ .str = try val.str(r.a, chat_id) });
+    const id = v.oid(.{ .str = try val.toStr(r.a, chat_id) });
     const chat = if (id) |x| try A.app.col.chats.findOne(r.a, .{ ._id = x, .deletedAt = .{ .@"$exists" = false } }, .{}) else null;
     return chat orelse r.fail(404, "Chat not found", "chat_not_found");
 }
@@ -138,7 +138,7 @@ pub fn peerOf(r: *Rq, chat: Val, user_id: Val) !Val {
 }
 
 pub fn pairKey(a: std.mem.Allocator, x: Val, y: Val) ![]const u8 {
-    const sx = try val.str(a, x);
-    const sy = try val.str(a, y);
+    const sx = try val.toStr(a, x);
+    const sy = try val.toStr(a, y);
     return if (std.mem.order(u8, sx, sy) == .gt) std.fmt.allocPrint(a, "{s}:{s}", .{ sy, sx }) else std.fmt.allocPrint(a, "{s}:{s}", .{ sx, sy });
 }

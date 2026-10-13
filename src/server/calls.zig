@@ -90,13 +90,13 @@ fn release(c: *Call) void {
 pub fn iceServers(a: std.mem.Allocator, user_id: []const u8) !Val {
     const cfg = &A.app.config;
     var servers = try Val.array(a);
-    if (cfg.stun_urls.len > 0) try servers.push(a, try val.from(a, .{ .urls = cfg.stun_urls }));
+    if (cfg.stun_urls.len > 0) try servers.push(try val.from(a, .{ .urls = cfg.stun_urls }));
     if (cfg.turn_urls.len > 0 and cfg.turn_secret.len > 0) {
         const username = try std.fmt.allocPrint(a, "{d}:{s}", .{ @divFloor(A.nowMs(), 1000) + 12 * 3600, user_id });
         var mac: [20]u8 = undefined;
         std.crypto.auth.hmac.HmacSha1.create(&mac, username, cfg.turn_secret);
         var enc: [28]u8 = undefined;
-        try servers.push(a, try val.from(a, .{ .urls = cfg.turn_urls, .username = username, .credential = try a.dupe(u8, std.base64.standard.Encoder.encode(&enc, &mac)) }));
+        try servers.push(try val.from(a, .{ .urls = cfg.turn_urls, .username = username, .credential = try a.dupe(u8, std.base64.standard.Encoder.encode(&enc, &mac)) }));
     }
     return servers;
 }
@@ -110,7 +110,7 @@ fn participantList(a: std.mem.Allocator, c: *Call, except: ?[]const u8) !Val {
     var out = try Val.array(a);
     for (c.participants.items) |p| {
         if (except) |e| if (std.mem.eql(u8, &p.conn_id, e)) continue;
-        try out.push(a, try val.from(a, .{ .connId = try a.dupe(u8, &p.conn_id), .userId = try a.dupe(u8, &p.user_id), .media = try mediaVal(a, p.media) }));
+        try out.push(try val.from(a, .{ .connId = try a.dupe(u8, &p.conn_id), .userId = try a.dupe(u8, &p.user_id), .media = try mediaVal(a, p.media) }));
     }
     return out;
 }
@@ -132,7 +132,7 @@ fn toParticipants(a: std.mem.Allocator, c: *Call, t: []const u8, d: Val, except:
 
 fn loadMember(r: *Rq, chat_id: Val, user_id: []const u8) !struct { chat: Val, member: Val } {
     const a = r.a;
-    const cid = v.oid(.{ .str = try val.str(a, chat_id) });
+    const cid = v.oid(.{ .str = try val.toStr(a, chat_id) });
     const chat = (if (cid) |x| try A.app.col.chats.findOne(a, .{ ._id = x, .deletedAt = .{ .@"$exists" = false } }, .{}) else null) orelse return r.fail(404, "Chat not found", null);
     const member = (try A.app.col.members.findOne(a, .{ .chatId = chat.get("_id"), .userId = v.oidStr(user_id), .status = "active" }, .{})) orelse return r.fail(404, "Chat not found", null);
     return .{ .chat = chat, .member = member };
@@ -296,7 +296,7 @@ fn start(r: *Rq, conn: *rt.Conn, d: Val) !Val {
     const peer = (if (peer_member) |pm| try col.users.findOne(a, .{ ._id = pm.get("userId") }, .{}) else null) orelse return r.fail(404, "This user is unavailable", null);
     if (peer.get("deletedAt").truthy()) return r.fail(404, "This user is unavailable", null);
     if (try access.isBlocked(r, peer.get("_id"), conn.user.get("_id")) or !(try access.allowedByPrivacy(r, peer, conn.user.get("_id"), "calls"))) {
-        return r.fail(403, try r.fmt("{s} does not accept calls from you", .{try val.str(a, peer.get("displayName"))}), "calls_forbidden");
+        return r.fail(403, try r.fmt("{s} does not accept calls from you", .{try val.toStr(a, peer.get("displayName"))}), "calls_forbidden");
     }
     const peer_key = rt.keyOf(peer.get("_id")).?;
     var busy = false;
@@ -325,7 +325,7 @@ fn start(r: *Rq, conn: *rt.Conn, d: Val) !Val {
     const inserted = try col.calls.insertOne(a, doc);
     if (busy) {
         _ = try msgs.serviceMessage(r, chat, conn.user.get("_id"), "call", try val.from(a, .{ .result = "busy", .duration = 0, .video = video, .callId = inserted }), true);
-        return val.from(a, .{ .callId = try val.str(a, inserted), .busy = true });
+        return val.from(a, .{ .callId = try val.toStr(a, inserted), .busy = true });
     }
     const c = try gpa().create(Call);
     c.* = .{ .id = inserted.id, .id_hex = inserted.id.toHex(), .chat_id = chat.get("_id").id, .group = false, .video = video, .initiator_id = uid, .ringing = true, .refs = 2 };
@@ -340,7 +340,7 @@ fn start(r: *Rq, conn: *rt.Conn, d: Val) !Val {
     startTimer(c, RING_MS, .ring);
     const id_s = try a.dupe(u8, &c.id_hex);
     const av = conn.user.get("avatar");
-    const caller = try val.from(a, .{ .id = &uid, .displayName = conn.user.get("displayName"), .avatar = if (av.truthy()) Val{ .str = try val.str(a, av) } else Val.null });
+    const caller = try val.from(a, .{ .id = &uid, .displayName = conn.user.get("displayName"), .avatar = if (av.truthy()) Val{ .str = try val.toStr(a, av) } else Val.null });
     const delivered = rt.toUser(a, peer.get("_id"), "call.incoming", try val.from(a, .{ .callId = id_s, .chatId = &chat_key, .from = caller, .video = video, .callerConnId = conn.idStr() }));
     try events.emit(a, .call_incoming, try val.from(a, .{ .callId = id_s, .chatId = &chat_key, .video = video, .callerName = conn.user.get("displayName"), .calleeId = peer.get("_id") }));
     return val.from(a, .{ .callId = id_s, .iceServers = try iceServers(a, &uid), .ringing = delivered > 0 });
@@ -348,7 +348,7 @@ fn start(r: *Rq, conn: *rt.Conn, d: Val) !Val {
 
 fn accept(r: *Rq, conn: *rt.Conn, d: Val) !Val {
     const a = r.a;
-    const c = acquire(.{ .str = try val.str(a, d.get("callId")) }) orelse return r.fail(410, "This call has ended", "call_ended");
+    const c = acquire(.{ .str = try val.toStr(a, d.get("callId")) }) orelse return r.fail(410, "This call has ended", "call_ended");
     defer release(c);
     const uid = conn.user_id;
     const media_ = Media{ .audio = true, .video = d.get("video").isTrue(), .screen = false };
@@ -379,7 +379,7 @@ fn accept(r: *Rq, conn: *rt.Conn, d: Val) !Val {
 }
 
 fn decline(r: *Rq, conn: *rt.Conn, d: Val) !Val {
-    const c = acquire(.{ .str = try val.str(r.a, d.get("callId")) }) orelse return .undef;
+    const c = acquire(.{ .str = try val.toStr(r.a, d.get("callId")) }) orelse return .undef;
     defer release(c);
     {
         lockIt();
@@ -395,7 +395,7 @@ fn decline(r: *Rq, conn: *rt.Conn, d: Val) !Val {
 
 fn join(r: *Rq, conn: *rt.Conn, d: Val) !Val {
     const a = r.a;
-    const c = acquire(.{ .str = try val.str(a, d.get("callId")) }) orelse return r.fail(410, "This call has ended", "call_ended");
+    const c = acquire(.{ .str = try val.toStr(a, d.get("callId")) }) orelse return r.fail(410, "This call has ended", "call_ended");
     defer release(c);
     if (c.ended or !c.group) return r.fail(410, "This call has ended", "call_ended");
     const uid = conn.user_id;
@@ -451,7 +451,7 @@ fn leave(r: *Rq, conn: *rt.Conn, c: *Call, reason: []const u8) !void {
 }
 
 fn hangup(r: *Rq, conn: *rt.Conn, d: Val) !Val {
-    const c = acquire(.{ .str = try val.str(r.a, d.get("callId")) }) orelse return .undef;
+    const c = acquire(.{ .str = try val.toStr(r.a, d.get("callId")) }) orelse return .undef;
     defer release(c);
     if (c.ended) return .undef;
     try leave(r, conn, c, "hangup");
@@ -460,7 +460,7 @@ fn hangup(r: *Rq, conn: *rt.Conn, d: Val) !Val {
 
 fn endForAll(r: *Rq, conn: *rt.Conn, d: Val) !Val {
     const a = r.a;
-    const c = acquire(.{ .str = try val.str(a, d.get("callId")) }) orelse return .undef;
+    const c = acquire(.{ .str = try val.toStr(a, d.get("callId")) }) orelse return .undef;
     defer release(c);
     if (c.ended or !c.group) return .undef;
     const m = try A.app.col.members.findOne(a, .{ .chatId = c.chat_id, .userId = conn.user.get("_id") }, .{});
@@ -474,9 +474,9 @@ fn endForAll(r: *Rq, conn: *rt.Conn, d: Val) !Val {
 /// Relays WebRTC signalling between two connections in the same call.
 fn signal(r: *Rq, conn: *rt.Conn, d: Val) !Val {
     const a = r.a;
-    const c = acquire(.{ .str = try val.str(a, d.get("callId")) }) orelse return .undef;
+    const c = acquire(.{ .str = try val.toStr(a, d.get("callId")) }) orelse return .undef;
     defer release(c);
-    const to = try val.str(a, if (d.get("to").truthy()) d.get("to") else Val.s(""));
+    const to = try val.toStr(a, if (d.get("to").truthy()) d.get("to") else Val.string(""));
     var target: ?[36]u8 = null;
     {
         lockIt();
@@ -495,7 +495,7 @@ fn signal(r: *Rq, conn: *rt.Conn, d: Val) !Val {
 
 fn media(r: *Rq, conn: *rt.Conn, d: Val) !Val {
     const a = r.a;
-    const c = acquire(.{ .str = try val.str(a, d.get("callId")) }) orelse return .undef;
+    const c = acquire(.{ .str = try val.toStr(a, d.get("callId")) }) orelse return .undef;
     defer release(c);
     const m = Media{ .audio = !(d.get("audio") == .bool and !d.get("audio").bool), .video = d.get("video").isTrue(), .screen = d.get("screen").isTrue() };
     {
@@ -511,7 +511,7 @@ fn media(r: *Rq, conn: *rt.Conn, d: Val) !Val {
 /// In-call extras: raise hand, emoji reactions.
 fn reaction(r: *Rq, conn: *rt.Conn, d: Val) !Val {
     const a = r.a;
-    const c = acquire(.{ .str = try val.str(a, d.get("callId")) }) orelse return .undef;
+    const c = acquire(.{ .str = try val.toStr(a, d.get("callId")) }) orelse return .undef;
     defer release(c);
     {
         lockIt();
@@ -549,11 +549,11 @@ pub fn history(r: *Rq, user: Val, before: ?[]const u8, limit_: i64) !Val {
     const q = try val.from(a, .{ .@"$or" = .{ .{ .@"participants.userId" = user.get("_id") }, .{ .invited = user.get("_id") } } });
     if (before) |b| if (b.len > 0) {
         const ms = val.parseDate(b) orelse (std.fmt.parseInt(i64, b, 10) catch null);
-        if (ms) |m| try q.set(a, "createdAt", .{ .@"$lt" = Val{ .date = m } }) else try q.set(a, "createdAt", .{ .@"$lt" = Val.null });
+        if (ms) |m| try q.set("createdAt", .{ .@"$lt" = Val{ .date = m } }) else try q.set("createdAt", .{ .@"$lt" = Val.null });
     };
     const rows = try A.app.col.calls.find(a, q, .{ .sort = .{ .createdAt = -1 }, .limit = @min(limit_, 100) });
     var out = try Val.array(a);
-    for (rows) |c| try out.push(a, try val.from(a, .{
+    for (rows) |c| try out.push(try val.from(a, .{
         .id = try r.str(c.get("_id")),
         .chatId = try r.str(c.get("chatId")),
         .group = c.get("group"),
@@ -563,7 +563,7 @@ pub fn history(r: *Rq, user: Val, before: ?[]const u8, limit_: i64) !Val {
         .initiatorId = try r.str(c.get("initiatorId")),
         .createdAt = c.get("createdAt"),
         .startedAt = if (c.get("startedAt").truthy()) c.get("startedAt") else Val.null,
-        .duration = if (c.get("duration").truthy()) c.get("duration") else Val.n(0),
+        .duration = if (c.get("duration").truthy()) c.get("duration") else Val.number(0),
     }));
     return out;
 }

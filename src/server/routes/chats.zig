@@ -98,7 +98,7 @@ fn member(q: *Req) !access.ChatMember {
 }
 
 fn sameApp(r: *Rq, x: Val, y: Val) !bool {
-    return std.mem.eql(u8, try val.str(r.a, if (x.truthy()) x else Val.s("")), try val.str(r.a, if (y.truthy()) y else Val.s("")));
+    return std.mem.eql(u8, try val.toStr(r.a, if (x.truthy()) x else Val.string("")), try val.toStr(r.a, if (y.truthy()) y else Val.string("")));
 }
 
 /// Members, or anyone in the same scope for public groups and channels (read-only preview).
@@ -198,8 +198,8 @@ fn getOne(q: *Req) !void {
     // Public chats can be previewed before joining.
     try r.ensure(chat.get("usernameLower").truthy() and try sameApp(r, chat.get("appId"), q.user().get("appId")), "Chat not found", 404, "chat_not_found");
     const out = try ser.chat(r.a, chat, .null, q.user().get("_id"), .{});
-    try out.set(r.a, "preview", true);
-    try out.set(r.a, "requested", m != null and eq(m.?.get("status"), "requested"));
+    try out.set("preview", true);
+    try out.set("requested", m != null and eq(m.?.get("status"), "requested"));
     return q.json(.{ .chat = out });
 }
 
@@ -213,7 +213,7 @@ fn byUsername(q: *Req) !void {
         const m = try col().members.findOne(a, .{ .chatId = chat.get("_id"), .userId = me.get("_id"), .status = "active" }, .{});
         if (m) |mm| return q.json(.{ .chat = try chats.chatFor(r, chat, me.get("_id"), mm) });
         const out = try ser.chat(a, chat, .null, me.get("_id"), .{});
-        try out.set(a, "preview", true);
+        try out.set("preview", true);
         return q.json(.{ .chat = out });
     }
     const key = if (me.get("appId").truthy()) try r.fmt("{s}:{s}", .{ try r.str(me.get("appId")), lower }) else lower;
@@ -239,7 +239,7 @@ fn openPrivate(q: *Req) !void {
 fn create(q: *Req) !void {
     const r = &q.r;
     try account.rateLimit(q, "create-chat", 30, 3600_000);
-    const t = if (q.b("type").truthy()) q.b("type") else Val.s("group");
+    const t = if (q.b("type").truthy()) q.b("type") else Val.string("group");
     const is_channel = eq(t, "channel");
     try apps.assertFeature(r, q.user(), if (is_channel) "channels" else "groups", try r.fmt("Creating {s}s is turned off in this app", .{try r.str(t)}));
     const res = try chats.createGroup(r, q.user(), try q.bodyObj());
@@ -295,30 +295,30 @@ fn state(q: *Req) !void {
     const unset = try Val.object(a);
     if (b.get("mutedUntil") != .undef) {
         const mu = b.get("mutedUntil");
-        if (mu == .null or (mu == .num and mu.num == 0)) try set.put(a, "mutedUntil", .null) else try set.put(a, "mutedUntil", .{ .date = @min(try v.reqInt(r, mu, "mutedUntil", .{ .min = 0 }), 32503680000000) });
+        if (mu == .null or (mu == .num and mu.num == 0)) try set.set("mutedUntil", .null) else try set.set("mutedUntil", Val{ .date = @min(try v.reqInt(r, mu, "mutedUntil", .{ .min = 0 }), 32503680000000) });
     }
     if (b.get("pinned") != .undef) {
         if (try v.reqBool(r, b.get("pinned"), "pinned")) {
             const n = try col().members.count(a, .{ .userId = q.user().get("_id"), .status = "active", .pinnedAt = .{ .@"$ne" = Val.null }, .archived = .{ .@"$ne" = true } }, .{});
             try r.ensure(n < Limits.pinned_chats or m.get("pinnedAt").truthy(), try r.fmt("You can pin up to {d} chats", .{Limits.pinned_chats}), 400, null);
-            try set.put(a, "pinnedAt", if (m.get("pinnedAt").truthy()) m.get("pinnedAt") else A.now());
-        } else try set.put(a, "pinnedAt", .null);
+            try set.set("pinnedAt", if (m.get("pinnedAt").truthy()) m.get("pinnedAt") else A.now());
+        } else try set.set("pinnedAt", .null);
     }
     if (b.get("archived") != .undef) {
         const arch = try v.reqBool(r, b.get("archived"), "archived");
-        try set.set(a, "archived", arch);
-        if (arch) try set.put(a, "pinnedAt", .null);
+        try set.set("archived", arch);
+        if (arch) try set.set("pinnedAt", .null);
     }
-    if (b.get("markedUnread") != .undef) try set.set(a, "markedUnread", try v.reqBool(r, b.get("markedUnread"), "markedUnread"));
+    if (b.get("markedUnread") != .undef) try set.set("markedUnread", try v.reqBool(r, b.get("markedUnread"), "markedUnread"));
     if (b.get("locked") != .undef) {
         if (try v.reqBool(r, b.get("locked"), "locked")) {
             try r.ensure(q.user().get("chatLock").truthy(), "Set a chat lock code first", 400, "no_lock_code");
-            try set.set(a, "locked", true);
-        } else try unset.set(a, "locked", "");
+            try set.set("locked", true);
+        } else try unset.set("locked", "");
     }
     if (b.get("draft") != .undef) {
         const d = b.get("draft");
-        if (d == .null) try unset.set(a, "draft", "") else {
+        if (d == .null) try unset.set("draft", "") else {
             _ = try v.reqObj(r, d, "draft");
             // Drafts in encrypted chats arrive encrypted; the server just syncs them between devices.
             const enc_chat = chat.get("encrypted").truthy();
@@ -328,12 +328,12 @@ fn state(q: *Req) !void {
                 .iv = try v.reqB64(r, d.path("enc.iv"), "iv", 32),
                 .ct = try v.reqB64(r, d.path("enc.ct"), "ct", 48 * 1024),
             }) else .undef;
-            try set.set(a, "draft", .{ .text = text, .enc = enc, .replyTo = if (d.get("replyTo").truthy()) Val{ .str = try r.str(idv(try v.reqId(r, d.get("replyTo"), "replyTo"))) } else Val.null, .at = A.now() });
+            try set.set("draft", .{ .text = text, .enc = enc, .replyTo = if (d.get("replyTo").truthy()) Val{ .str = try r.str(idv(try v.reqId(r, d.get("replyTo"), "replyTo"))) } else Val.null, .at = A.now() });
         }
     }
     const update = try Val.object(a);
-    if (set.len() > 0) try update.put(a, "$set", set);
-    if (unset.len() > 0) try update.put(a, "$unset", unset);
+    if (set.len() > 0) try update.set("$set", set);
+    if (unset.len() > 0) try update.set("$unset", unset);
     if (update.len() > 0) _ = try col().members.updateOne(a, .{ ._id = m.get("_id") }, update, .{});
     const fresh = (try col().members.findOne(a, .{ ._id = m.get("_id") }, .{})) orelse m;
     const me_v = (try ser.chat(a, chat, fresh, q.user().get("_id"), .{})).get("me");
@@ -346,21 +346,21 @@ fn members(q: *Req) !void {
     const a = r.a;
     const cm = try member(q);
     const chat = cm.chat;
-    const filter = try v.reqOneOf(r, if (q.qv("filter").truthy()) q.qv("filter") else Val.s("all"), "filter", &.{ "all", "admins", "banned", "requests" });
+    const filter = try v.reqOneOf(r, if (q.qv("filter").truthy()) q.qv("filter") else Val.string("all"), "filter", &.{ "all", "admins", "banned", "requests" });
     const f = try val.from(a, .{ .chatId = chat.get("_id") });
-    if (std.mem.eql(u8, filter, "all")) try f.set(a, "status", "active");
+    if (std.mem.eql(u8, filter, "all")) try f.set("status", "active");
     if (std.mem.eql(u8, filter, "admins")) {
-        try f.set(a, "status", "active");
-        try f.set(a, "role", .{ .@"$in" = .{ "owner", "admin" } });
+        try f.set("status", "active");
+        try f.set("role", .{ .@"$in" = .{ "owner", "admin" } });
     }
-    if (std.mem.eql(u8, filter, "banned")) try f.set(a, "status", "banned");
-    if (std.mem.eql(u8, filter, "requests")) try f.set(a, "status", "requested");
+    if (std.mem.eql(u8, filter, "banned")) try f.set("status", "banned");
+    if (std.mem.eql(u8, filter, "requests")) try f.set("status", "requested");
     if (eq(chat.get("type"), "channel") and std.mem.eql(u8, filter, "all")) {
         const role = cm.member.get("role");
         try r.ensure(eq(role, "owner") or eq(role, "admin"), "Only admins can see subscribers", 403, null);
     }
-    const limit = @min(try v.reqInt(r, if (q.qv("limit") != .undef) q.qv("limit") else Val.n(200), "limit", .{ .min = 1, .max = 500 }), 500);
-    const offset = try v.reqInt(r, if (q.qv("offset") != .undef) q.qv("offset") else Val.n(0), "offset", .{ .min = 0 });
+    const limit = @min(try v.reqInt(r, if (q.qv("limit") != .undef) q.qv("limit") else Val.number(200), "limit", .{ .min = 1, .max = 500 }), 500);
+    const offset = try v.reqInt(r, if (q.qv("offset") != .undef) q.qv("offset") else Val.number(0), "offset", .{ .min = 0 });
     const rows = try col().members.find(a, f, .{ .sort = .{ .role = 1, .joinedAt = 1 }, .skip = offset, .limit = limit });
     var uids: std.ArrayList(Val) = .empty;
     for (rows) |m| try uids.append(a, m.get("userId"));
@@ -400,8 +400,8 @@ fn members(q: *Req) !void {
             if (std.mem.indexOf(u8, dn, n) == null and std.mem.indexOf(u8, un, n) == null) continue;
         }
         const o = try ser.member(a, m);
-        try o.put(a, "user", u);
-        try out.push(a, o);
+        try o.set("user", u);
+        try out.push(o);
     }
     return q.json(.{ .members = out, .total = try col().members.count(a, f, .{}), .online = rt.onlineMembers(a, chat.get("_id")).len });
 }
@@ -444,7 +444,7 @@ fn decide(q: *Req) !void {
 
 fn joinResult(q: *Req, result: Val) !void {
     const out = try val.clone(q.r.a, result);
-    try out.put(q.r.a, "chat", try chats.chatFor(&q.r, result.get("chat"), q.user().get("_id"), null));
+    try out.set("chat", try chats.chatFor(&q.r, result.get("chat"), q.user().get("_id"), null));
     return q.json(out);
 }
 
@@ -491,10 +491,10 @@ fn invites(q: *Req) !void {
     const cm = try member(q);
     try r.ensure(access.can(cm.chat, cm.member, "inviteUsers") or access.can(cm.chat, cm.member, "addMembers"), "You cannot see invite links here", 403, null);
     const f = try val.from(a, .{ .chatId = cm.chat.get("_id"), .revoked = false });
-    if (!isAdmin(cm.member)) try f.put(a, "createdBy", q.user().get("_id"));
+    if (!isAdmin(cm.member)) try f.set("createdBy", q.user().get("_id"));
     const rows = try col().invites.find(a, f, .{ .sort = .{ .createdAt = -1 }, .limit = 100 });
     var out = try Val.array(a);
-    for (rows) |i| try out.push(a, try chats.serializeInvite(r, i));
+    for (rows) |i| try out.push(try chats.serializeInvite(r, i));
     return q.json(.{ .invites = out });
 }
 
@@ -508,7 +508,7 @@ fn revokeInvite(q: *Req) !void {
     const a = q.r.a;
     const cm = try member(q);
     const f = try val.from(a, .{ .chatId = cm.chat.get("_id"), .code = q.param("code") });
-    if (!isAdmin(cm.member)) try f.put(a, "createdBy", q.user().get("_id"));
+    if (!isAdmin(cm.member)) try f.set("createdBy", q.user().get("_id"));
     _ = try col().invites.updateOne(a, f, .{ .@"$set" = .{ .revoked = true } }, .{});
     return q.json(.{ .ok = true });
 }
@@ -521,7 +521,7 @@ fn previewInvite(q: *Req) !void {
     try r.ensure(try sameApp(r, chat.get("appId"), q.user().get("appId")), "This invite link is invalid", 404, null);
     const m = try col().members.findOne(a, .{ .chatId = chat.get("_id"), .userId = q.user().get("_id") }, .{});
     const out = try ser.chat(a, chat, .null, q.user().get("_id"), .{});
-    try out.set(a, "preview", true);
+    try out.set("preview", true);
     return q.json(.{ .chat = out, .member = m != null and eq(m.?.get("status"), "active"), .requestApproval = inv.get("requestApproval") });
 }
 
@@ -571,7 +571,7 @@ fn messages(q: *Req) !void {
     const lim = try numQ(q, "limit");
     const docs = try msgs.history(r, cm.chat, cm.member, .{ .before = try numQ(q, "before"), .after = try numQ(q, "after"), .around = try numQ(q, "around"), .limit = if (lim) |l| (if (l != 0) l else 50) else 50, .tag = tag });
     var out = try Val.array(a);
-    for (docs) |d| try out.push(a, try ser.message(a, d, q.user().get("_id"), cm.chat));
+    for (docs) |d| try out.push(try ser.message(a, d, q.user().get("_id"), cm.chat));
     return q.json(.{ .messages = out, .floor = msgs.visibleFrom(cm.chat, cm.member) });
 }
 
@@ -580,7 +580,7 @@ fn scheduled(q: *Req) !void {
     const cm = try member(q);
     const docs = try col().messages.find(a, .{ .chatId = cm.chat.get("_id"), .senderId = q.user().get("_id"), .scheduledAt = .{ .@"$type" = "date" } }, .{ .sort = .{ .scheduledAt = 1 }, .limit = 100 });
     var out = try Val.array(a);
-    for (docs) |d| try out.push(a, try ser.message(a, d, q.user().get("_id"), cm.chat));
+    for (docs) |d| try out.push(try ser.message(a, d, q.user().get("_id"), cm.chat));
     return q.json(.{ .messages = out });
 }
 
@@ -667,13 +667,13 @@ fn reactions(q: *Req) !void {
     try r.ensure(!eq(cm.chat.get("type"), "channel"), "Reactions in channels are anonymous", 403, null);
     const doc = (try store.findOne(r, cm.chat, idv(try v.reqId(r, q.pv("id"), "id")), null)) orelse return r.fail(404, "Message not found", null);
     var uids: std.ArrayList(Val) = .empty;
-    for (doc.get("reactions").keys()) |kv| for (kv.v.items()) |u| try uids.append(a, u);
+    for (doc.get("reactions").vals()) |kv_v| for (kv_v.items()) |u| try uids.append(a, u);
     const users = try col().users.find(a, .{ ._id = .{ .@"$in" = uids.items } }, .{});
     const serialized = try account.usersFor(r, q.user(), users, false);
     var out = try Val.array(a);
-    for (doc.get("reactions").keys()) |kv| for (kv.v.items()) |u| {
+    for (doc.get("reactions").keys(), doc.get("reactions").vals()) |kv_k, kv_v| for (kv_v.items()) |u| {
         for (serialized.items()) |s| if (val.same(s.get("id"), u)) {
-            try out.push(a, try val.from(a, .{ .emoji = kv.k, .user = s }));
+            try out.push(try val.from(a, .{ .emoji = kv_k, .user = s }));
             break;
         };
     };
@@ -769,13 +769,13 @@ fn mediaCounts(q: *Req) !void {
         // Counted over the newest thousand messages the app keeps.
         for (try store.list(r, cm.chat, .{ .filter = filter, .after = floor, .limit = 1000 })) |d| for (d.get("tags").items()) |t| {
             const k = t.asStr() orelse continue;
-            try counts.set(a, k, (counts.get(k).asNum() orelse 0) + 1);
+            try counts.set(k, (counts.get(k).asNum() orelse 0) + 1);
         };
         return q.json(.{ .counts = counts });
     }
     const match = try val.from(a, .{ .chatId = cm.chat.get("_id"), .seq = .{ .@"$gt" = floor } });
-    for (filter.keys()) |kv| try match.put(a, kv.k, kv.v);
+    for (filter.keys(), filter.vals()) |kv_k, kv_v| try match.set(kv_k, kv_v);
     const rows = try col().messages.aggregate(a, .{ .{ .@"$match" = match }, .{ .@"$unwind" = "$tags" }, .{ .@"$group" = .{ ._id = "$tags", .count = .{ .@"$sum" = 1 } } } });
-    for (rows) |x| try counts.put(a, try r.str(x.get("_id")), x.get("count"));
+    for (rows) |x| try counts.set(try r.str(x.get("_id")), x.get("count"));
     return q.json(.{ .counts = counts });
 }

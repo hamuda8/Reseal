@@ -10,7 +10,7 @@ const std = @import("std");
 const A = @import("app.zig");
 const v = @import("validate.zig");
 const rt = @import("realtime.zig");
-const ec = @import("lib/ec.zig");
+const ec = @import("ec");
 const val = A.val;
 const Val = A.Val;
 const Rq = A.Rq;
@@ -43,11 +43,11 @@ fn cleanBackup(r: *Rq, b: Val, name: []const u8) !?Val {
     if (!b.truthy()) return null;
     _ = try v.reqObj(r, b, name);
     const kdf = try v.reqOneOf(r, b.get("kdf"), try r.fmt("{s}.kdf", .{name}), &.{ "pbkdf2-sha256", "hkdf-sha256", "escrow" });
-    const ver: Val = if (b.get("v").isNullish()) Val.n(1) else b.get("v");
+    const ver: Val = if (b.get("v").isNullish()) Val.number(1) else b.get("v");
     return try val.from(a, .{
         .v = try v.reqInt(r, ver, try r.fmt("{s}.v", .{name}), .{ .min = 1, .max = 9 }),
         .kdf = kdf,
-        .iter = if (std.mem.eql(u8, kdf, "pbkdf2-sha256")) Val.n(try v.reqInt(r, b.get("iter"), try r.fmt("{s}.iter", .{name}), .{ .min = 200_000, .max = 10_000_000 })) else Val.undef,
+        .iter = if (std.mem.eql(u8, kdf, "pbkdf2-sha256")) Val.number(try v.reqInt(r, b.get("iter"), try r.fmt("{s}.iter", .{name}), .{ .min = 200_000, .max = 10_000_000 })) else Val.undef,
         .salt = if (std.mem.eql(u8, kdf, "escrow")) Val.undef else Val{ .str = try v.reqB64(r, b.get("salt"), try r.fmt("{s}.salt", .{name}), 64) },
         .iv = try v.reqB64(r, b.get("iv"), try r.fmt("{s}.iv", .{name}), 32),
         .ct = try v.reqB64(r, b.get("ct"), try r.fmt("{s}.ct", .{name}), 4096),
@@ -93,9 +93,9 @@ pub fn publishUserKeys(r: *Rq, user: Val, body: Val) !Val {
     const mode: []const u8 = if (access_eq(body.get("mode"), "advanced")) "advanced" else "standard";
     const standard = std.mem.eql(u8, mode, "standard");
     const backup = try Val.object(a);
-    if (standard) if (try cleanBackup(r, body.path("backup.escrow"), "backup.escrow")) |x| try backup.put(a, "escrow", x);
-    if (try cleanBackup(r, body.path("backup.passcode"), "backup.passcode")) |x| try backup.put(a, "passcode", x);
-    if (try cleanBackup(r, body.path("backup.recovery"), "backup.recovery")) |x| try backup.put(a, "recovery", x);
+    if (standard) if (try cleanBackup(r, body.path("backup.escrow"), "backup.escrow")) |x| try backup.set("escrow", x);
+    if (try cleanBackup(r, body.path("backup.passcode"), "backup.passcode")) |x| try backup.set("passcode", x);
+    if (try cleanBackup(r, body.path("backup.recovery"), "backup.recovery")) |x| try backup.set("recovery", x);
     if (standard) try r.ensure(backup.get("escrow").truthy() and body.get("escrowKey").truthy(), "A key backup is required", 400, null) else try r.ensure(backup.get("passcode").truthy(), "A passcode backup is required for advanced protection", 400, null);
 
     const old = user.get("keys");
@@ -108,7 +108,7 @@ pub fn publishUserKeys(r: *Rq, user: Val, body: Val) !Val {
     const keys = try val.from(a, .{ .enc = enc, .sig = sig, .mode = mode, .version = if (changed) old_version + 1 else (if (old.get("version").truthy()) old_version else 1), .updatedAt = A.now(), .backup = backup });
     _ = try col().users.updateOne(a, .{ ._id = user.get("_id") }, .{ .@"$set" = .{ .keys = keys } }, .{});
     if (standard) try storeEscrowKey(r, user.get("_id"), try cleanEscrowKey(r, body.get("escrowKey"))) else _ = try col().keyEscrow.deleteOne(a, .{ .userId = user.get("_id") });
-    try user.put(a, "keys", keys);
+    try user.set("keys", keys);
     try afterKeysChanged(r, user, !old.get("enc").truthy(), changed, keys.get("version").asInt() orelse 1);
     return keys;
 }
@@ -124,7 +124,7 @@ pub fn setProtection(r: *Rq, user: Val, body: Val) !void {
     if (access_eq(body.get("mode"), "advanced")) {
         const passcode = (try cleanBackup(r, body.get("passcode"), "passcode")) orelse return r.fail(400, "A passcode backup is required", null);
         const b = try val.from(a, .{ .passcode = passcode });
-        if (try cleanBackup(r, body.get("recovery"), "recovery")) |rec| try b.put(a, "recovery", rec);
+        if (try cleanBackup(r, body.get("recovery"), "recovery")) |rec| try b.set("recovery", rec);
         _ = try col().users.updateOne(a, .{ ._id = user.get("_id") }, .{ .@"$set" = .{ .@"keys.mode" = "advanced", .@"keys.backup" = b } }, .{});
         _ = try col().keyEscrow.deleteOne(a, .{ .userId = user.get("_id") });
     } else {
@@ -140,8 +140,8 @@ pub fn updateBackup(r: *Rq, user: Val, body: Val) !void {
     const a = r.a;
     try r.ensure(user.path("keys.enc").truthy(), "Set up encryption first", 400, "no_keys");
     const set = try Val.object(a);
-    if (body.get("passcode") != .undef) try set.put(a, "keys.backup.passcode", (try cleanBackup(r, body.get("passcode"), "passcode")) orelse .undef);
-    if (body.get("recovery") != .undef) try set.put(a, "keys.backup.recovery", (try cleanBackup(r, body.get("recovery"), "recovery")) orelse .undef);
+    if (body.get("passcode") != .undef) try set.set("keys.backup.passcode", (try cleanBackup(r, body.get("passcode"), "passcode")) orelse .undef);
+    if (body.get("recovery") != .undef) try set.set("keys.backup.recovery", (try cleanBackup(r, body.get("recovery"), "recovery")) orelse .undef);
     try r.ensure(set.len() > 0, "Nothing to update", 400, null);
     _ = try col().users.updateOne(a, .{ ._id = user.get("_id") }, .{ .@"$set" = set }, .{});
 }
@@ -159,7 +159,7 @@ pub fn restoreEscrow(r: *Rq, user: Val, device: []const u8) !Val {
     _ = try col().keyEscrow.updateOne(a, .{ ._id = row.?.get("_id") }, .{ .@"$set" = .{ .lastRestoredAt = A.now(), .lastDevice = dev }, .@"$inc" = .{ .restores = 1 } }, .{});
     // Tell the account's other open devices, so an unexpected sign-in is noticed.
     _ = rt.toUser(a, user.get("_id"), "security.restore", try val.from(a, .{ .device = dev, .at = A.now() }));
-    return val.from(a, .{ .enc = k.get("enc"), .sig = k.get("sig"), .version = if (k.get("version").truthy()) k.get("version") else Val.n(1), .provisioned = k.get("provisioned").truthy(), .escrow = k.path("backup.escrow"), .escrowKey = key.? });
+    return val.from(a, .{ .enc = k.get("enc"), .sig = k.get("sig"), .version = if (k.get("version").truthy()) k.get("version") else Val.number(1), .provisioned = k.get("provisioned").truthy(), .escrow = k.path("backup.escrow"), .escrowKey = key.? });
 }
 
 /// Creates keys on the server for someone who has not opened Reseal yet, so people can message
@@ -204,7 +204,7 @@ pub fn provisionKeys(r: *Rq, user: Val) !Val {
         return if (fresh) |f| f.get("keys") else .undef;
     }
     try storeEscrowKey(r, user.get("_id"), try b64e(a, &escrow_key));
-    try user.put(a, "keys", keys);
+    try user.set("keys", keys);
     return keys;
 }
 
@@ -240,7 +240,7 @@ pub fn requestKeys(r: *Rq, chat: Val, user_ids: []const Val, all_epochs: bool) !
             };
             if (has) continue;
             _ = try col().keyRequests.updateOne(a, .{ .chatId = chat.get("_id"), .userId = u.get("_id"), .epoch = epoch }, .{ .@"$setOnInsert" = .{ .createdAt = now } }, .{ .upsert = true });
-            try created.push(a, try val.from(a, .{ .userId = try r.str(u.get("_id")), .epoch = epoch }));
+            try created.push(try val.from(a, .{ .userId = try r.str(u.get("_id")), .epoch = epoch }));
         }
     }
     if (created.len() > 0) try notifyHolders(r, chat, created);
@@ -256,7 +256,7 @@ fn notifyHolders(r: *Rq, chat: Val, requests: Val) !void {
         for (epochs.items()) |e| if (e.num == q.get("epoch").num) {
             dup = true;
         };
-        if (!dup) try epochs.push(a, q.get("epoch"));
+        if (!dup) try epochs.push(q.get("epoch"));
     }
     var online_ids: std.ArrayList(Val) = .empty;
     for (online) |o| if (v.oid(o)) |x| try online_ids.append(a, .{ .id = x });
@@ -278,7 +278,7 @@ fn notifyHolders(r: *Rq, chat: Val, requests: Val) !void {
             for (holders) |h2| if (std.mem.eql(u8, try r.str(h2.get("userId")), uid) and (h2.get("epoch").asNum() orelse -1) == q.get("epoch").num) {
                 holds = true;
             };
-            if (holds) try relevant.push(a, q);
+            if (holds) try relevant.push(q);
         }
         if (relevant.len() > 0) _ = rt.toUser(a, .{ .str = uid }, "keys.needed", try val.from(a, .{ .chatId = try r.str(chat.get("_id")), .requests = relevant }));
     }
@@ -289,7 +289,7 @@ pub fn myChatKeys(r: *Rq, chat: Val, user: Val) !Val {
     const a = r.a;
     const rows = try col().chatKeys.find(a, .{ .chatId = chat.get("_id"), .userId = user.get("_id") }, .{ .sort = .{ .epoch = 1 } });
     var out = try Val.array(a);
-    for (rows) |x| try out.push(a, try val.from(a, .{ .epoch = x.get("epoch"), .eph = x.get("eph"), .iv = x.get("iv"), .ct = x.get("ct"), .sig = x.get("sig"), .by = try r.str(x.get("by")), .byVersion = if (x.get("byVersion").truthy()) x.get("byVersion") else Val.n(1), .createdAt = x.get("createdAt") }));
+    for (rows) |x| try out.push(try val.from(a, .{ .epoch = x.get("epoch"), .eph = x.get("eph"), .iv = x.get("iv"), .ct = x.get("ct"), .sig = x.get("sig"), .by = try r.str(x.get("by")), .byVersion = if (x.get("byVersion").truthy()) x.get("byVersion") else Val.number(1), .createdAt = x.get("createdAt") }));
     return out;
 }
 
@@ -405,7 +405,7 @@ pub fn pendingRequests(r: *Rq, user: Val) !Val {
         for (mine) |k| if (val.same(k.get("chatId"), q.get("chatId")) and (k.get("epoch").asNum() orelse -1) == (q.get("epoch").asNum() orelse -2)) {
             has = true;
         };
-        if (has) try out.push(a, try val.from(a, .{ .chatId = try r.str(q.get("chatId")), .userId = try r.str(q.get("userId")), .epoch = q.get("epoch") }));
+        if (has) try out.push(try val.from(a, .{ .chatId = try r.str(q.get("chatId")), .userId = try r.str(q.get("userId")), .epoch = q.get("epoch") }));
     }
     return out;
 }
@@ -417,7 +417,7 @@ pub fn publicKeys(r: *Rq, user_ids: []const Val) !Val {
     var out = try Val.array(a);
     for (users) |u| {
         const k = u.get("keys");
-        try out.push(a, try val.from(a, .{
+        try out.push(try val.from(a, .{
             .userId = try r.str(u.get("_id")),
             .enc = if (k.get("enc").truthy()) k.get("enc") else Val.null,
             .sig = if (k.get("sig").truthy()) k.get("sig") else Val.null,
