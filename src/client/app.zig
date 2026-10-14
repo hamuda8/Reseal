@@ -30,6 +30,7 @@ pub const bots = @import("bots.zig");
 pub const dev = @import("dev.zig");
 pub const stories = @import("stories.zig");
 pub const voice = @import("voice.zig");
+const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
 
@@ -355,6 +356,8 @@ pub const Msg = union(enum) {
 
     // Embed
     embed_open: EmbedTarget,
+    /// Push: a token, a push's data (push.zig).
+    push: push_mod.Event,
 };
 
 pub const Filter = union(enum) { all, unread, people, groups, channels, ai, folder: Id };
@@ -379,6 +382,10 @@ fn onSocket(e: zui.SocketEvent) Msg {
 pub fn callEvent(e: zui.CallEvent) ?Msg {
     return .{ .call_event = .{ .kind = e.kind, .id = Id.of(e.id) } };
 }
+
+/// Push (push.zig): a call rings the phone at once, also when the app was not running.
+pub const pushToken = push_mod.pushToken;
+pub const pushMessage = push_mod.pushMessage;
 
 /// The device came online or went offline, or the app was shown or hidden.
 pub fn deviceEvent(e: zui.DeviceEvent) ?Msg {
@@ -730,6 +737,7 @@ fn handle(s: *State, msg: Msg) void {
         },
         .socket => |ev| onSocketEvent(s, ev),
         .host => |json| onHost(s, json),
+        .push => |e| push_mod.update(s, e),
         .reconnect => |attempt| if (attempt == s.ws.attempt and s.ws.socket == 0 and !s.ws.stopped) connect(s),
         .tick => {
             fx.after(30_000, .tick);
@@ -950,6 +958,7 @@ pub fn keysReady(s: *State) void {
     api(s, .GET, "/folders", null, .folders);
     stories.load(s);
     connect(s);
+    push_mod.register();
     // Web Push (the shell subscribes this browser once notifications are allowed).
     if (zui.platform == .web and s.mode == .app) if (s.store.config) |cfg| if (cfg.s("push.vapidPublicKey")) |k|
         post(std.fmt.allocPrint(tmp(), "{{\"t\":\"push\",\"key\":{s}}}", .{j.quote(tmp(), k) catch return}) catch return);

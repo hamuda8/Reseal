@@ -44,6 +44,10 @@
             <intent-filter><action android:name="android.telecom.ConnectionService" /></intent-filter>
         </service>
         <receiver android:name="com.wufour.zui.ZuiCallReceiver" android:exported="false" />
+        <!-- Push (FCM): calls ring and messages arrive while the app is closed (zui ZuiPush). -->
+        <service android:name="com.wufour.zui.ZuiPush" android:exported="false">
+            <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
+        </service>
 
         <!-- Home-screen widget: who has unread messages (names only, never message text). -->
         <receiver android:name="com.wufour.zui.ZuiWidget" android:exported="false">

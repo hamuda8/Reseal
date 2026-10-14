@@ -26,6 +26,8 @@ pub fn build(b: *std.Build) void {
         .ios_info_plist = b.path("shells/ios/Info.plist"),
         // The unread-chats widget on iOS too (WidgetKit, through the app group group.<bundle id>).
         .ios_widget = true,
+        // FCM: google-services.json stays outside the repository (C:/MProjects/secrets).
+        .android_push = .{ .google_services = "../secrets/reseal-google-services.json" },
         .optimize = b.standardOptimizeOption(.{}),
     });
 }
