@@ -604,3 +604,18 @@ test "assistant chat: greeting and conversation starters" {
     try D.press("Plan a weekend");
     try testing.expect(std.mem.indexOf(u8, lastPost("/chats/b1/messages"), "Plan a weekend") != null);
 }
+
+test "a reminder that comes due shows a toast with Open" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try bootAsBob(a);
+    defer D.reset();
+    const me = j.str(vec(a), "bobId").?;
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}},{\"id\":\"s1\",\"type\":\"saved\",\"primary\":true,\"title\":\"Saved Messages\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    const ev = try std.fmt.allocPrint(a, "{{\"t\":\"message\",\"d\":{{\"id\":\"r1\",\"chatId\":\"s1\",\"seq\":3,\"senderId\":\"{s}\",\"authorId\":\"{s}\",\"kind\":\"message\",\"text\":\"Call the bank\",\"reminder\":true,\"createdAt\":\"2026-10-12T15:00:00Z\"}}}}", .{ me, me });
+    D.R.dispatch(.{ .socket = .{ .kind = .message, .socket = state().ws.socket, .data = ev } });
+    try testing.expectEqualStrings("Reminder: Call the bank", state().toast.text.get());
+    try D.press("Open");
+    try testing.expect(state().open_chat.eql("s1"));
+}

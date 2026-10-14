@@ -276,7 +276,19 @@ pub fn onEvent(s: *State, typ: []const u8, d: j.Value) void {
     if (eq(typ, "message.edit")) return onEdit(s, d);
     if (eq(typ, "message.stream")) return onStream(s, d);
     if (eq(typ, "message.delete")) return onDelete(s, d);
-    if (eq(typ, "message.reactions")) return patchMessage(s, chat_id, j.strOr(d, "id", ""), "reactions", j.field(d, "reactions"));
+    if (eq(typ, "message.reactions")) {
+        patchMessage(s, chat_id, j.strOr(d, "id", ""), "reactions", j.field(d, "reactions"));
+        // Someone reacted to my message.
+        const actor = j.strOr(d, "actorId", "");
+        if (j.truthy(d, "on") and s.store.isMe(j.strOr(d, "authorId", "")) and !s.store.isMe(actor)) if (s.store.chat(chat_id)) |c| if (!c.isMuted()) {
+            notifyText(s, c, s.store.title(c), fmt.tf("{name} reacted {emoji} to your message", .{ .name = s.store.displayName(actor), .emoji = j.strOr(d, "emoji", "") }));
+        };
+        return;
+    }
+    if (eq(typ, "support.handoff")) {
+        if (s.store.chat(chat_id)) |c| notifyText(s, c, s.store.title(c), t("A visitor asked to talk to a person"));
+        return;
+    }
     if (eq(typ, "message.poll")) return patchMessage(s, chat_id, j.strOr(d, "id", ""), "poll", j.field(d, "poll"));
     if (eq(typ, "chat.new") or eq(typ, "chat.update")) {
         const c = s.store.putChat(d) catch return;
@@ -428,6 +440,13 @@ fn onMessage(s: *State, raw: j.Value) void {
     if (m.senderId().len > 0) stopTyping(s, chat_id, m.senderId());
 
     if (!mine and !j.truthy(raw, "silent") and service_notify) notify(s, c, m, open_visible);
+    // A reminder I set in a saved chat came due.
+    if (mine and j.truthy(raw, "reminder") and !open_visible) {
+        const summary = text.summary(s, m, true);
+        const locked = c.meBool("locked");
+        notifyText(s, c, fmt.tf("Reminder: {name}", .{ .name = s.store.title(c) }), if (locked) t("New message") else summary);
+        if (s.visible) @import("listextras.zig").toastOpen(s, if (locked) t("Reminder") else std.fmt.allocPrint(tmp(), "{s}: {s}", .{ t("Reminder"), summary }) catch t("Reminder"), Id.of(chat_id));
+    }
 
     if (s.store.existingTimeline(chat_id)) |tl| {
         // Our own message sent from this device: replace the pending copy.
@@ -519,6 +538,14 @@ fn notify(s: *State, c: *data.Chat, m: *data.Message, open_visible: bool) void {
     } else if (!s.prefs.previews) body = t("New message");
     app.fx.notify(.{ .id = notifyId(c.id()), .title = title, .body = body });
     _ = a;
+}
+
+/// A notification that is not a new message (a reaction, a reminder, a visitor's request).
+fn notifyText(s: *State, c: *data.Chat, title: []const u8, body: []const u8) void {
+    if (!s.prefs.notifications) return;
+    if (zui.platform == .web and s.visible) return;
+    const locked = c.meBool("locked");
+    app.fx.notify(.{ .id = notifyId(c.id()), .title = if (locked) "Reseal" else title, .body = if (locked or !s.prefs.previews) t("New message") else body });
 }
 
 fn notifyId(chat: []const u8) u32 {

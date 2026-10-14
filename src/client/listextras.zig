@@ -23,12 +23,16 @@ pub const ListExtras = struct {
     /// The chat the toast's Undo unarchives.
     undo_archive: Id = .{},
     undo_toast: u32 = 0,
+    /// The chat the toast's Open opens (a reminder).
+    open_chat: Id = .{},
+    open_toast: u32 = 0,
 };
 
 pub const Act = union(enum) {
     chip_menu: app.Filter,
     mark_all_read,
     undo_archive,
+    open_toast_chat,
 };
 
 pub fn chipMsg(f: app.Filter) Msg {
@@ -44,6 +48,12 @@ pub fn act(s: *State, a: Act) void {
         .mark_all_read => {
             s.modal = null;
             markAllRead(s, s.listx.chip);
+        },
+        .open_toast_chat => {
+            const chat = s.listx.open_chat;
+            s.listx.open_chat = .{};
+            s.toast.text.clear();
+            if (chat.isSet()) views.openChat(s, chat.str());
         },
         .undo_archive => {
             const chat = s.listx.undo_archive;
@@ -61,9 +71,17 @@ pub fn archived(s: *State, chat: Id) void {
     s.listx.undo_toast = s.toast.id;
 }
 
+/// A toast with Open (a reminder that came due).
+pub fn toastOpen(s: *State, text: []const u8, chat: Id) void {
+    app.toast(s, text);
+    s.listx.open_chat = chat;
+    s.listx.open_toast = s.toast.id;
+}
+
 /// The toast's action, when it has one.
 pub fn toastAction(s: *const State) ?struct { label: []const u8, msg: Msg } {
     if (s.listx.undo_archive.isSet() and s.listx.undo_toast == s.toast.id) return .{ .label = t("Undo"), .msg = .{ .list_extras = .undo_archive } };
+    if (s.listx.open_chat.isSet() and s.listx.open_toast == s.toast.id) return .{ .label = t("Open"), .msg = .{ .list_extras = .open_toast_chat } };
     return null;
 }
 
