@@ -208,7 +208,9 @@ try {
     await a.clickText('Bob Haddad');
     await a.waitText('soften the shadows');
     // The call button is the first icon of the header actions.
-    const p = await a.evaluate(`(() => { const btns = [...document.querySelectorAll('[role=button]')].filter(b => { const r = b.getBoundingClientRect(); return r.y < 70 && r.x > 900; }); const r = btns[0].getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+    let p = null;
+    for (let i = 0; i < 20 && !p; i++) { p = await a.evaluate(`(() => { let btns = [...document.querySelectorAll('[role=button]')].filter(b => { const r = b.getBoundingClientRect(); return r.y < 70 && r.x > 900; }); if (!btns.length) { btns = [...document.querySelectorAll('[role=button]')].filter(b => { const r = b.getBoundingClientRect(); return r.y < 70 && r.x < 400; }).sort((x, y) => y.getBoundingClientRect().x - x.getBoundingClientRect().x); } if (!btns.length) return null; const r = btns[0].getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`); if (!p) await sleep(250); }
+    if (!p) await a.shot('70-call-no-header');
     await a.click(p[0], p[1]);
     check('call: ringing on the caller', await a.waitText('Ringing', 8000));
     check('call: incoming on the callee', await b.waitText('Incoming voice call', 8000));
@@ -275,7 +277,7 @@ chat.on('unread', n => { window.__unread = n; });</script></body></html>`;
       const child = tree.result?.frameTree?.childFrames?.[0]?.frame;
       if (!child) return [];
       const world = await t.send('Page.createIsolatedWorld', { frameId: child.id });
-      const r = await t.send('Runtime.evaluate', { contextId: world.result.executionContextId, expression: `[...document.querySelectorAll('div')].filter(d => d.childElementCount === 0 && d.textContent).map(d => d.textContent)`, returnByValue: true });
+      const r = await t.send('Runtime.evaluate', { contextId: world.result.executionContextId, expression: `[...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent).map(d => d.textContent)`, returnByValue: true });
       return r.result?.result?.value || [];
     };
     let ok = false;

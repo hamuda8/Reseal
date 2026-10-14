@@ -34,6 +34,10 @@ const Job = struct { body: []u8, then: union(enum) { api: struct { method: zui.M
 
 pub const Keys = struct {
     identity: ?Mine = null,
+    /// The check that zui.keys still holds my private key (the web's IndexedDB can be cleared
+    /// while localStorage keeps the public half).
+    probe: u32 = 0,
+    recovering: bool = false,
     /// Signatures that arrived (request id -> base64), until their bodies leave.
     sigs: std.AutoHashMapUnmanaged(u32, []u8) = .empty,
     jobs: std.ArrayList(Job) = .empty,
@@ -140,6 +144,24 @@ fn clearChatKeys(s: *State) void {
     while (ci.next()) |c| c.*.keys_fetched = false;
 }
 
+/// This device lost its private keys (the browser cleared its storage) while the public ones
+/// remain: get them back as at sign-in, from the automatic backup or with the passcode.
+fn recover(s: *State) void {
+    if (s.keys.recovering) return;
+    s.keys.recovering = true;
+    zui.log("zui.keys lost the private keys: restoring them", .{});
+    zui.storage.remove(publicKey(s), .{});
+    s.keys.identity = null;
+    clearChatKeys(s);
+    const me = s.store.me orelse return;
+    if (std.mem.eql(u8, me.s("keyMode") orelse "", "standard") or s.mode == .embed) {
+        app.api(s, .POST, "/keys/restore", "{}", .keys_restore);
+    } else {
+        s.keys.recovering = false;
+        s.phase = .locked;
+    }
+}
+
 /// Sign out: forget this device's keys.
 pub fn forgetDevice(s: *State) void {
     if (myId(s).len > 0) {
@@ -171,6 +193,7 @@ pub fn ensureKeys(s: *State) void {
             const g = crypto.fromB64(tmp(), sig_b64) catch "";
             if (e.len == 65 and g.len == 65) {
                 s.keys.identity = .{ .enc_public = e[0..65].*, .sig_public = g[0..65].* };
+                s.keys.probe = app.fx.key(.{ .op = .public, .name = keyName(s, "enc") }, onKeyMsg);
                 return app.keysReady(s);
             }
         }
@@ -311,6 +334,10 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
             adopt(s, b.enc, b.sig, "standard");
             app.keysReady(s);
             fulfillPending(s);
+            if (s.keys.recovering) {
+                s.keys.recovering = false;
+                app.toast(s, t("Your encryption keys were restored on this device."));
+            }
         },
         .keys_backup_unlock => {
             s.busy = false;
@@ -1036,6 +1063,12 @@ fn unwrap(s: *State, w: crypto.Wrap, chat: []const u8, epoch: i64, wrapper_sig: 
 
 /// An answer from zui.keys: a signature, or an unwrapped chat key.
 pub fn onKey(s: *State, r: zui.keys.Result) void {
+    if (r.id == s.keys.probe and s.keys.probe != 0) {
+        s.keys.probe = 0;
+        if (r.status == .missing) recover(s);
+        return;
+    }
+    if (r.status == .missing) recover(s);
     if (s.keys.unwraps.fetchRemove(r.id)) |kv| {
         const chat = kv.value.chat.str();
         if (r.ok() and r.data.len == 32) remember(s, chat, kv.value.epoch, r.data[0..32].*) else zui.log("Could not unwrap key {s}#{d}", .{ chat, kv.value.epoch });

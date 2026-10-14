@@ -392,3 +392,33 @@ test "voice message: record, upload, send with duration and waveform" {
     try testing.expect(std.mem.indexOf(u8, body, "\"duration\":2.5") != null);
     try testing.expect(std.mem.indexOf(u8, body, "\"waveform\":\"") != null);
 }
+
+test "keys: private keys gone from this device, public ones kept: restored from the backup" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const v = vec(a);
+    const bob = j.obj(v, "bob").?;
+    const bob_id = j.str(v, "bobId").?;
+    sys.setClock(sys.parseIso("2026-10-12T15:00:00Z").?, 0);
+    zui.storage.set("token", "tok_bob", .{ .secure = true });
+    // The public half survived (localStorage); zui.keys has no private key under that name.
+    zui.storage.remove(try std.fmt.allocPrint(a, "zui.key.reseal:{s}:enc", .{bob_id}), .{ .secure = true });
+    zui.storage.remove(try std.fmt.allocPrint(a, "zui.key.reseal:{s}:sig", .{bob_id}), .{ .secure = true });
+    zui.storage.set(try std.fmt.allocPrint(a, "identity-public:{s}", .{bob_id}), try std.fmt.allocPrint(a, "{s} {s}", .{ j.str(bob, "encPublic").?, j.str(bob, "sigPublic").? }), .{});
+    D.start(1280, 800);
+    defer D.reset();
+    try testing.expect(D.respond("/api/config", 200, "{\"version\":\"test\"}"));
+    const me = try std.fmt.allocPrint(a, "{{\"user\":{{\"id\":\"{s}\",\"displayName\":\"Bob Haddad\",\"hasKeys\":true,\"keyMode\":\"standard\",\"keys\":{{\"enc\":\"{s}\",\"sig\":\"{s}\"}}}}}}", .{ bob_id, j.str(bob, "encPublic").?, j.str(bob, "sigPublic").? });
+    try testing.expect(D.respond("/api/me", 200, me));
+    try testing.expectEqual(app.Phase.ready, state().phase);
+    // The probe (answered after the update) found nothing: the automatic backup is asked for again.
+    // Only the timers set so far (the app re-arms its own ticks).
+    const n = host.timers.items.len;
+    for (0..n) |_| {
+        const tm = host.timers.orderedRemove(0);
+        D.R.timerDone(tm.id);
+    }
+    try testing.expect(D.pending("/api/keys/restore") != null);
+    try testing.expect(state().keys.recovering);
+}

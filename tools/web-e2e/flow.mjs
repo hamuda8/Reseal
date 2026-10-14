@@ -62,11 +62,11 @@ const click = async (x, y) => {
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
 };
-const texts = () => evaluate(`[...document.querySelectorAll('div')].filter(d => d.childElementCount === 0 && d.textContent).map(d => d.textContent)`);
+const texts = () => evaluate(`[...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent).map(d => d.textContent)`);
 const hasText = async (t) => (await texts())?.some(x => x.includes(t));
 const waitText = async (t, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await hasText(t)) return true; await sleep(250); } return false; };
 const clickText = async (label) => {
-  const p = await evaluate(`(() => { const el = [...document.querySelectorAll('div')].find(d => d.childElementCount === 0 && d.textContent === ${JSON.stringify(label)}); if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+  const p = await evaluate(`(() => { const el = [...document.querySelectorAll('div')].find(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === ${JSON.stringify(label)}); if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
   if (!p) throw new Error('no text ' + label);
   await click(p[0], p[1]);
   await sleep(500);

@@ -48,7 +48,7 @@ await b.waitText('Alice Carter');
 // A tap on a message's bubble (the text's box).
 const tapMessage = async (t, text) => {
   // The bubble in the message list (the chat list may show the same words first).
-  const p = await t.evaluate(`(() => { const els = [...document.querySelectorAll('div')].filter(d => d.childElementCount === 0 && d.textContent.includes(${JSON.stringify(text)}) && d.getBoundingClientRect().x > 470); const el = els[els.length - 1]; if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+  const p = await t.evaluate(`(() => { const els = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent.includes(${JSON.stringify(text)}) && d.getBoundingClientRect().x > 470); const el = els[0]; if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
   if (!p) throw new Error('no bubble ' + text);
   await t.click(p[0], p[1]);
   await sleep(500);
@@ -145,7 +145,8 @@ try {
     // The attach button is left of the composer.
     const p = await a.evaluate(`(() => { const i = [...document.querySelectorAll('input')].find(x => x.placeholder === 'Message'); const r = i.getBoundingClientRect(); return [r.x - 50, r.y + r.height / 2]; })()`);
     await a.click(p[0], p[1]);
-    await sleep(800);
+    await sleep(500);
+    await a.clickText('Photo or video');
     const opened = await a.waitEvent('Page.fileChooserOpened', 5000);
     check('attach opens the file chooser', Boolean(opened));
     if (opened) await a.send('DOM.setFileInputFiles', { files: [file], backendNodeId: opened.params.backendNodeId });
@@ -169,10 +170,10 @@ try {
       }
       check('crypto.js decrypts the file to the same bytes', Buffer.concat(parts).equals(png));
     }
-    // Bob's Zig client shows it (downloaded and decrypted into a data: address).
+    // Bob's Zig client shows it (downloaded and decrypted; drawn from its bytes).
     await b.clickText('Alice Carter');
     let shown = false;
-    for (let i = 0; i < 40 && !shown; i++) { shown = await b.evaluate(`[...document.querySelectorAll('img')].some(i => i.src.startsWith('data:image/png;base64,') && i.naturalWidth === 64)`); if (!shown) await sleep(250); }
+    for (let i = 0; i < 40 && !shown; i++) { shown = await b.evaluate(`[...document.querySelectorAll('img')].some(i => (i.src.startsWith('data:image/png') || i.src.startsWith('blob:')) && i.naturalWidth === 64)`); if (!shown) await sleep(250); }
     check('Bob\'s client decrypts and shows the picture', shown);
     await b.shot('110-picture');
   }

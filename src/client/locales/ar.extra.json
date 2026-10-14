@@ -112,5 +112,6 @@
   "Waiting for this message's key. It opens when someone in the chat is online.": "بانتظار مفتاح هذه الرسالة. ستُفتح عندما يكون أحد أعضاء المحادثة متصلًا.",
   "When online": "عند الاتصال",
   "Year-month-day hours:minutes, your local time": "سنة-شهر-يوم ساعات:دقائق، بتوقيتك المحلي",
-  "You are offline.": "أنت غير متصل."
+  "You are offline.": "أنت غير متصل.",
+  "Your encryption keys were restored on this device.": "استُعيدت مفاتيح التشفير على هذا الجهاز."
 }
