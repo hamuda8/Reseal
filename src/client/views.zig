@@ -1237,6 +1237,7 @@ fn modal(cx: Cx) void {
         .story_kind => @import("stories.zig").kindSheet(cx),
         .common_groups => @import("userinfo.zig").commonSheet(cx),
         .poll_voters => @import("pollx.zig").votersSheet(cx),
+        .attach_preview => @import("attachx.zig").sheet(cx),
         .story_compose => @import("stories.zig").composer(cx),
         .story_people => @import("stories.zig").peopleSheet(cx),
         .story_list => @import("stories.zig").listSheet(cx),

@@ -69,6 +69,8 @@ pub const Compose = struct {
     preview_dismissed: app.Text = .{},
     preview_seq: u32 = 0,
     locating: bool = false,
+    /// The picker was opened for a file (sent as a file, not compressed).
+    picking_file: bool = false,
     scheduled: ?*data.Obj = null,
     /// Recently used emoji (newest first), kept on the device.
     recent: std.ArrayList([]u8) = .empty,
@@ -215,20 +217,29 @@ pub fn act(s: *State, a: Act) void {
         .preview_due => |seq| if (seq == c.preview_seq) fetchPreview(s),
         // The web shell's picker also makes a tiny preview for the receivers' placeholders.
         .pick_media => {
-            s.modal = null;
+            keepAttach(s);
+            c.picking_file = false;
             if (zui.platform == .web) app.post("{\"t\":\"pick\",\"accept\":\"image/*,video/*\"}") else app.fx.pickPhoto(.{ .max_size = 2560, .quality = 85 }, onPicked);
         },
         .take_photo => {
-            s.modal = null;
+            keepAttach(s);
+            c.picking_file = false;
             app.fx.pickPhoto(.{ .camera = true, .max_size = 2560, .quality = 85 }, onPicked);
         },
         .pick_file => {
-            s.modal = null;
+            keepAttach(s);
+            c.picking_file = true;
             if (zui.platform == .web) app.post("{\"t\":\"pick\"}") else app.fx.pickFile(.{}, onPicked);
         },
         .scheduled_send => |id| app.api(s, .POST, std.fmt.allocPrint(tmp(), "/chats/{s}/messages/scheduled/{s}/send", .{ s.open_chat.str(), id.str() }) catch return, "{}", .scheduled_changed),
         .scheduled_delete => |id| app.api(s, .POST, std.fmt.allocPrint(tmp(), "/chats/{s}/messages/delete", .{s.open_chat.str()}) catch return, std.fmt.allocPrint(tmp(), "{{\"ids\":[\"{s}\"],\"forEveryone\":true}}", .{id.str()}) catch return, .scheduled_changed),
     }
+}
+
+/// The attach sheet stays open while more is picked; other sheets close.
+fn keepAttach(s: *State) void {
+    if (s.modal) |m| if (m == .attach_preview) return;
+    s.modal = null;
 }
 
 /// A position for "Location" arrived (or not): send it once.

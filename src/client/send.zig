@@ -502,7 +502,8 @@ pub fn edit(s: *State, chat_id: []const u8, msg_id: []const u8, text: []const u8
 pub fn onPickedFile(s: *State, v: j.Value) void {
     if (!s.open_chat.isSet()) return;
     const bytes = crypto.fromB64(gpa, j.strOr(v, "data", "")) catch return app.toastError(s, t("Could not read that file"));
-    attach(s, bytes, .{
+    // It waits in the attach sheet (caption, compression, spoiler) until sent.
+    @import("attachx.zig").stage(s, bytes, .{
         .name = j.strOr(v, "name", "file"),
         .mime = j.strOr(v, "type", "application/octet-stream"),
         .thumb = j.str(v, "thumb"),
@@ -510,20 +511,30 @@ pub fn onPickedFile(s: *State, v: j.Value) void {
         .h = j.int(v, "h"),
         .duration = j.float(v, "duration"),
         .encrypted = false,
-    });
+    }, s.compose.picking_file);
 }
 
 /// A photo or file zui's picker gave (phones): its bytes are only valid now, so copied.
 pub fn onPicked(s: *State, f: zui.File) void {
     if (!s.open_chat.isSet()) return;
     const bytes = gpa.dupe(u8, f.data) catch return app.toastError(s, t("Could not read that file"));
-    attach(s, bytes, .{
+    @import("attachx.zig").stage(s, bytes, .{
         .name = if (f.name.len > 0) f.name else "photo.jpg",
         .mime = if (f.mime.len > 0) f.mime else "application/octet-stream",
         .w = if (f.width > 0) @as(i64, f.width) else null,
         .h = if (f.height > 0) @as(i64, f.height) else null,
         .encrypted = false,
-    });
+    }, s.compose.picking_file);
+}
+
+/// One more file in the message `local` (queued, not sent yet): its bytes (owned) upload first.
+pub fn attachTo(s: *State, local: u32, bytes: []u8, meta: media.Meta) void {
+    const o = find(s, local) orelse {
+        gpa.free(bytes);
+        return;
+    };
+    const up = media.startUpload(s, local, bytes, meta) orelse return;
+    o.uploads.append(gpa, up) catch {};
 }
 
 /// Sends `bytes` (owned) as a new message's attachment in the open chat.

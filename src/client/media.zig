@@ -36,6 +36,8 @@ pub const Meta = struct {
     kind: ?[]const u8 = null,
     /// A voice message's 48 bars (base64).
     waveform: ?[]const u8 = null,
+    /// Covered until tapped ("Hide with spoiler").
+    spoiler: bool = false,
 };
 
 const Upload = struct {
@@ -101,6 +103,7 @@ pub fn startUpload(s: *State, local: u32, bytes: []u8, meta: Meta) ?u32 {
     if (meta.duration) |d| mj.print(a, ",\"duration\":{d}", .{d}) catch {};
     if (meta.thumb) |th| mj.print(a, ",\"thumb\":{s}", .{j.quote(a, th) catch "\"\""}) catch {};
     if (meta.waveform) |wf| mj.print(a, ",\"waveform\":{s}", .{j.quote(a, wf) catch "\"\""}) catch {};
+    if (meta.spoiler) mj.appendSlice(a, ",\"spoiler\":true") catch {};
     const id = s.files.next_upload;
     s.files.next_upload += 1;
     s.files.uploads.append(gpa, .{

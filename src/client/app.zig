@@ -40,6 +40,7 @@ pub const userinfo = @import("userinfo.zig");
 pub const sharedmedia = @import("sharedmedia.zig");
 pub const pollx = @import("pollx.zig");
 pub const viewerx = @import("viewerx.zig");
+pub const attachx = @import("attachx.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -155,6 +156,7 @@ pub const Field = enum {
     model_search,
     dev_app_name,
     forward_search,
+    attach_caption,
     dev_origins,
     dev_storage_url,
     dev_webhook_url,
@@ -247,6 +249,7 @@ pub const Modal = union(enum) {
     story_kind,
     common_groups,
     poll_voters,
+    attach_preview,
     story_compose,
     story_people,
     story_list,
@@ -335,6 +338,7 @@ pub const Msg = union(enum) {
     shared: sharedmedia.Act,
     poll: pollx.Act,
     viewer_x: viewerx.Act,
+    attach_x: attachx.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -540,6 +544,7 @@ pub const State = struct {
     common: ?*data.Obj = null,
     shared: sharedmedia.Shared = .{},
     polls: pollx.Polls = .{},
+    attach: attachx.Attach = .{},
     /// Messages whose spoilers were shown.
     revealed: std.ArrayList(Id) = .empty,
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
@@ -816,6 +821,7 @@ fn handle(s: *State, msg: Msg) void {
         .shared => |a| sharedmedia.act(s, a),
         .poll => |a| pollx.act(s, a),
         .viewer_x => |a| viewerx.act(s, a),
+        .attach_x => |a| attachx.act(s, a),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),

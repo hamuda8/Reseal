@@ -617,6 +617,13 @@ fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out:
             } else if (f) |file| {
                 if (file.state == .ready) media.draw(ui, file, j.strOr(item, "id", ""), .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "full", j.strOr(item, "id", "") }));
             }
+            // Hidden with a spoiler: covered until tapped.
+            if (j.truthy(item, "spoiler") and !s.isRevealed(m.id())) {
+                ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h }, .background = col.surface_3, .align_items = .center, .justify = .center, .gap = 6 }, .{ .on_press = if (m.local_id == 0) Msg{ .message_action = .{ .what = .reveal, .msg = Id.of(m.id()) } } else null, .key = key(.{ "spl", j.strOr(item, "id", ""), i }) });
+                ui.icon(icons.eyeOff, 26, col.text_2, .{}, 0);
+                ui.text(t("Spoiler"), .{ .font_size = 13, .weight = 650, .color = col.text_2 });
+                ui.end();
+            }
             if (m.local_id != 0 and m.state == .sending) {
                 ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1480"), .align_items = .center, .justify = .center }, .{});
                 ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{@as(u32, @intFromFloat(m.progress * 100))}) catch "", .{ .font_size = 12, .weight = 700, .color = Color.white });

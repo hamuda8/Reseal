@@ -619,3 +619,25 @@ test "a reminder that comes due shows a toast with Open" {
     try D.press("Open");
     try testing.expect(state().open_chat.eql("s1"));
 }
+
+test "attach: the picked photo waits in a sheet with a caption and a spoiler, then uploads" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/chats/g1/messages", 200, "{\"messages\":[],\"floor\":0}"));
+    try D.typeInto("Message", "the view");
+    D.R.dispatch(.{ .compose = .pick_media });
+    D.giveFile(.{ .data = "\x89PNG fake", .name = "view.png", .mime = "image/png", .width = 40, .height = 30 });
+    try testing.expect(D.findText("Send photo") != 0);
+    try testing.expectEqualStrings("the view", state().fields.get(.attach_caption).get());
+    D.R.dispatch(.{ .attach_x = .spoiler });
+    D.R.dispatch(.{ .attach_x = .send });
+    try testing.expect(state().modal == null);
+    try testing.expectEqual(@as(usize, 0), state().attach.items.items.len);
+    try testing.expectEqualStrings("", state().fields.get(.composer).get());
+    try testing.expect(std.mem.indexOf(u8, lastPost("/api/media"), "\"name\":\"view.png\"") != null);
+    try testing.expect(std.mem.indexOf(u8, state().files.uploads.items[0].meta_json, "\"spoiler\":true") != null);
+}
