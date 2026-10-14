@@ -30,4 +30,19 @@ pub fn build(b: *std.Build) void {
         .android_push = .{ .google_services = "../secrets/reseal-google-services.json" },
         .optimize = b.standardOptimizeOption(.{}),
     });
+    // The npm scripts of the Node version, one command each (tools/run.ps1 does the builds):
+    //   zig build local        this machine, with ../Reseal-js/.env.local, in this window
+    //   zig build staging      reseal.wreseal.com, with ../Reseal-js/.env.staging, in the background
+    //   zig build production   the Linux server and pages for Proxmox, in zig-out/production
+    for ([_][2][]const u8{
+        .{ "local", "Build and run on this machine (like npm run local)" },
+        .{ "staging", "Build and start staging in the background (like npm run staging)" },
+        .{ "production", "Build the Linux server and pages for Proxmox into zig-out/production" },
+    }) |m| {
+        const run = b.addSystemCommand(&.{ "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File" });
+        run.addFileArg(b.path("tools/run.ps1"));
+        run.addArgs(&.{ "-Mode", m[0], "-Zig", b.graph.zig_exe });
+        run.has_side_effects = true;
+        b.step(m[0], m[1]).dependOn(&run.step);
+    }
 }
