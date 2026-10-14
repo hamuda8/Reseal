@@ -486,7 +486,13 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
         if (media_items.len > 0) mediaBlock(cx, m, media_items, max_w, out);
         if (j.obj(m.content, "poll")) |p| pollBlock(cx, m, p, fg);
         if (j.obj(m.content, "location")) |loc| card(cx, icons.location, j.str(loc, "title") orelse t("Location"), j.str(loc, "address") orelse std.fmt.allocPrint(a, "{d:.5}, {d:.5}", .{ j.floatOr(loc, "lat", 0), j.floatOr(loc, "lng", 0) }) catch "", fg);
-        if (j.obj(m.content, "contact")) |ct| card(cx, icons.user, j.strOr(ct, "name", ""), j.str(ct, "phone") orelse "", fg);
+        if (j.obj(m.content, "contact")) |ct| {
+            // A tap opens their profile (contactCard).
+            const uid = j.str(ct, "userId");
+            ui.begin(.{}, .{ .on_press = if (uid) |u| (if (s.store.isMe(u)) null else Msg{ .open_user = Id.of(u) }) else null, .key = key(.{ "contact", m.id() }) });
+            card(cx, icons.user, j.strOr(ct, "name", ""), j.str(ct, "phone") orelse if (j.str(ct, "username")) |un| (std.fmt.allocPrint(a, "@{s}", .{un}) catch "") else "", fg);
+            ui.end();
+        }
         if (j.obj(m.content, "sticker")) |st| ui.text(j.strOr(st, "emoji", ""), .{ .font_size = 96, .line_height = 1.1 });
         const txt = m.text();
         if (txt.len > 0) {

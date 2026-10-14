@@ -84,7 +84,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Round video bubble
 - [x] Polls (tap to vote, several answers + Vote, results, quiz marks, View votes, explanation)
 - [x] Location card (opens Wufour Maps), link preview card, sticker, big emoji
-- [ ] M25 Contact card: tap opens the profile
+- [x] M25 Contact card: tap opens the profile
 - [x] Decrypt states, Deleted message, Unverified sender, Not sent + Retry/Delete
 - [x] Reactions row (tap toggles), service messages, selection mark
 - [~] Reaction chips show counts, not reactor avatars and hover names (no hover tooltips in zui)

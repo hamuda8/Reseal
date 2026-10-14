@@ -852,3 +852,15 @@ test "web push prompt: the shell asks, the toast's Turn on tells it to" {
     try D.press("Turn on");
     try testing.expect(std.mem.indexOf(u8, host.posted.items, "push-allow") != null);
 }
+
+test "a shared contact opens their profile" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"contact\":{\"name\":\"Dana Saleh\",\"userId\":\"u42\",\"username\":\"dana\"},\"createdAt\":\"2026-10-12T14:00:00Z\"}],\"floor\":0}"));
+    try D.press("Dana Saleh");
+    try testing.expect(state().user_info.eql("u42"));
+}
