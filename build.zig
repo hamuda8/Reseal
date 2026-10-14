@@ -45,4 +45,5 @@ pub fn build(b: *std.Build) void {
         run.has_side_effects = true;
         b.step(m[0], m[1]).dependOn(&run.step);
     }
+    b.step("dev", "Same as zig build local (like npm run dev)").dependOn(&b.top_level_steps.get("local").?.step);
 }

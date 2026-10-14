@@ -66,22 +66,15 @@ first of `.env.local`, `.env.production`, `.env`.
 
 | Command | Like | What it does |
 |---|---|---|
-|  |  | builds, then runs on this machine in the window, with  (Ctrl+C stops it) |
-|  |  | builds, then (re)starts reseal.wreseal.com in the background with ; logs in  |
-|  | Unknown command: "start"
+| `zig build dev` (or `local`) | `npm run dev` | builds, then runs on this machine in the window, with `../Reseal-js/.env.local` (Ctrl+C stops it) |
+| `zig build staging` | `npm run staging` | builds, then (re)starts reseal.wreseal.com in the background with `../Reseal-js/.env.staging`; logs in `zig-out/staging` |
+| `zig build production` | `npm start` | builds the Linux server and pages into `zig-out/production` and prints how to run them on Proxmox with `.env.production` |
 
+All three run `tools/run.ps1` (`powershell -File tools\run.ps1 -Mode local|staging|production` does the same).
+Staging runs behind Cloudflare Tunnel on this laptop and does not survive a restart: run
+`zig build staging` again after one. Roll back to Node: stop `reseal-server.exe` and run
+`npm run staging` in Reseal-js.
 
-Did you mean one of these?
-  npm star # Mark your favorite packages
-  npm stars # View packages marked as favorites
-  npm start # Start a package
-To see a list of supported npm commands, run:
-  npm help | builds the Linux server and pages into  and prints how to run them on Proxmox with  |
-
-All three run  ( does the same).
-Staging runs behind Cloudflare Tunnel on this laptop; it does not survive a restart, so run
- again after one. Roll back to Node: stop  and run
- in Reseal-js.
 ## Tests
 
 - `zig build test`
