@@ -641,3 +641,18 @@ test "attach: the picked photo waits in a sheet with a caption and a spoiler, th
     try testing.expect(std.mem.indexOf(u8, lastPost("/api/media"), "\"name\":\"view.png\"") != null);
     try testing.expect(std.mem.indexOf(u8, state().files.uploads.items[0].meta_json, "\"spoiler\":true") != null);
 }
+
+test "next mention: jumps to the first unread message that mentions me" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try bootAsBob(a);
+    defer D.reset();
+    const me = j.str(vec(a), "bobId").?;
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"seq\":3,\"encrypted\":false,\"me\":{\"role\":\"member\",\"status\":\"active\",\"unread\":2,\"mentions\":1,\"lastReadSeq\":1}}]}"));
+    try D.press("Launch crew");
+    const page = try std.fmt.allocPrint(a, "{{\"messages\":[{{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"old\",\"createdAt\":\"2026-10-12T14:00:00Z\"}},{{\"id\":\"m2\",\"chatId\":\"g1\",\"seq\":2,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"hey @bob\",\"mentions\":[\"{s}\"],\"createdAt\":\"2026-10-12T14:01:00Z\"}},{{\"id\":\"m3\",\"chatId\":\"g1\",\"seq\":3,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"later\",\"createdAt\":\"2026-10-12T14:02:00Z\"}}],\"floor\":0}}", .{me});
+    try testing.expect(D.respond("/messages", 200, page));
+    D.R.dispatch(.{ .extras = .next_mention });
+    try testing.expect(state().extras.highlight.eql("m2"));
+}

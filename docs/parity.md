@@ -37,7 +37,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Day separators, unread separator, runs, infinite scroll both ways
 - [x] Intro: assistant greeting and starters, 'Encrypted chat' + 'Verify the security code', saved purpose
 - [x] Scroll-to-bottom button with count
-- [ ] M1 'Next mention' button (jumps to the first unread mention)
+- [x] M1 'Next mention' button (jumps to the first unread mention)
 - [x] Read marking, jump to message with highlight, 'That message is no longer available.'
 - [x] Message menu: reactions bar + More reactions, Reply, Edit, Copy text, Copy message link, Pin/Unpin, Forward, Save to Saved / Save to…, Download, Retract vote, Stop poll, Seen by…, Select, Details, Delete
 - [x] Pin dialog with 'Notify all members'

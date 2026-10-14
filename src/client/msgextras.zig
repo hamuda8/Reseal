@@ -36,6 +36,7 @@ pub const Act = union(enum) {
     jump: struct { msg: Id, seq: i64 = 0 },
     unhighlight: u32,
     to_bottom,
+    next_mention,
 };
 
 pub const Extras = struct {
@@ -109,6 +110,16 @@ pub fn act(s: *State, a: Act) void {
         .jump => |jmp| jump(s, jmp.msg.str(), jmp.seq),
         .unhighlight => |seq| if (seq == x.highlight_seq) {
             x.highlight = .{};
+        },
+        .next_mention => if (s.open_chat.isSet()) {
+            // The first unread message that mentions me, else the bottom.
+            const c = s.store.chat(s.open_chat.str()) orelse return;
+            const read = c.meInt("lastReadSeq");
+            if (s.store.existingTimeline(c.id())) |tl| for (tl.items.items) |m| {
+                if ((m.seq() orelse 0) <= read) continue;
+                for (j.arr(m.o.v, "mentions")) |mid| if (mid == .string and s.store.isMe(mid.string)) return jump(s, m.id(), m.seq() orelse 0);
+            };
+            act(s, .to_bottom);
         },
         .to_bottom => if (s.open_chat.isSet()) {
             const tl = s.store.existingTimeline(s.open_chat.str());
@@ -270,6 +281,15 @@ pub fn pinSheet(cx: Cx) void {
 /// The round "scroll to bottom" button over the messages (with the unread count).
 pub fn bottomButton(cx: Cx, c: *const data.Chat) void {
     const s = cx.s;
+    // Next mention, above the scroll-down button.
+    if (c.meInt("mentions") > 0) {
+        const up: f32 = if (s.extras.at_bottom) 0 else 56;
+        cx.ui.begin(.{ .position = .absolute, .inset = .{ .bottom = (if (cx.phone) @as(f32, 80) else 96) + up, .end = if (cx.phone) 14 else 26 } }, .{ .key = key(.{"next-mention"}) });
+        cx.ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 23, .background = cx.c.surface, .border_width = 1, .border_color = cx.c.border, .shadow = .{ .y = 2, .blur = 10 }, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = msg(.next_mention) });
+        cx.ui.icon(icons.at, 22, cx.c.accent, .{}, 0);
+        cx.ui.end();
+        cx.ui.end();
+    }
     const tl = s.store.existingTimeline(c.id());
     const newer = if (tl) |x| x.has_newer else false;
     if (s.extras.at_bottom and !newer) return;
