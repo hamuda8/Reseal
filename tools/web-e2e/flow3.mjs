@@ -91,7 +91,8 @@ try {
     // Delete by Bob for everyone
     await tapMessage(b, 'This is a reply');
     await b.clickText('Delete');
-    await b.clickText('Delete for everyone');
+    // As in Reseal-js: 'Also delete for {name}', ticked to begin with.
+    check('the delete dialog offers deleting for the other person too', await b.waitText('Also delete for Alice Carter', 4000));
     await b.clickText('Delete');
     let gone = false;
     for (let i = 0; i < 30 && !gone; i++) { gone = !(await a.hasText('This is a reply')); if (!gone) await sleep(250); }
@@ -111,6 +112,8 @@ try {
     await tapMessage(a, 'Ping from Bob');
     await a.clickText('Forward');
     await a.clickText('Carol Nasser');
+    // The chat picker takes several chats, then Send.
+    await a.clickText('Send');
     await sleep(2500);
     let got = null;
     try {
@@ -150,6 +153,9 @@ try {
     const opened = await a.waitEvent('Page.fileChooserOpened', 5000);
     check('attach opens the file chooser', Boolean(opened));
     if (opened) await a.send('DOM.setFileInputFiles', { files: [file], backendNodeId: opened.params.backendNodeId });
+    // It waits in the attach sheet (caption, compression, spoiler) until Send.
+    check('the attach sheet shows the photo', await a.waitText('Send photo', 5000));
+    await a.clickText('Send');
     await sleep(4000);
     const { messages } = await bob.api.get(`/api/chats/${dm.id}/messages?limit=20`);
     const last = messages.at(-1);
