@@ -720,3 +720,17 @@ test "pinned bar: each tap shows the next pin; unpin from the bar" {
     D.R.dispatch(.{ .extras = .{ .pin_unpin = app.Id.of("m2") } });
     try testing.expectEqualStrings("{\"unpin\":true}", lastPost("/messages/m2/pin"));
 }
+
+test "album: three photos in one message, each opens the viewer at its place" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"media\":[{\"id\":\"p1\",\"kind\":\"photo\",\"w\":100,\"h\":100},{\"id\":\"p2\",\"kind\":\"photo\",\"w\":100,\"h\":100},{\"id\":\"p3\",\"kind\":\"photo\",\"w\":100,\"h\":100}],\"createdAt\":\"2026-10-12T14:00:00Z\"}],\"floor\":0}"));
+    // Drawn as an album (no crash, the message is there); the viewer walks all three.
+    D.R.dispatch(.{ .open_media = .{ .msg = app.Id.of("m1"), .index = 2 } });
+    D.R.dispatch(.{ .viewer_x = .{ .go = -1 } });
+    try testing.expect(state().viewer.?.index == 1);
+}

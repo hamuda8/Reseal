@@ -76,7 +76,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 ## Bubbles (message.js, text.js, format.js, markdown.js)
 - [x] Meta line: timer, lock on encrypted media, views, edited, channel signature, time, status icons
 - [x] Forwarded from, reply quote (tap jumps), glimpse reply quote
-- [ ] M9 Album grid for 2–10 photos/videos in one message (they stack now)
+- [x] M9 Album grid for 2–10 photos/videos in one message (they stack now)
 - [x] Spoiler cover on media, upload progress, file card with size and download
 - [x] Voice bubble play/pause, waveform, time
 - [ ] M10 Seek by tapping the waveform

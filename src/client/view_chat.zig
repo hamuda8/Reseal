@@ -591,10 +591,91 @@ fn replyQuote(cx: Cx, c: *const data.Chat, rid: []const u8, out: bool) void {
     ui.end();
 }
 
-fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out: bool) void {
+/// One photo, GIF or video of a message, `w` by `h`.
+fn visualTile(cx: Cx, m: *const data.Message, item: j.Value, i: usize, w: f32, h: f32, radius: f32, press: ?Msg) void {
     const ui = cx.ui;
     const s = cx.s;
     const col = cx.c;
+    const kind = j.strOr(item, "kind", "file");
+    const vc = @import("voice.zig");
+        ui.begin(.{ .width = .{ .px = w }, .height = .{ .px = h }, .radius = radius, .clip = true, .background = col.surface_3, .align_items = .center, .justify = .center }, .{ .key = key(.{ "media", j.strOr(item, "id", ""), i }), .on_press = press });
+        if (j.str(item, "thumb")) |th| ui.image(th, .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "thumb", j.strOr(item, "id", "") }));
+        const f = media.shown(s, item);
+        if (std.mem.eql(u8, kind, "video")) {
+            // Plays in place (tap again to pause).
+            if (vc.videoPlaying(s, m, @intCast(i))) |player| {
+                ui.video(player, .{ .cover = false }, .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "vid", j.strOr(item, "id", "") }));
+                ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, .{ .on_press = .{ .voice = .{ .play = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } });
+                ui.end();
+            } else {
+                ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1473"), .align_items = .center, .justify = .center }, .{ .on_press = if (m.local_id == 0) Msg{ .voice = .{ .play = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } else null });
+                if (s.voice.waiting and s.voice.playing_msg.eql(m.id())) ui.spinner(24, Color.white, .{}, 0) else ui.icon(icons.play, 26, Color.white, .{}, 0);
+                ui.end();
+            }
+        } else if (f) |file| {
+            if (file.state == .ready) media.draw(ui, file, j.strOr(item, "id", ""), .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "full", j.strOr(item, "id", "") }));
+        }
+        // Hidden with a spoiler: covered until tapped.
+        if (j.truthy(item, "spoiler") and !s.isRevealed(m.id())) {
+            ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h }, .background = col.surface_3, .align_items = .center, .justify = .center, .gap = 6 }, .{ .on_press = if (m.local_id == 0) Msg{ .message_action = .{ .what = .reveal, .msg = Id.of(m.id()) } } else null, .key = key(.{ "spl", j.strOr(item, "id", ""), i }) });
+            ui.icon(icons.eyeOff, 26, col.text_2, .{}, 0);
+            ui.text(t("Spoiler"), .{ .font_size = 13, .weight = 650, .color = col.text_2 });
+            ui.end();
+        }
+        if (m.local_id != 0 and m.state == .sending) {
+            ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1480"), .align_items = .center, .justify = .center }, .{});
+            ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{@as(u32, @intFromFloat(m.progress * 100))}) catch "", .{ .font_size = 12, .weight = 700, .color = Color.white });
+            ui.end();
+        }
+        ui.end();
+}
+
+fn isVisual(item: j.Value) bool {
+    const kind = j.strOr(item, "kind", "file");
+    return std.mem.eql(u8, kind, "photo") or std.mem.eql(u8, kind, "gif") or std.mem.eql(u8, kind, "video");
+}
+
+/// Two to ten photos and videos as one album (rows of two, an odd first one across).
+fn album(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32) void {
+    const ui = cx.ui;
+    const total = @min(max_w, 420);
+    var idx: [10]usize = undefined;
+    var n: usize = 0;
+    for (items, 0..) |it, i| if (isVisual(it) and n < idx.len) {
+        idx[n] = i;
+        n += 1;
+    };
+    ui.begin(.{ .gap = 3, .width = .{ .px = total }, .radius = 16, .clip = true }, .{});
+    var k: usize = 0;
+    if (n % 2 == 1) {
+        const it = items[idx[0]];
+        const w0: f32 = @floatFromInt(j.intOr(it, "w", 320));
+        const h0: f32 = @floatFromInt(j.intOr(it, "h", 240));
+        visualTile(cx, m, it, idx[0], total, @min(320, total * h0 / @max(1, w0)), 0, openMsg(m, idx[0]));
+        k = 1;
+    }
+    while (k < n) : (k += 2) {
+        ui.begin(.{ .direction = .row, .gap = 3 }, .{});
+        const cell = (total - 3) / 2;
+        for (0..2) |o| visualTile(cx, m, items[idx[k + o]], idx[k + o], cell, cell * 0.85, 0, openMsg(m, idx[k + o]));
+        ui.end();
+    }
+    ui.end();
+}
+
+fn openMsg(m: *const data.Message, i: usize) ?Msg {
+    if (m.local_id != 0) return null;
+    return .{ .open_media = .{ .msg = Id.of(m.id()), .index = @intCast(@min(i, 255)) } };
+}
+
+fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out: bool) void {
+    const ui = cx.ui;
+    const col = cx.c;
+    var visuals: usize = 0;
+    for (items) |it| {
+        if (isVisual(it)) visuals += 1;
+    }
+    if (visuals > 1) album(cx, m, items, max_w);
     for (items, 0..) |item, i| {
         const kind = j.strOr(item, "kind", "file");
         const vc = @import("voice.zig");
@@ -608,40 +689,12 @@ fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out:
         }
         const visual = std.mem.eql(u8, kind, "photo") or std.mem.eql(u8, kind, "gif") or std.mem.eql(u8, kind, "video");
         if (visual) {
+            if (visuals > 1) continue;
             const w0: f32 = @floatFromInt(j.intOr(item, "w", 320));
             const h0: f32 = @floatFromInt(j.intOr(item, "h", 240));
             const w = @min(@min(max_w, 420), w0);
             const h = @min(420, w * h0 / @max(1, w0));
-            ui.begin(.{ .width = .{ .px = w }, .height = .{ .px = h }, .radius = 16, .clip = true, .background = col.surface_3, .align_items = .center, .justify = .center }, .{ .key = key(.{ "media", j.strOr(item, "id", ""), i }) });
-            if (j.str(item, "thumb")) |th| ui.image(th, .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "thumb", j.strOr(item, "id", "") }));
-            const f = media.shown(s, item);
-            if (std.mem.eql(u8, kind, "video")) {
-                // Plays in place (tap again to pause).
-                if (vc.videoPlaying(s, m, @intCast(i))) |player| {
-                    ui.video(player, .{ .cover = false }, .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "vid", j.strOr(item, "id", "") }));
-                    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, .{ .on_press = .{ .voice = .{ .play = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } });
-                    ui.end();
-                } else {
-                    ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1473"), .align_items = .center, .justify = .center }, .{ .on_press = if (m.local_id == 0) Msg{ .voice = .{ .play = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } else null });
-                    if (s.voice.waiting and s.voice.playing_msg.eql(m.id())) ui.spinner(24, Color.white, .{}, 0) else ui.icon(icons.play, 26, Color.white, .{}, 0);
-                    ui.end();
-                }
-            } else if (f) |file| {
-                if (file.state == .ready) media.draw(ui, file, j.strOr(item, "id", ""), .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "full", j.strOr(item, "id", "") }));
-            }
-            // Hidden with a spoiler: covered until tapped.
-            if (j.truthy(item, "spoiler") and !s.isRevealed(m.id())) {
-                ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h }, .background = col.surface_3, .align_items = .center, .justify = .center, .gap = 6 }, .{ .on_press = if (m.local_id == 0) Msg{ .message_action = .{ .what = .reveal, .msg = Id.of(m.id()) } } else null, .key = key(.{ "spl", j.strOr(item, "id", ""), i }) });
-                ui.icon(icons.eyeOff, 26, col.text_2, .{}, 0);
-                ui.text(t("Spoiler"), .{ .font_size = 13, .weight = 650, .color = col.text_2 });
-                ui.end();
-            }
-            if (m.local_id != 0 and m.state == .sending) {
-                ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1480"), .align_items = .center, .justify = .center }, .{});
-                ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{@as(u32, @intFromFloat(m.progress * 100))}) catch "", .{ .font_size = 12, .weight = 700, .color = Color.white });
-                ui.end();
-            }
-            ui.end();
+            visualTile(cx, m, item, i, w, h, 16, null);
         } else {
             // A file card.
             const name = j.strOr(item, "name", t("File"));
