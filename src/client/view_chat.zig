@@ -813,7 +813,7 @@ fn composer(cx: Cx, c: *const data.Chat) void {
         ui.input(.{
             .key = zui.key("composer"),
             .value = s.fields.get(.composer).get(),
-            .placeholder = t("Message"),
+            .placeholder = if (c.is("channel")) t("Broadcast") else if (c.is("saved")) t("Write a note…") else t("Message"),
             .on_change = app.onField(.composer),
             .on_submit = .{ .submit = .composer },
             .multiline = lines,

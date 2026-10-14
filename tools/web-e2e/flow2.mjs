@@ -99,7 +99,7 @@ try {
     await t.shot('24-calls');
     await rail(2);
     check('saved pane opens the Saved chat', await t.waitText('Your private space for notes, links, files and messages you want to keep. Encrypted and on all your devices.', 6000));
-    await t.typeIn('Message', 'Note to self 📝');
+    await t.typeIn('Write a note…', 'Note to self 📝');
     await t.key('Enter');
     await sleep(2500);
     check('a note in Saved (first key epoch made here)', await t.waitText('Note to self'));
