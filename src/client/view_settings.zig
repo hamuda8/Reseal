@@ -544,6 +544,7 @@ pub fn safety(cx: Cx, user_id: []const u8) void {
         ui.begin(.{ .align_items = .center }, .{});
         ui.text(em.items, .{ .font_size = 28, .line_height = 1.3 });
         ui.end();
+        @import("userinfo.zig").verifyRow(cx, u.?);
     } else ui.text(t("This person has not set up encryption yet."), .{ .font_size = 15, .color = cx.c.text_2 });
     ui.end();
     views.endSheet(cx);

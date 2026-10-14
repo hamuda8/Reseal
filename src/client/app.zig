@@ -36,6 +36,8 @@ pub const extras = @import("msgextras.zig");
 pub const chatmore = @import("chatmore.zig");
 pub const fwdpick = @import("fwdpick.zig");
 pub const listextras = @import("listextras.zig");
+pub const userinfo = @import("userinfo.zig");
+pub const sharedmedia = @import("sharedmedia.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -241,6 +243,7 @@ pub const Modal = union(enum) {
     story_views,
     story_menu,
     story_kind,
+    common_groups,
     story_compose,
     story_people,
     story_list,
@@ -325,6 +328,8 @@ pub const Msg = union(enum) {
     chat_more: chatmore.Act,
     fwd_pick: fwdpick.Act,
     list_extras: listextras.Act,
+    user_info: userinfo.Act,
+    shared: sharedmedia.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -527,6 +532,8 @@ pub const State = struct {
     selected: std.ArrayList(Id) = .empty,
     fwd: fwdpick.Pick = .{},
     listx: listextras.ListExtras = .{},
+    common: ?*data.Obj = null,
+    shared: sharedmedia.Shared = .{},
     /// Messages whose spoilers were shown.
     revealed: std.ArrayList(Id) = .empty,
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
@@ -684,6 +691,8 @@ pub const Op = union(enum) {
     seen_by,
     jump_lookup,
     handoff,
+    common_groups,
+    shared: u32,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -739,6 +748,7 @@ pub fn update(s: *State, msg: Msg, e: zui.Env, f: zui.Fx(Msg)) void {
     // Batched work collected while handling: user lookups, the home-screen widget.
     keys.flushLookups(s);
     @import("view_chat.zig").wantMedia(s);
+    sharedmedia.after(s);
     // The call screen's clock: once a second while a call is on. The web's clock comes from the
     // shell, which then sends it every second.
     const calling = s.call.status == .active;
@@ -795,6 +805,8 @@ fn handle(s: *State, msg: Msg) void {
         .chat_more => |a| chatmore.act(s, a),
         .fwd_pick => |a| fwdpick.act(s, a),
         .list_extras => |a| listextras.act(s, a),
+        .user_info => |a| userinfo.act(s, a),
+        .shared => |a| sharedmedia.act(s, a),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),
@@ -1070,6 +1082,8 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (drafts.onAnswer(s, op, r)) return;
             if (extras.onAnswer(s, op, r)) return;
             if (chatmore.onAnswer(s, op, r)) return;
+            if (userinfo.onAnswer(s, op, r)) return;
+            if (sharedmedia.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

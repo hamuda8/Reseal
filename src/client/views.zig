@@ -76,6 +76,7 @@ pub fn onUi(s: *State, msg: Msg) void {
         .open_info => |id| {
             s.info = id;
             s.user_info = .{};
+            @import("sharedmedia.zig").opened(s, id);
             if (s.store.chat(id.str())) |c| if (!c.is("private") and !c.is("saved") and !c.is("bot")) {
                 group.opened(s, c);
                 if (!c.is("channel") or vchat.isAdmin(c)) loadMembers(s, id.str());
@@ -1222,6 +1223,7 @@ fn modal(cx: Cx) void {
         .story_views => @import("stories.zig").viewsSheet(cx),
         .story_menu => @import("stories.zig").menuSheet(cx),
         .story_kind => @import("stories.zig").kindSheet(cx),
+        .common_groups => @import("userinfo.zig").commonSheet(cx),
         .story_compose => @import("stories.zig").composer(cx),
         .story_people => @import("stories.zig").peopleSheet(cx),
         .story_list => @import("stories.zig").listSheet(cx),

@@ -1097,39 +1097,14 @@ pub fn infoPanel(cx: Cx) void {
         } else {
             vgroup.body(cx, c);
         }
-        if (c.is("private") or c.is("bot")) {
-            ui.begin(.{ .padding = .{ .top = 12 } }, .{});
-            kit.row(cx, t("More actions"), .{ .icon = icons.more, .on = .{ .menu = .{ .menu = .{ .kind = .chat_row, .target = Id.of(c.id()) } } } });
-            ui.end();
-        }
+        if (!c.is("private") and !c.is("bot")) @import("sharedmedia.zig").section(cx, c);
     }
     ui.end();
     ui.end();
 }
 
 fn userCard(cx: Cx, u: *const data.Obj, c: ?*const data.Chat) void {
-    const ui = cx.ui;
-    const s = cx.s;
-    const col = cx.c;
-    ui.begin(.{ .align_items = .center, .gap = 6, .padding = .{ .top = 12, .bottom = 16 } }, .{});
-    kit.avatar(cx, .{ .name = s.store.userName(u), .color = u.i("color") orelse 0, .image = u.s("avatar"), .image_url = u.s("avatarUrl"), .size = 96 }, key(.{ "uc", u.s("id") orelse "" }));
-    ui.text(s.store.userName(u), .{ .font_size = 22, .weight = 800, .color = col.text, .text_align = .center });
-    ui.text(if (u.b("deleted")) t("deleted account") else text.presenceText(u.get("presence")), .{ .font_size = 14, .color = col.text_2, .text_align = .center });
-    ui.end();
-    if (u.s("bio")) |bio| if (bio.len > 0) {
-        kit.sectionTitle(cx, t("Bio"));
-        ui.begin(.{ .padding = .xy(12, 4) }, .{});
-        ui.text(bio, .{ .font_size = 15, .color = col.text, .line_height = 1.5 });
-        ui.end();
-    };
-    if (u.s("username")) |un| kit.row(cx, std.fmt.allocPrint(cx.a(), "@{s}", .{un}) catch "", .{ .icon = icons.at, .subtitle = t("Username") });
-    // Glimpses kept on the profile (mine: also the archive).
-    if (s.mode == .app) kit.row(cx, t("Glimpses"), .{ .icon = icons.image, .chevron = true, .on = if (s.store.isMe(u.s("id") orelse "")) .{ .stories = .archive } else .{ .stories = .{ .pinned_of = Id.of(u.s("id") orelse "") } } });
-    if (c) |ch| {
-        if (ch.encrypted() and u.get("keys") != null) kit.row(cx, t("Verify safety number"), .{ .icon = icons.shieldCheck, .on = .{ .menu = .{ .safety = Id.of(u.s("id") orelse "") } } });
-    } else if (!s.store.isMe(u.s("id") orelse "")) {
-        kit.row(cx, t("Send message"), .{ .icon = icons.chat, .on = .{ .start_global = Id.of(u.s("id") orelse "") } });
-    }
+    return @import("userinfo.zig").card(cx, u, c);
 }
 
 // ---------------------------------------------------------------------------------------------

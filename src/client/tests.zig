@@ -528,3 +528,28 @@ test "chat list: mark all as read from a chip, undo archiving" {
     };
     try testing.expect(unarchived);
 }
+
+test "user info: actions, username copied, groups in common, shared media" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"p1\",\"type\":\"private\",\"encrypted\":false,\"peer\":{\"id\":\"u3\",\"displayName\":\"Carol Nasser\",\"username\":\"carol\",\"commonGroups\":2},\"me\":{\"role\":\"member\",\"status\":\"active\",\"unread\":0}}]}"));
+    D.R.dispatch(.{ .open_info = app.Id.of("p1") });
+    try testing.expect(D.findText("Message") != 0);
+    try testing.expect(D.findText("Mute") != 0);
+    try testing.expect(D.findText("2 groups in common") != 0);
+    try D.press("@carol");
+    try testing.expectEqualStrings("Username copied", state().toast.text.get());
+    // Shared media: the Media tab asks for photos, videos and GIFs.
+    try testing.expect(D.respond("tag=photo", 200, "{\"messages\":[]}"));
+    try testing.expect(D.respond("tag=video", 200, "{\"messages\":[]}"));
+    try testing.expect(D.respond("tag=gif", 200, "{\"messages\":[]}"));
+    try testing.expect(D.findText("Nothing here yet") != 0);
+    try D.press("Files");
+    try testing.expect(D.respond("tag=file", 200, "{\"messages\":[{\"id\":\"m5\",\"chatId\":\"p1\",\"seq\":5,\"senderId\":\"u3\",\"kind\":\"message\",\"media\":[{\"id\":\"f1\",\"kind\":\"file\",\"name\":\"plan.pdf\",\"size\":2048}],\"createdAt\":\"2026-10-12T14:00:00Z\"}]}"));
+    try testing.expect(D.findText("plan.pdf") != 0);
+    try D.press("2 groups in common");
+    try testing.expect(D.respond("/users/u3/common-groups", 200, "{\"chats\":[{\"id\":\"g1\",\"title\":\"Launch crew\",\"memberCount\":4}]}"));
+    try testing.expect(D.findText("Launch crew") != 0);
+}
