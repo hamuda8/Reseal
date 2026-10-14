@@ -112,6 +112,7 @@ fn callScreen(cx: Cx) void {
         callButton(cx, if (c.camera_on) icons.video else icons.videoOff, t("Camera"), .{ .call = .camera }, if (c.camera_on) .on else .normal);
         if (zui.platform == .web and !cx.phone) callButton(cx, if (c.screen_on) icons.screenOff else icons.screen, t("Screen"), .{ .call = .screen }, if (c.screen_on) .on else .normal);
         if (zui.platform != .web or cx.phone) callButton(cx, icons.cameraSwitch, t("Flip"), .{ .call = .switch_camera }, .normal);
+        if (c.group) callButton(cx, icons.hand, if (c.hand) t("Lower hand") else t("Raise hand"), .{ .call = .hand }, if (c.hand) .on else .normal);
         callButton(cx, icons.phoneOff, if (c.group) t("Leave") else t("End"), .{ .call = .hangup }, .danger);
     }
     ui.end();
@@ -135,7 +136,7 @@ fn groupGrid(cx: Cx) void {
         while (k < use_cols and i < n) : (k += 1) {
             if (i == 0) {
                 const me = s.store.me;
-                tile(cx, if (me) |m| m.s("displayName") orelse "" else "", if (me) |m| m.i("color") orelse 0 else 0, if (c.camera_on or c.screen_on) (if (c.screen_on) c.screen else c.local) else 0, !c.muted, true, false, tile_w, tile_h, "self");
+                tile(cx, if (me) |m| m.s("displayName") orelse "" else "", if (me) |m| m.i("color") orelse 0 else 0, if (c.camera_on or c.screen_on) (if (c.screen_on) c.screen else c.local) else 0, !c.muted, true, c.hand, tile_w, tile_h, "self");
             } else {
                 const p = c.peers.items[i - 1];
                 tile(cx, s.store.displayName(p.user.str()), if (s.store.user(p.user.str())) |u| u.i("color") orelse 0 else 0, if (p.media.video) p.remote else 0, p.media.audio, false, p.hand, tile_w, tile_h, p.conn.str());

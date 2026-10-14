@@ -94,6 +94,7 @@ pub const Action = union(enum) {
     screen,
     switch_camera,
     minimize,
+    hand,
     dismiss: u32,
     open_chat,
 };
@@ -132,6 +133,12 @@ pub fn act(s: *State, a: Action) void {
         .screen => toggleScreen(s),
         .switch_camera => if (c.local != 0) app.fx.switchCamera(c.local),
         .minimize => c.minimized = !c.minimized,
+        .hand => {
+            // Group calls: a raised hand shows on my tile for everyone (call.reaction).
+            if (!c.id.isSet()) return;
+            c.hand = !c.hand;
+            app.wsSend(s, "call.reaction", std.fmt.allocPrint(tmp(), "{{\"callId\":\"{s}\",\"emoji\":\"\\u270b\",\"hand\":{}}}", .{ c.id.str(), c.hand }) catch return);
+        },
         .dismiss => |seq| if (seq == c.seq and c.status == .ended or c.status == .unavailable and seq == c.seq) reset(s),
         .open_chat => {
             c.minimized = true;
@@ -518,8 +525,15 @@ pub fn statusText(s: *const State) []const u8 {
         .ringing => if (c.outgoing) t("Ringing…") else t("Connecting…"),
         .connecting => t("Connecting…"),
         .ended, .unavailable => c.reason.get(),
-        .active => if (c.group) fmt.tn(tmp(), @intCast(c.peers.items.len + 1), "{n} participant", "{n} participants") else if (c.started_at > 0) fmt.duration(tmp(), @as(f64, @floatFromInt(sys.now() - c.started_at)) / 1000) else fmt.duration(tmp(), 0),
+        .active => if (!c.group and c.peers.items.len > 0 and !c.peers.items[0].connected) t("Reconnecting…") else activeText(c),
         .idle => "",
+    };
+}
+
+fn activeText(c: anytype) []const u8 {
+    return switch (c.status) {
+        .active => if (c.group) fmt.tn(tmp(), @intCast(c.peers.items.len + 1), "{n} participant", "{n} participants") else if (c.started_at > 0) fmt.duration(tmp(), @as(f64, @floatFromInt(sys.now() - c.started_at)) / 1000) else fmt.duration(tmp(), 0),
+        else => "",
     };
 }
 
