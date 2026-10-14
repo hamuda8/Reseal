@@ -458,7 +458,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
         if (m.verified != null and !m.verified.?) {
             ui.begin(.{ .direction = .row, .gap = 4, .align_items = .center }, .{});
             ui.icon(icons.alert, 14, col.warning, .{}, 0);
-            ui.text(t("Not verified"), .{ .font_size = 12, .color = col.warning });
+            ui.text(t("Unverified sender"), .{ .font_size = 12, .color = col.warning });
             ui.end();
         }
     }
@@ -516,10 +516,12 @@ fn isEmojiOnly(s: []const u8) bool {
 fn decryptNote(cx: Cx, m: *const data.Message, fg: Color) void {
     const ui = cx.ui;
     ui.begin(.{ .direction = .row, .gap = 8, .align_items = .center }, .{});
-    ui.icon(if (m.decrypt == .failed) icons.alert else icons.lock, 18, fg, .{ .opacity = 0.8 }, 0);
+    if (m.decrypt == .pending) {
+        ui.spinner(16, fg, .{}, key(.{ "dspin", m.id() }));
+    } else ui.icon(if (m.decrypt == .failed) icons.alert else icons.lock, 18, fg, .{ .opacity = 0.8 }, 0);
     ui.text(switch (m.decrypt) {
         .pending => t("Decrypting…"),
-        .nokey => t("Waiting for this message's key. It opens when someone in the chat is online."),
+        .nokey => t("Waiting for the key to this message. It will appear when a member who has it comes online."),
         .failed => t("This message could not be decrypted."),
         .ok => "",
     }, .{ .font_size = 14, .color = fg, .opacity = 0.85 });
@@ -692,7 +694,18 @@ fn metaRow(cx: Cx, c: *const data.Chat, m: *const data.Message, out: bool, overl
     const color = if (overlay) Color.white else if (out) col.bubble_meta_out else col.bubble_meta_in;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 3, .align_self = .end, .padding = if (overlay) .{ .top = 2, .bottom = 2, .start = 8, .end = 8 } else .{}, .radius = 9, .background = if (overlay) Color.hex("#0a0c1473") else null, .position = if (overlay) .absolute else .flow, .inset = if (overlay) .{ .bottom = 8, .end = 8 } else .{} }, .{});
     if (j.intOr(m.o.v, "ttl", 0) > 0) ui.icon(icons.timer, 13, color, .{}, 0);
+    for (m.media()) |it| if (j.str(it, "key") != null) {
+        ui.icon(icons.lockSmall, 12, color, .{}, 0);
+        break;
+    };
+    const views_n = j.intOr(m.o.v, "views", 0);
+    if (views_n > 0) {
+        ui.icon(icons.eye, 13, color, .{}, 0);
+        ui.text(fmt.compact(cx.a(), views_n), .{ .font_size = 11.5, .color = color });
+    }
     if (j.str(m.o.v, "editedAt") != null) ui.text(t("edited"), .{ .font_size = 11.5, .color = color });
+    // Channels that sign posts: the author's name.
+    if (c.is("channel") and c.o.b("signMessages") and m.authorId().len > 0) ui.text(s.store.displayName(m.authorId()), .{ .font_size = 11.5, .color = color, .max_lines = 1 });
     ui.text(fmt.time(cx.a(), if (m.at > 0) m.at else sys.now()), .{ .font_size = 11.5, .color = color });
     if (s.store.isMe(m.authorId()) and !c.is("channel") and !c.is("saved")) {
         switch (m.state) {

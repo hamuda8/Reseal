@@ -28,6 +28,20 @@ pub fn digits(a: Allocator, s: []const u8) []const u8 {
     return out.items;
 }
 
+/// 1234 → "1.2K", 2500000 → "2.5M" (compactNumber).
+pub fn compact(a: Allocator, n: i64) []const u8 {
+    if (n < 1000) return std.fmt.allocPrint(a, "{d}", .{n}) catch "";
+    const f: f64 = @floatFromInt(n);
+    if (n < 1_000_000) return trimZero(a, f / 1000, "K");
+    return trimZero(a, f / 1_000_000, "M");
+}
+
+fn trimZero(a: Allocator, v: f64, suffix: []const u8) []const u8 {
+    const r = @round(v * 10) / 10;
+    if (r >= 100 or r == @trunc(r)) return std.fmt.allocPrint(a, "{d:.0}{s}", .{ r, suffix }) catch "";
+    return std.fmt.allocPrint(a, "{d:.1}{s}", .{ r, suffix }) catch "";
+}
+
 pub fn number(a: Allocator, n: i64) []const u8 {
     return digits(a, std.fmt.allocPrint(a, "{d}", .{n}) catch return "");
 }
@@ -250,4 +264,14 @@ test "formatting" {
     try std.testing.expectEqualStrings("AC", initials(a, "Alice  Carter"));
     try std.testing.expectEqualStrings("3 members", tn(a, 3, "{n} member", "{n} members"));
     try std.testing.expectEqualStrings("a b c", plain(a, " a\n b  c ", 100));
+}
+
+test "compact numbers" {
+    var buf: [256]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
+    const a = fba.allocator();
+    try std.testing.expectEqualStrings("999", compact(a, 999));
+    try std.testing.expectEqualStrings("1.2K", compact(a, 1234));
+    try std.testing.expectEqualStrings("12K", compact(a, 12000));
+    try std.testing.expectEqualStrings("2.5M", compact(a, 2_500_000));
 }
