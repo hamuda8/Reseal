@@ -123,6 +123,46 @@ try {
     check('schedule: on the server for later', messages.length === 1 && messages[0].text === 'See you tomorrow' && new Date(messages[0].scheduledAt).getTime() > Date.now() + 50 * 60_000);
   }
 
+  if (want('voice')) {
+    await a.clickText('Plain crew');
+    await sleep(800);
+    // The round button at the far end of the composer (send, or record when empty).
+    const sendAt = async () => a.evaluate(`(() => { const cands = [...document.querySelectorAll('[role=button]')].map(b => b.getBoundingClientRect()).filter(b => b.width >= 48 && b.width <= 52 && b.y > 600); cands.sort((x, y) => y.x - x.x); const b = cands[0]; return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
+    let p = await sendAt();
+    await a.click(p[0], p[1]);
+    await sleep(2500);
+    await a.shot('103-recording');
+    p = await sendAt();
+    await a.click(p[0], p[1]);
+    await sleep(3000);
+    let m = await lastMessage(bob, group.id);
+    check('voice: a voice message with duration and waveform', m?.media?.[0]?.kind === 'voice' && m.media[0].duration > 1 && typeof m.media[0].waveform === 'string', JSON.stringify(m?.media?.[0] || m));
+    await a.shot('104-voice-bubble');
+    // A round video: a right click switches the button to the camera.
+    p = await sendAt();
+    await a.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: p[0], y: p[1], button: 'right', buttons: 2, clickCount: 1 });
+    await a.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p[0], y: p[1], button: 'right', buttons: 0, clickCount: 1 });
+    await sleep(500);
+    p = await sendAt();
+    await a.click(p[0], p[1]);
+    await sleep(2500);
+    await a.shot('105-round-recording');
+    p = await sendAt();
+    await a.click(p[0], p[1]);
+    await sleep(4000);
+    m = await lastMessage(bob, group.id);
+    check('voice: a round video message', m?.media?.[0]?.kind === 'round' && /^video\//.test(m.media[0].mime || ''), JSON.stringify(m?.media?.[0] || m));
+    await a.shot('106-round-bubble');
+    // Play the voice message (the round play button in its bubble).
+    const play = await a.evaluate(`(() => { const r = [...document.querySelectorAll('[role=button]')].map(b => b.getBoundingClientRect()).filter(b => b.width === 44 && b.height === 44 && b.x > 600 && b.y < 600).sort((x, y) => x.y - y.y)[0]; return r ? [r.x + r.width / 2, r.y + r.height / 2] : null; })()`);
+    // zui's players are detached media elements: watch play().
+    await a.evaluate(`(() => { window.__media = []; const o = HTMLMediaElement.prototype.play; HTMLMediaElement.prototype.play = function () { window.__media.push(this); return o.call(this); }; })()`);
+    if (play) await a.click(play[0], play[1]);
+    let playing = false;
+    for (let i = 0; i < 20 && !playing; i++) { await sleep(250); playing = await a.evaluate(`window.__media.some(e => !e.paused && e.currentTime > 0)`); }
+    check('voice: plays back', playing);
+  }
+
   if (want('select')) {
     await alice.api.post(`/api/chats/${group.id}/messages`, { text: 'one to delete', clientId: 's1' });
     await alice.api.post(`/api/chats/${group.id}/messages`, { text: 'two to delete', clientId: 's2' });

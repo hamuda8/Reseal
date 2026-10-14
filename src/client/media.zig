@@ -32,6 +32,10 @@ pub const Meta = struct {
     h: ?i64 = null,
     duration: ?f64 = null,
     encrypted: bool,
+    /// "voice" or "round" for recordings (otherwise from the MIME type).
+    kind: ?[]const u8 = null,
+    /// A voice message's 48 bars (base64).
+    waveform: ?[]const u8 = null,
 };
 
 const Upload = struct {
@@ -89,13 +93,14 @@ pub fn kindOf(mime: []const u8) []const u8 {
 /// Starts uploading `bytes` (owned from now on) for message `local`; returns the upload's id.
 pub fn startUpload(s: *State, local: u32, bytes: []u8, meta: Meta) ?u32 {
     const a = tmp();
-    const kind = kindOf(meta.mime);
+    const kind = meta.kind orelse kindOf(meta.mime);
     var mj: std.ArrayList(u8) = .empty;
     mj.print(a, "\"kind\":\"{s}\",\"name\":{s},\"mime\":{s},\"size\":{d}", .{ kind, j.quote(a, meta.name) catch return null, j.quote(a, meta.mime) catch return null, bytes.len }) catch return null;
     if (meta.w) |w| mj.print(a, ",\"w\":{d}", .{w}) catch {};
     if (meta.h) |h| mj.print(a, ",\"h\":{d}", .{h}) catch {};
     if (meta.duration) |d| mj.print(a, ",\"duration\":{d}", .{d}) catch {};
     if (meta.thumb) |th| mj.print(a, ",\"thumb\":{s}", .{j.quote(a, th) catch "\"\""}) catch {};
+    if (meta.waveform) |wf| mj.print(a, ",\"waveform\":{s}", .{j.quote(a, wf) catch "\"\""}) catch {};
     const id = s.files.next_upload;
     s.files.next_upload += 1;
     s.files.uploads.append(gpa, .{
@@ -245,6 +250,7 @@ fn onInfo(s: *State, id: []const u8, r: zui.Response) void {
         // A plain file plays straight from its signed link.
         f.url = gpa.dupe(u8, j.strOr(v, "media.url", "")) catch "";
         f.state = .ready;
+        @import("voice.zig").tryStart(s);
         if (f.save) saveFile(f);
         return;
     }
@@ -274,6 +280,7 @@ fn onChunk(s: *State, id: []const u8, index: u32, r: zui.Response) void {
     // Done: the bytes, drawn with ui.imageBytes.
     f.bytes = f.parts.toOwnedSlice(gpa) catch return;
     f.state = .ready;
+    @import("voice.zig").tryStart(s);
     if (f.save) saveFile(f);
 }
 

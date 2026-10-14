@@ -110,6 +110,7 @@ pub fn chatView(cx: Cx) void {
     topBars(cx, c);
     messages(cx, c);
     composer(cx, c);
+    @import("voice.zig").roundPreview(cx);
     ui.end();
 }
 
@@ -406,7 +407,11 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     else
         .{ .message_tap = Id.of(m.id()) };
     const media_items = m.media();
-    const media_only = media_items.len > 0 and m.text().len == 0 and m.decrypt == .ok and !m.deleted();
+    // Pictures, videos and round videos stand alone; voice messages and files sit in a bubble.
+    const media_only = media_items.len > 0 and m.text().len == 0 and m.decrypt == .ok and !m.deleted() and for (media_items) |it| {
+        const mk = j.strOr(it, "kind", "file");
+        if (!(std.mem.eql(u8, mk, "photo") or std.mem.eql(u8, mk, "gif") or std.mem.eql(u8, mk, "video") or std.mem.eql(u8, mk, "round"))) break false;
+    } else true;
     const bg = if (media_only) null else if (out) col.bubble_out else col.bubble_in;
     const fg = if (out) col.bubble_out_text else col.bubble_in_text;
     const small: f32 = 7;
@@ -546,7 +551,16 @@ fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out:
     const col = cx.c;
     for (items, 0..) |item, i| {
         const kind = j.strOr(item, "kind", "file");
-        const visual = std.mem.eql(u8, kind, "photo") or std.mem.eql(u8, kind, "gif") or std.mem.eql(u8, kind, "video") or std.mem.eql(u8, kind, "round");
+        const vc = @import("voice.zig");
+        if (std.mem.eql(u8, kind, "voice")) {
+            vc.voiceBubble(cx, m, item, @intCast(i), if (out) col.bubble_out_text else col.bubble_in_text, if (out) Color.hex("#ffffff38") else col.brand);
+            continue;
+        }
+        if (std.mem.eql(u8, kind, "round")) {
+            vc.roundBubble(cx, m, item, @intCast(i));
+            continue;
+        }
+        const visual = std.mem.eql(u8, kind, "photo") or std.mem.eql(u8, kind, "gif") or std.mem.eql(u8, kind, "video");
         if (visual) {
             const w0: f32 = @floatFromInt(j.intOr(item, "w", 320));
             const h0: f32 = @floatFromInt(j.intOr(item, "h", 240));
@@ -555,10 +569,17 @@ fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out:
             ui.begin(.{ .width = .{ .px = w }, .height = .{ .px = h }, .radius = 16, .clip = true, .background = col.surface_3, .align_items = .center, .justify = .center }, .{ .key = key(.{ "media", j.strOr(item, "id", ""), i }) });
             if (j.str(item, "thumb")) |th| ui.image(th, .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "thumb", j.strOr(item, "id", "") }));
             const f = media.shown(s, item);
-            if (std.mem.eql(u8, kind, "video") or std.mem.eql(u8, kind, "round")) {
-                ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1473"), .align_items = .center, .justify = .center }, .{});
-                ui.icon(icons.play, 26, Color.white, .{}, 0);
-                ui.end();
+            if (std.mem.eql(u8, kind, "video")) {
+                // Plays in place (tap again to pause).
+                if (vc.videoPlaying(s, m, @intCast(i))) |player| {
+                    ui.video(player, .{ .cover = false }, .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "vid", j.strOr(item, "id", "") }));
+                    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, .{ .on_press = .{ .voice = .{ .play = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } });
+                    ui.end();
+                } else {
+                    ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1473"), .align_items = .center, .justify = .center }, .{ .on_press = if (m.local_id == 0) Msg{ .voice = .{ .play = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } else null });
+                    if (s.voice.waiting and s.voice.playing_msg.eql(m.id())) ui.spinner(24, Color.white, .{}, 0) else ui.icon(icons.play, 26, Color.white, .{}, 0);
+                    ui.end();
+                }
             } else if (f) |file| {
                 if (file.state == .ready) media.draw(ui, file, j.strOr(item, "id", ""), .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "full", j.strOr(item, "id", "") }));
             }
@@ -716,6 +737,7 @@ fn composer(cx: Cx, c: *const data.Chat) void {
         ui.begin(.{ .grow = 1, .width = .fill, .background = col.surface_2, .radius = 18 }, .{});
         if (s.reply_to.isSet() or s.editing.isSet()) replyBar(cx, c);
         vcompose.bars(cx, c);
+        if (s.voice.recording) @import("voice.zig").recordingBar(cx) else {
         ui.begin(.{ .direction = .row, .align_items = .center, .min_height = 50, .padding = .{ .start = 14, .end = 4, .top = 3, .bottom = 3 } }, .{});
         // Enter sends when "Send with Enter" is on (a keyboard); otherwise, and on phones, it
         // starts a new line and the send button sends.
@@ -732,11 +754,17 @@ fn composer(cx: Cx, c: *const data.Chat) void {
         });
         kit.iconButton(cx, icons.smile, .{ .compose = .{ .open = .emoji } }, .{ .size = 40 });
         ui.end();
+        }
         ui.end();
-        // A long press or right click on Send: the send options (Reseal-js sendMenu).
-        const options: ?Msg = if (!s.editing.isSet()) Msg{ .compose = .{ .open = .options } } else null;
-        ui.begin(.{ .width = .{ .px = 50 }, .height = .{ .px = 50 }, .radius = 17, .background = col.brand, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = .send_text, .on_long_press = options, .on_context = options });
-        ui.icon(if (s.editing.isSet()) icons.check else if (s.lang == .ar) icons.send_rtl else icons.send, 22, col.on_accent, .{}, 0);
+// With nothing typed, the button records (a voice message, or a round video: a long press
+        // switches); a long press or right click on Send opens the send options (sendMenu).
+        const kind_feature: []const u8 = if (s.voice.mode == .round) "videoMessages" else "voiceMessages";
+        const mic = !s.editing.isSet() and s.fields.get(.composer).trimmed().len == 0 and feature(s, kind_feature) and (zui.platform == .web or zui.platform == .android or zui.platform == .ios);
+        const recording = s.voice.recording;
+        const options: ?Msg = if (mic) Msg{ .voice = .toggle_mode } else if (!s.editing.isSet()) Msg{ .compose = .{ .open = .options } } else null;
+        const press: Msg = if (recording) .{ .voice = .finish } else if (mic) .{ .voice = .record } else .send_text;
+        ui.begin(.{ .width = .{ .px = 50 }, .height = .{ .px = 50 }, .radius = 17, .background = if (recording) col.danger else col.brand, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = press, .on_long_press = if (recording) null else options, .on_context = if (recording) null else options });
+        ui.icon(if (s.editing.isSet()) icons.check else if (mic and !recording) @import("voice.zig").micIcon(s) else if (s.lang == .ar) icons.send_rtl else icons.send, 22, col.on_accent, .{}, 0);
         ui.end();
         ui.end();
     }

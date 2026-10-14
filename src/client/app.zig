@@ -29,6 +29,7 @@ pub const exporter = @import("export.zig");
 pub const bots = @import("bots.zig");
 pub const dev = @import("dev.zig");
 pub const stories = @import("stories.zig");
+pub const voice = @import("voice.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
 
@@ -301,6 +302,9 @@ pub const Msg = union(enum) {
     stories: stories.Act,
     story_photo: zui.File,
     story_play: zui.PlayEvent,
+    voice: voice.Act,
+    record_event: zui.RecordEvent,
+    play_event: zui.PlayEvent,
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
@@ -484,6 +488,7 @@ pub const State = struct {
     bots: bots.Bots = .{},
     dev: dev.Dev = .{},
     stories: stories.Stories = .{},
+    voice: voice.Voice = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -736,6 +741,9 @@ fn handle(s: *State, msg: Msg) void {
         .key => |r| if (!stories.onKey(s, r)) keys.onKey(s, r),
         .story_photo => |f| stories.onPicked(s, f),
         .story_play => |e| stories.onPlayEvent(s, e),
+        .voice => |a| voice.act(s, a),
+        .record_event => |e| voice.onRecordEvent(s, e),
+        .play_event => |e| voice.onPlayEvent(s, e),
         .toast_hide => |id| if (id == s.toast.id) s.toast.text.clear(),
         .embed_init_timeout => embedInitDone(s, null),
         .send_typing_done => {},
@@ -1300,4 +1308,5 @@ test {
     _ = @import("rich.zig");
     _ = @import("compose.zig");
     _ = @import("export.zig");
+    _ = @import("voice.zig");
 }

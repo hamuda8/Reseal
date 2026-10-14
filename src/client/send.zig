@@ -527,6 +527,11 @@ pub fn onPicked(s: *State, f: zui.File) void {
 }
 
 /// Sends `bytes` (owned) as a new message's attachment in the open chat.
+/// A voice message or round video (voice.zig): its bytes (owned) as a new message.
+pub fn attachRecording(s: *State, bytes: []u8, meta: media.Meta) void {
+    attach(s, bytes, meta);
+}
+
 fn attach(s: *State, bytes: []u8, meta_in: media.Meta) void {
     const chat = s.open_chat;
     const c = s.store.chat(chat.str()) orelse {

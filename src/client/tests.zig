@@ -369,3 +369,26 @@ test "assistants and the developer console" {
     try testing.expect(D.findText("Secret key") != 0);
     try testing.expectEqualStrings("rsl_sk_test", state().dev.secret.get());
 }
+
+test "voice message: record, upload, send with duration and waveform" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[],\"floor\":0}"));
+    D.R.dispatch(.{ .voice = .record });
+    const rec = state().voice.recorder;
+    try testing.expect(state().voice.recording);
+    for (0..20) |i| D.R.dispatch(.{ .record_event = .{ .kind = .level, .recorder = rec, .level = @as(f32, @floatFromInt(i % 5)) / 5, .duration_ms = @intCast(i * 100) } });
+    D.R.dispatch(.{ .record_event = .{ .kind = .done, .recorder = rec, .duration_ms = 2500, .data = "m4a-bytes", .mime = "audio/mp4" } });
+    try testing.expect(!state().voice.recording);
+    try testing.expect(D.respond("/api/media", 200, "{\"id\":\"md1\",\"chunks\":1,\"chunkSize\":1048576}"));
+    try testing.expect(D.respond("/api/media/md1/chunks/0", 200, "{}"));
+    try testing.expect(D.respond("/api/media/md1/complete", 200, "{}"));
+    const body = lastPost("/chats/g1/messages");
+    try testing.expect(std.mem.indexOf(u8, body, "\"kind\":\"voice\"") != null);
+    try testing.expect(std.mem.indexOf(u8, body, "\"duration\":2.5") != null);
+    try testing.expect(std.mem.indexOf(u8, body, "\"waveform\":\"") != null);
+}
