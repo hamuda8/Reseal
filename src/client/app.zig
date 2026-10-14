@@ -43,6 +43,7 @@ pub const viewerx = @import("viewerx.zig");
 pub const attachx = @import("attachx.zig");
 pub const infopanes = @import("infopanes.zig");
 pub const aimd = @import("aimd.zig");
+pub const chatindex = @import("chatindex.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -343,6 +344,7 @@ pub const Msg = union(enum) {
     viewer_x: viewerx.Act,
     attach_x: attachx.Act,
     ai: aimd.Act,
+    chat_index: chatindex.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -551,6 +553,7 @@ pub const State = struct {
     polls: pollx.Polls = .{},
     attach: attachx.Attach = .{},
     saved_counts: infopanes.Counts = .{},
+    chat_index: chatindex.Index = .{},
     /// Messages whose spoilers were shown.
     revealed: std.ArrayList(Id) = .empty,
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
@@ -709,6 +712,7 @@ pub const Op = union(enum) {
     jump_lookup,
     handoff,
     bot_button,
+    chat_index: u32,
     common_groups,
     shared: u32,
     poll_voters,
@@ -831,6 +835,7 @@ fn handle(s: *State, msg: Msg) void {
         .viewer_x => |a| viewerx.act(s, a),
         .attach_x => |a| attachx.act(s, a),
         .ai => |a| aimd.act(s, a),
+        .chat_index => |a| chatindex.act(s, a),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),
@@ -1110,6 +1115,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (sharedmedia.onAnswer(s, op, r)) return;
             if (pollx.onAnswer(s, op, r)) return;
             if (infopanes.onAnswer(s, op, r)) return;
+            if (chatindex.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

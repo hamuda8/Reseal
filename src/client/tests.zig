@@ -782,3 +782,26 @@ test "hashtags open the chat's search, inline code copies, unknown usernames say
     try testing.expect(D.respond("/chats/by-username/nobody1", 404, "{\"error\":\"Not found\"}"));
     try testing.expectEqualStrings("Nobody has that username.", state().toast.text.get());
 }
+
+test "search everything: an encrypted chat's older history indexed here and searched" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"e1\",\"type\":\"group\",\"title\":\"Secret crew\",\"seq\":120,\"encrypted\":true,\"keyEpoch\":1,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Secret crew");
+    // A full page: older history exists.
+    var pg: std.ArrayList(u8) = .empty;
+    try pg.appendSlice(arena.allocator(), "{\"messages\":[");
+    for (71..121) |i| try pg.print(arena.allocator(), "{s}{{\"id\":\"m{d}\",\"chatId\":\"e1\",\"seq\":{d},\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"later {d}\",\"createdAt\":\"2026-10-12T14:00:00Z\"}}", .{ if (i > 71) "," else "", i, i, i });
+    try pg.appendSlice(arena.allocator(), "],\"floor\":0}");
+    try testing.expect(D.respond("/chats/e1/messages", 200, pg.items));
+    D.R.dispatch(.{ .chat_action = .{ .what = .search, .chat = app.Id.of("e1") } });
+    try D.typeInto("Search messages", "harbour");
+    try testing.expect(D.findText("No messages found") != 0);
+    try D.press("Search everything");
+    try testing.expect(D.pending("before=71") != null);
+    try testing.expect(D.respond("before=71", 200, "{\"messages\":[{\"id\":\"m5\",\"chatId\":\"e1\",\"seq\":5,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"Meet at the harbour\",\"createdAt\":\"2026-10-01T10:00:00Z\"}],\"floor\":0}"));
+    try testing.expect(D.findText("Meet at the harbour") != 0);
+    try testing.expect(state().chat_index.complete);
+}

@@ -1066,7 +1066,31 @@ fn searchSheet(cx: Cx, target: Id) void {
             n += 1;
             hitRow(cx, s.store.displayName(j.strOr(m, "senderId", "")), j.strOr(m, "text", ""), sys.parseIso(j.strOr(m, "createdAt", "")) orelse 0, j.strOr(m, "id", ""));
         };
-        if (n == 0) kit.emptyState(cx, icons.search, t("No results"), if (c.encrypted()) t("Encrypted chats are searched on this device, in the messages loaded so far.") else null);
+        // Encrypted chats: the older history indexed on this device ("Search everything").
+        const cidx = @import("chatindex.zig");
+        if (c.encrypted()) {
+            const tl = s.store.existingTimeline(c.id());
+            for (cidx.entries(s)) |e| {
+                if (n >= 200) break;
+                if (tl != null and tl.?.find(e.id.str()) != null) continue;
+                if (!containsCi(e.text, q)) continue;
+                n += 1;
+                hitRow(cx, s.store.displayName(e.sender.str()), e.text, e.at, e.id.str());
+            }
+        }
+        if (n == 0) kit.emptyState(cx, icons.search, t("No messages found"), null);
+    }
+    if (c.encrypted()) {
+        const st = @import("chatindex.zig").status(s);
+        const older = if (s.store.existingTimeline(c.id())) |tl| tl.has_older else true;
+        if (!st.complete and older) {
+            ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .padding = .xy(12, 8) }, .{});
+            ui.text(t("Older messages are still being indexed on this device."), .{ .font_size = 13, .color = cx.c.text_2, .grow = 1, .width = .fill });
+            if (st.running) {
+                ui.text(if (st.count > 0) fmt.tf("Indexing… {n}", .{ .n = @as(i64, @intCast(st.count)) }) else t("Indexing…"), .{ .font_size = 13, .weight = 650, .color = cx.c.accent });
+            } else kit.button(cx, t("Search everything"), .{ .chat_index = .start }, .{ .small = true, .kind = .secondary });
+            ui.end();
+        }
     }
     views.endSheet(cx);
 }
