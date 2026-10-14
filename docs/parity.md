@@ -142,3 +142,6 @@ Missing items carry an id (M1…) and are worked through in that order.
 
 ## Not in the inventory above (checked separately)
 - [x] Glimpses (stories.js), AI assistants (bots.js), developer console (dev.js), export (export.js), chat lock (chatlock.js)
+
+## Between clients
+- [x] WebM voice messages from Reseal-js on the web (Chrome and Firefox record WebM/Opus) play on iOS: zig-core demuxes the WebM (zui.webm) and decodes the Opus with AudioConverter into WAV for AVPlayer (zig-core 69796ee); plain chats fetch the bytes first

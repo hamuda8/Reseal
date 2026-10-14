@@ -673,6 +673,7 @@ pub const Op = union(enum) {
     upload_chunk: struct { local: u32, file: u32, index: u32 },
     upload_complete: struct { local: u32, file: u32 },
     media_info: struct { media: Id },
+    media_bytes: Id,
     media_chunk: struct { media: Id, index: u32 },
     embed_config,
     embed_guest,

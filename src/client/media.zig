@@ -201,6 +201,15 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
         },
         .media_info => |x| onInfo(s, x.media.str(), r),
         .media_chunk => |x| onChunk(s, x.media.str(), x.index, r),
+        .media_bytes => |x| if (s.files.files.getPtr(x.str())) |f| {
+            if (!r.ok()) {
+                f.state = .failed;
+                return true;
+            }
+            f.bytes = gpa.dupe(u8, r.body) catch return true;
+            f.state = .ready;
+            @import("voice.zig").tryStart(s);
+        },
         else => return false,
     }
     return true;
@@ -252,6 +261,12 @@ fn onInfo(s: *State, id: []const u8, r: zui.Response) void {
     if (f.key == null) {
         // A plain file plays straight from its signed link.
         f.url = gpa.dupe(u8, j.strOr(v, "media.url", "")) catch "";
+        // iOS plays a browser's WebM voice message from its bytes (zui decodes the Opus).
+        if (zui.platform == .ios and std.mem.indexOf(u8, f.mime, "webm") != null) {
+            const url = if (std.mem.startsWith(u8, f.url, "/")) std.fmt.allocPrint(tmp(), "{s}{s}", .{ app.server, f.url }) catch return else f.url;
+            app.fetchRaw(s, url, .{ .media_bytes = Id.of(id) });
+            return;
+        }
         f.state = .ready;
         @import("voice.zig").tryStart(s);
         if (f.save) saveFile(f);
