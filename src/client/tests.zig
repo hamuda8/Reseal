@@ -734,3 +734,17 @@ test "album: three photos in one message, each opens the viewer at its place" {
     D.R.dispatch(.{ .viewer_x = .{ .go = -1 } });
     try testing.expect(state().viewer.?.index == 1);
 }
+
+test "inline bot buttons: a callback answers the bot, its text is the toast" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"b1\",\"type\":\"bot\",\"encrypted\":false,\"peer\":{\"id\":\"u7\",\"displayName\":\"Shop bot\",\"isBot\":true},\"me\":{\"role\":\"member\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Shop bot");
+    try testing.expect(D.respond("/chats/b1/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"b1\",\"seq\":1,\"senderId\":\"u7\",\"kind\":\"message\",\"text\":\"Your order?\",\"buttons\":[[{\"text\":\"Confirm\",\"data\":\"ok\"},{\"text\":\"Track\",\"url\":\"https://example.com/t\"}]],\"createdAt\":\"2026-10-12T14:00:00Z\"}],\"floor\":0}"));
+    try D.press("Confirm");
+    try testing.expectEqualStrings("{\"data\":\"ok\"}", lastPost("/messages/m1/button"));
+    try testing.expect(D.respond("/messages/m1/button", 200, "{}"));
+    try testing.expectEqualStrings("Confirm", state().toast.text.get());
+}

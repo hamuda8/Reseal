@@ -498,6 +498,18 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
             }
         }
         if (j.obj(m.content, "preview")) |pv| if (j.str(pv, "title") != null or j.str(pv, "description") != null) linkCard(cx, pv, fg);
+        // Inline buttons (a link opens, the others answer the bot).
+        for (j.arr(m.content, "buttons"), 0..) |row, ri| {
+            ui.begin(.{ .direction = .row, .gap = 4, .padding = .{ .top = 4 } }, .{ .key = key(.{ "ibr", m.id(), ri }) });
+            for (if (row == .array) row.array.items else &[_]j.Value{}, 0..) |b, bi| {
+                if (ri > 15 or bi > 15) break;
+                ui.begin(.{ .grow = 1, .width = .fill, .direction = .row, .gap = 5, .align_items = .center, .justify = .center, .padding = .xy(10, 8), .radius = 10, .background = fg.withAlpha(0.1), .pressed_background = fg.withAlpha(0.2) }, .{ .on_press = if (m.local_id == 0) Msg{ .chat_more = .{ .button = .{ .msg = Id.of(m.id()), .row = @intCast(ri), .col = @intCast(bi) } } } else null, .key = key(.{ "ib", m.id(), ri, bi }) });
+                ui.text(j.strOr(b, "text", ""), .{ .font_size = 13.5, .weight = 650, .color = fg, .max_lines = 1 });
+                if (j.str(b, "url") != null) ui.icon(icons.external, 13, fg, .{}, 0);
+                ui.end();
+            }
+            ui.end();
+        }
         if (m.verified != null and !m.verified.?) {
             ui.begin(.{ .direction = .row, .gap = 4, .align_items = .center }, .{});
             ui.icon(icons.alert, 14, col.warning, .{}, 0);

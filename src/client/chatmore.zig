@@ -39,6 +39,7 @@ pub const Act = union(enum) {
     set_ttl: struct { chat: Id, secs: u32 },
     handoff: Id,
     starter: struct { chat: Id, i: u8 },
+    button: struct { msg: Id, row: u8, col: u8 },
 };
 
 fn openIt(s: *State, chat: Id) void {
@@ -69,6 +70,19 @@ pub fn act(s: *State, a: Act) void {
             if (x.i >= list.len or list[x.i] != .string) return;
             @import("send.zig").sendText(s, x.chat.str(), list[x.i].string, .{});
         },
+        .button => |x| {
+            const tl = s.store.existingTimeline(s.open_chat.str()) orelse return;
+            const m = tl.find(x.msg.str()) orelse return;
+            const rows = j.arr(m.content, "buttons");
+            if (x.row >= rows.len) return;
+            const row = if (rows[x.row] == .array) rows[x.row].array.items else return;
+            if (x.col >= row.len) return;
+            const b = row[x.col];
+            if (j.str(b, "url")) |u| return app.fx.openUrl(u, true);
+            s.chat_button_text.set(j.strOr(b, "text", ""));
+            const data_json = if (j.field(b, "data")) |d| (j.stringify(tmp(), d) catch "null") else "null";
+            app.api(s, .POST, std.fmt.allocPrint(tmp(), "/chats/{s}/messages/{s}/button", .{ s.open_chat.str(), x.msg.str() }) catch return, std.fmt.allocPrint(tmp(), "{{\"data\":{s}}}", .{data_json}) catch return, .bot_button);
+        },
         .handoff => |chat| {
             s.modal = null;
             app.api(s, .POST, std.fmt.allocPrint(tmp(), "/chats/{s}/handoff", .{chat.str()}) catch return, "{}", .handoff);
@@ -78,6 +92,7 @@ pub fn act(s: *State, a: Act) void {
 
 pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
     switch (op) {
+        .bot_button => if (r.ok()) app.toast(s, s.chat_button_text.get()) else app.toastError(s, app.apiError(r).message),
         .handoff => if (r.ok()) app.toast(s, t("We let the team know. Someone will reply here soon.")) else app.toastError(s, app.apiError(r).message),
         else => return false,
     }
