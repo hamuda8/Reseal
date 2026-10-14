@@ -37,6 +37,8 @@ pub const Act = union(enum) {
     unhighlight: u32,
     to_bottom,
     next_mention,
+    pin_tap: Id,
+    pin_unpin: Id,
 };
 
 pub const Extras = struct {
@@ -48,6 +50,8 @@ pub const Extras = struct {
     highlight: Id = .{},
     highlight_seq: u32 = 0,
     at_bottom: bool = true,
+    /// The pin the pinned bar shows.
+    pin_index: usize = 0,
 };
 
 fn path(comptime f: []const u8, args: anytype) []const u8 {
@@ -111,6 +115,12 @@ pub fn act(s: *State, a: Act) void {
         .unhighlight => |seq| if (seq == x.highlight_seq) {
             x.highlight = .{};
         },
+        .pin_tap => |pid| {
+            const n = if (s.store.chat(s.open_chat.str())) |c| j.arr(c.o.v, "pinned").len else 0;
+            jump(s, pid.str(), 0);
+            s.extras.pin_index = if (n > 0) (s.extras.pin_index + 1) % n else 0;
+        },
+        .pin_unpin => |pid| app.api(s, .POST, std.fmt.allocPrint(tmp(), "/chats/{s}/messages/{s}/pin", .{ s.open_chat.str(), pid.str() }) catch return, "{\"unpin\":true}", .pin),
         .next_mention => if (s.open_chat.isSet()) {
             // The first unread message that mentions me, else the bottom.
             const c = s.store.chat(s.open_chat.str()) orelse return;

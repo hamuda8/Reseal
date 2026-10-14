@@ -704,3 +704,19 @@ test "group info: Voice chat, Search members over 15" {
     try testing.expect(D.findText("Person 12") != 0);
     try testing.expect(D.findText("Person 7") == 0);
 }
+
+test "pinned bar: each tap shows the next pin; unpin from the bar" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"seq\":2,\"pinned\":[\"m1\",\"m2\"],\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"first pin\",\"createdAt\":\"2026-10-12T14:00:00Z\"},{\"id\":\"m2\",\"chatId\":\"g1\",\"seq\":2,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"second pin\",\"createdAt\":\"2026-10-12T14:01:00Z\"}],\"floor\":0}"));
+    try testing.expect(D.findText("Pinned message #1") != 0);
+    D.R.dispatch(.{ .extras = .{ .pin_tap = app.Id.of("m1") } });
+    try testing.expect(state().extras.highlight.eql("m1"));
+    try testing.expect(D.findText("Pinned message #2") != 0);
+    D.R.dispatch(.{ .extras = .{ .pin_unpin = app.Id.of("m2") } });
+    try testing.expectEqualStrings("{\"unpin\":true}", lastPost("/messages/m2/pin"));
+}

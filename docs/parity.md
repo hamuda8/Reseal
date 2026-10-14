@@ -32,7 +32,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 ## Chat view (chatview.js)
 - [x] Header: avatar, title, lock/sparkles, status line by chat type, Call / Video call / group call, Search in chat, More
 - [x] Top bars: group call bar with Join, pinned bar, AI notice
-- [ ] M8 Pinned bar: cycles to the next pin on each tap, 'Pinned message #n', × Unpin for those allowed
+- [x] M8 Pinned bar: cycles to the next pin on each tap, 'Pinned message #n', × Unpin for those allowed
 - [x] Composer replacements (Join, Mute in channels, Unblock, deleted account, admins only)
 - [x] Day separators, unread separator, runs, infinite scroll both ways
 - [x] Intro: assistant greeting and starters, 'Encrypted chat' + 'Verify the security code', saved purpose

@@ -229,18 +229,30 @@ fn topBars(cx: Cx, c: *const data.Chat) void {
         ui.end();
     }
     if (pinned.len > 0) {
-        const pid = if (pinned[0] == .string) pinned[pinned.len - 1].string else "";
+        // One pin at a time; a tap shows it and moves on to the next (pinnedBar).
+        const idx: usize = if (s.extras.pin_index < pinned.len) s.extras.pin_index else 0;
+        const pid = if (pinned[idx] == .string) pinned[idx].string else "";
         var line: []const u8 = t("Pinned message");
         if (s.store.existingTimeline(c.id())) |tl| if (tl.find(pid)) |m| {
-            line = text.summary(s, m, true);
+            line = if (m.deleted()) t("Deleted message") else text.summary(s, m, true);
         };
-        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 50, .padding = .{ .start = 14, .end = 10, .top = 7, .bottom = 7 }, .radius = 16, .background = col.surface_2, .pressed_opacity = 0.85 }, .{ .on_press = .{ .extras = .{ .jump = .{ .msg = Id.of(pid) } } } });
-        ui.begin(.{ .width = .{ .px = 3 }, .height = .{ .px = 34 }, .radius = 2, .background = col.accent }, .{});
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 50, .padding = .{ .start = 14, .end = 6, .top = 7, .bottom = 7 }, .radius = 16, .background = col.surface_2 }, .{});
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .grow = 1, .width = .fill, .pressed_opacity = 0.85 }, .{ .on_press = .{ .extras = .{ .pin_tap = Id.of(pid) } }, .key = key(.{"pinbar"}) });
+        // Up to four lines, the current one lit.
+        ui.begin(.{ .gap = 2, .height = .{ .px = 34 }, .justify = .center }, .{});
+        const shown = @min(pinned.len, 4);
+        for (0..shown) |i| {
+            const seg: f32 = (34 - 2 * @as(f32, @floatFromInt(shown - 1))) / @as(f32, @floatFromInt(shown));
+            ui.begin(.{ .width = .{ .px = 3 }, .height = .{ .px = seg }, .radius = 2, .background = if (i == @min(idx, 3)) col.accent else col.accent.withAlpha(0.3) }, .{});
+            ui.end();
+        }
         ui.end();
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(if (pinned.len > 1) fmt.tf("Pinned message #{n}", .{ .n = @as(i64, @intCast(pinned.len)) }) else t("Pinned message"), .{ .font_size = 12.5, .weight = 700, .color = col.accent });
+        ui.text(if (pinned.len > 1) fmt.tf("Pinned message #{n}", .{ .n = @as(i64, @intCast(idx + 1)) }) else t("Pinned message"), .{ .font_size = 12.5, .weight = 700, .color = col.accent });
         ui.text(line, .{ .font_size = 14, .color = col.text, .max_lines = 1 });
         ui.end();
+        ui.end();
+        if (can(c, "pinMessages")) kit.iconButton(cx, icons.close, .{ .extras = .{ .pin_unpin = Id.of(pid) } }, .{ .size = 32, .icon_size = 18 });
         ui.end();
     }
     if (bot) {
