@@ -103,6 +103,12 @@ fn callScreen(cx: Cx) void {
         ui.video(if (c.screen_on) c.screen else c.local, .{ .mirror = !c.screen_on, .cover = true }, .{ .width = .fill, .height = .fill }, key(.{"lv"}));
         ui.end();
     }
+    // Reactions from the others, floating for a moment.
+    for (c.floats[0..c.floats_len]) |f| {
+        ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 130, .start = cx.w * f.x / 100 } }, .{ .key = key(.{ "cfloat", f.seq }) });
+        ui.text(f.emoji[0..f.len], .{ .font_size = 40 });
+        ui.end();
+    }
     // Controls
     ui.begin(.{ .direction = .row, .justify = .center, .gap = if (cx.phone) 8 else 16, .padding = .{ .top = 18, .bottom = 34, .start = 16, .end = 16 } }, .{});
     if (c.status == .ended or c.status == .unavailable) {

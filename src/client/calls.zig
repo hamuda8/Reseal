@@ -48,6 +48,8 @@ pub const Peer = struct {
     remote_fp_len: u8 = 0,
 };
 
+pub const Float = struct { seq: u32, x: f32, emoji: [32]u8 = undefined, len: u8 = 0 };
+
 pub const Incoming = struct { call: Id, chat: Id, from: Id, name: Text = .{}, avatar: Id = .{}, video: bool = false };
 
 /// What to do once the microphone (and camera) are on.
@@ -77,6 +79,10 @@ pub const CallState = struct {
     emoji: Text = .{},
     unverified: bool = false,
     seq: u32 = 0,
+    /// Reactions floating over a group call (each for 2.5 s).
+    floats: [8]Float = undefined,
+    floats_len: u8 = 0,
+    float_seq: u32 = 0,
     /// Answered on the system call screen before the call reached the app.
     answer_pending: Id = .{},
     system_started: bool = false,
@@ -98,6 +104,7 @@ pub const Action = union(enum) {
     minimize,
     hand,
     dismiss: u32,
+    float_done: u32,
     open_chat,
 };
 
@@ -140,6 +147,11 @@ pub fn act(s: *State, a: Action) void {
             if (!c.id.isSet()) return;
             c.hand = !c.hand;
             app.wsSend(s, "call.reaction", std.fmt.allocPrint(tmp(), "{{\"callId\":\"{s}\",\"emoji\":\"\\u270b\",\"hand\":{}}}", .{ c.id.str(), c.hand }) catch return);
+        },
+        .float_done => |seq| for (c.floats[0..c.floats_len], 0..) |f, i| if (f.seq == seq) {
+            std.mem.copyForwards(Float, c.floats[i .. c.floats_len - 1], c.floats[i + 1 .. c.floats_len]);
+            c.floats_len -= 1;
+            break;
         },
         .dismiss => |seq| if (seq == c.seq and c.status == .ended or c.status == .unavailable and seq == c.seq) reset(s),
         .open_chat => {
@@ -615,9 +627,25 @@ pub fn onEvent(s: *State, typ: []const u8, d: j.Value) void {
             p.media = .{ .audio = j.truthy(m, "audio"), .video = j.truthy(m, "video"), .screen = j.truthy(m, "screen") };
         };
     } else if (eq(typ, "call.reaction")) {
-        if (findPeer(s, j.strOr(d, "connId", ""))) |p| if (eq(j.strOr(d, "emoji", ""), "✋")) {
-            p.hand = j.truthy(d, "hand");
-        };
+        if (!s.call.id.eql(j.strOr(d, "callId", ""))) return;
+        const emoji = j.strOr(d, "emoji", "");
+        if (eq(emoji, "✋")) {
+            if (findPeer(s, j.strOr(d, "connId", ""))) |p| p.hand = j.truthy(d, "hand");
+            return;
+        }
+        // Someone's reaction floats up over the call for a moment.
+        if (emoji.len == 0 or emoji.len > 32) return;
+        c.float_seq +%= 1;
+        var f: Float = .{ .seq = c.float_seq, .x = @floatFromInt(20 + @as(u32, @truncate(sys.random().int(u32))) % 60) };
+        @memcpy(f.emoji[0..emoji.len], emoji);
+        f.len = @intCast(emoji.len);
+        if (c.floats_len == c.floats.len) {
+            std.mem.copyForwards(Float, c.floats[0 .. c.floats.len - 1], c.floats[1..]);
+            c.floats_len -= 1;
+        }
+        c.floats[c.floats_len] = f;
+        c.floats_len += 1;
+        app.fx.after(2500, .{ .call = .{ .float_done = f.seq } });
     } else if (eq(typ, "call.signal")) {
         onSignal(s, d);
     }

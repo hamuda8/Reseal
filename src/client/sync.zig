@@ -252,6 +252,8 @@ pub fn cancelTyping(s: *State) void {
 pub fn onConnected(s: *State, reconnect: bool) void {
     keys.fulfillPending(s);
     if (!reconnect) return;
+    // Signalling goes on over the new connection only for new peers.
+    if (s.call.group and s.call.status == .active) app.toast(s, t("Reconnected. If someone cannot hear you, leave and rejoin the call."));
     // Catch up on everything that happened while we were offline.
     app.api(s, .GET, "/chats", null, .chats);
     var it = s.store.timelines.iterator();

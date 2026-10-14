@@ -107,8 +107,8 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Minimize (mini bar), full screen, encryption emoji badge, unverified warning
 - [x] 1:1 and group views, 'Waiting for others to join…', hands on tiles
 - [x] Mute, Camera, Screen (desktop web), Flip (phones), Raise hand, End/Leave
-- [ ] M21 Devices menu (Microphone / Camera / Speaker) and 'Open chat' from it
-- [ ] M22 Floating emoji reactions in group calls; 'Reconnected. If someone cannot hear you…' after a group call reconnects
+- [~] M21 Devices menu (Microphone / Camera / Speaker): zui media has no device list or choice (only front/back camera, which the Flip button uses); 'Open chat' is the call screen's top-bar button
+- [x] M22 Floating emoji reactions in group calls; 'Reconnected. If someone cannot hear you…' after a group call reconnects
 - [~] Ringtone, dial tone, connect and hang-up sounds: zui only has fx.beep (the phones ring through their system call screens)
 - [~] 'Voice call' / 'Video call' on the phones' system call screen are hard-coded in zig-core's ZuiCallService (zui.Call needs a label field; zig-core is read-only here)
 
