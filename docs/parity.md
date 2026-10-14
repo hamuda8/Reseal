@@ -96,8 +96,8 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] M5 Team info for customers ('About {team}', encryption row, 'Order' row, shared media, export, delete)
 - [x] M4 Saved info ('About Saved' / 'Saved chat info': 'Only you can see this…', Purpose, items / photos & videos / files counts, shared media, export, delete)
 - [x] Group/channel info: counts, Mute, Add, Leave, Description, Public link, Invite links, Encryption, Auto-delete, members, Edit
-- [ ] M6 Group info 'Voice chat' button
-- [ ] M7 'Search members' when there are more than 15
+- [x] M6 Group info 'Voice chat' button
+- [x] M7 'Search members' when there are more than 15
 - [x] Member menu (admin rights, transfer, remove, ban), admin rights sheet, add members, join requests, invite links and new link sheet, edit pane, public link, permissions, settings section, administrators, banned users
 - [x] Shared media tabs Media / Files / Links / Voice / Music
 

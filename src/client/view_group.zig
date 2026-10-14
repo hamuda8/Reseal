@@ -77,6 +77,7 @@ fn main(cx: Cx, c: *const data.Chat) void {
     ui.begin(.{ .direction = .row, .justify = .center, .gap = 8, .padding = .{ .bottom = 10 } }, .{});
     const muted = c.isMuted();
     quick(cx, if (muted) icons.bell else icons.bellOff, if (muted) t("Unmute") else t("Mute"), .{ .chat_action = .{ .what = if (muted) .unmute else .mute, .chat = Id.of(c.id()) } });
+    if (!channel and @import("view_chat.zig").feature(s, "calls")) quick(cx, icons.phone, t("Voice chat"), .{ .call = .{ .join = Id.of(c.id()) } });
     if (can(c, "addMembers") or can(c, "inviteUsers")) quick(cx, icons.userPlus, t("Add"), .{ .push_pane = .{ .picker = .add_members } });
     if (!eq(c.role(), "owner")) quick(cx, icons.logout, t("Leave"), .{ .chat_action = .{ .what = .leave, .chat = Id.of(c.id()) } });
     ui.end();
@@ -94,7 +95,22 @@ fn main(cx: Cx, c: *const data.Chat) void {
         kit.sectionTitle(cx, if (channel) t("Subscribers") else t("Members"));
         if (isAdmin(c) and s.group.requests > 0) kit.row(cx, fmt.tn(a, s.group.requests, "{n} join request", "{n} join requests"), .{ .icon = icons.userPlus, .chevron = true, .on = act(.{ .page = .requests }) });
         if (s.members) |mres| if (s.members_chat.eql(c.id())) {
-            for (j.arr(mres.v, "members")) |m| memberRow(cx, c, m);
+            const list = j.arr(mres.v, "members");
+            // More than 15: a search over the names.
+            if (list.len > 15) {
+                ui.begin(.{ .direction = .row, .padding = .xy(8, 4) }, .{});
+                kit.searchBox(cx, .member_search, t("Search members"));
+                ui.end();
+            }
+            const q = std.mem.trim(u8, s.fields.get(.member_search).get(), " ");
+            for (list) |m| {
+                if (q.len > 0 and list.len > 15) {
+                    const nm = j.strOr(m, "user.displayName", "");
+                    const un = j.strOr(m, "user.username", "");
+                    if (std.ascii.findIgnoreCase(nm, q) == null and std.ascii.findIgnoreCase(un, q) == null) continue;
+                }
+                memberRow(cx, c, m);
+            }
         };
     }
     ui.begin(.{ .padding = .{ .top = 12 } }, .{});

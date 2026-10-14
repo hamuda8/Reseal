@@ -684,3 +684,23 @@ test "info: About Saved with counts, a team's About for its customer" {
     try testing.expect(D.findText("About Acme Store") != 0);
     try testing.expect(D.findText("A-1001") != 0);
 }
+
+test "group info: Voice chat, Search members over 15" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try bootAsBob(a);
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"memberCount\":16,\"encrypted\":false,\"me\":{\"role\":\"member\",\"status\":\"active\",\"unread\":0}}]}"));
+    D.R.dispatch(.{ .open_info = app.Id.of("g1") });
+    try testing.expect(D.findText("Voice chat") != 0);
+    var list: std.ArrayList(u8) = .empty;
+    try list.appendSlice(a, "{\"members\":[");
+    for (0..16) |i| try list.print(a, "{s}{{\"userId\":\"u{d}\",\"role\":\"member\",\"user\":{{\"id\":\"u{d}\",\"displayName\":\"Person {d}\"}}}}", .{ if (i > 0) "," else "", i, i, i });
+    try list.appendSlice(a, "]}");
+    try testing.expect(D.respond("/chats/g1/members", 200, list.items));
+    try testing.expect(D.findText("Person 7") != 0);
+    try D.typeInto("Search members", "Person 12");
+    try testing.expect(D.findText("Person 12") != 0);
+    try testing.expect(D.findText("Person 7") == 0);
+}

@@ -157,6 +157,7 @@ pub const Field = enum {
     model_search,
     dev_app_name,
     forward_search,
+    member_search,
     attach_caption,
     dev_origins,
     dev_storage_url,
