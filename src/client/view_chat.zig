@@ -329,25 +329,56 @@ fn unreadLine(cx: Cx) void {
     ui.end();
 }
 
+/// The card at the top of a chat (Reseal-js chatview intro): an assistant's greeting and
+/// conversation starters, an encrypted chat's promise, a saved chat's purpose.
 fn intro(cx: Cx, c: *const data.Chat) void {
     const ui = cx.ui;
     const col = cx.c;
-    // Plain chats (Reseal-js chatview intro): a card only while there is nothing yet.
-    if (!c.is("saved") and !c.encrypted()) if (cx.s.store.existingTimeline(c.id())) |tl| {
-        for (tl.items.items) |m| if (!m.isService()) return;
+    const s = cx.s;
+    const bot = c.is("bot");
+    var mine = false;
+    var shown: usize = 0;
+    if (s.store.existingTimeline(c.id())) |tl| for (tl.items.items) |m| {
+        if (m.isService()) continue;
+        shown += 1;
+        if (s.store.isMe(m.authorId())) mine = true;
     };
+    if (shown > 3 and !bot) return;
+    if (!bot and !c.encrypted() and !c.is("saved")) {
+        if (shown > 0) return;
+    }
+    const peer = s.store.peer(c);
     flipped(cx);
     ui.begin(.{ .align_items = .center, .padding = .{ .top = 24, .bottom = 22 } }, .{});
     ui.begin(.{ .max_width = 360, .align_items = .center, .gap = 6, .padding = .{ .top = 24, .bottom = 20, .start = 24, .end = 24 }, .radius = 24, .background = col.surface_2 }, .{});
     ui.begin(.{ .width = .{ .px = 44 }, .height = .{ .px = 44 }, .radius = 15, .background = col.brand, .align_items = .center, .justify = .center }, .{});
-    ui.icon(if (c.is("saved")) icons.bookmark else if (c.encrypted()) icons.lock else icons.chat, 24, Color.white, .{}, 0);
+    ui.icon(if (bot) icons.sparkles else if (c.is("saved")) icons.bookmark else if (c.encrypted()) icons.shieldCheck else icons.chat, 24, Color.white, .{}, 0);
     ui.end();
-    if (c.is("saved")) {
-        ui.text(t("Saved Messages"), .{ .font_size = 17, .weight = 700, .color = col.text, .text_align = .center });
-        ui.text(t("Keep notes, links and files here. Only you can see them, and they are encrypted on your devices."), .{ .font_size = 13.5, .color = col.text_2, .text_align = .center, .line_height = 1.6 });
+    const body: zui.Style = .{ .font_size = 13.5, .color = col.text_2, .text_align = .center, .line_height = 1.6 };
+    if (bot) {
+        ui.text(s.store.title(c), .{ .font_size = 17, .weight = 700, .color = col.text, .text_align = .center });
+        const about = if (peer) |p| (p.s("bio") orelse p.s("bot.description")) else null;
+        ui.text(if (about != null and about.?.len > 0) about.? else t("Ask me anything."), body);
+        if (!mine) if (peer) |p| if (p.get("bot")) |b| {
+            ui.begin(.{ .direction = .row, .wrap = true, .justify = .center, .gap = 6, .padding = .{ .top = 8 } }, .{});
+            for (j.arr(b, "starters"), 0..) |st, i| if (st == .string and i < 8) {
+                ui.begin(.{ .padding = .xy(12, 7), .radius = 14, .background = col.surface, .border_width = 1, .border_color = col.border, .pressed_background = col.active }, .{ .on_press = .{ .chat_more = .{ .starter = .{ .chat = Id.of(c.id()), .i = @intCast(i) } } }, .key = key(.{ "starter", i }) });
+                ui.text(st.string, .{ .font_size = 13.5, .color = col.text });
+                ui.end();
+            };
+            ui.end();
+        };
+    } else if (c.is("saved")) {
+        ui.text(s.store.title(c), .{ .font_size = 17, .weight = 700, .color = col.text, .text_align = .center });
+        const about = c.o.s("about") orelse "";
+        ui.text(if (about.len > 0) about else t("Your private space for notes, links, files and messages you want to keep. Encrypted and on all your devices."), body);
     } else if (c.encrypted()) {
-        ui.text(t("End-to-end encrypted"), .{ .font_size = 17, .weight = 700, .color = col.text, .text_align = .center });
-        ui.text(t("Messages and calls are encrypted on your devices. Not even Reseal can read them."), .{ .font_size = 13.5, .color = col.text_2, .text_align = .center, .line_height = 1.6 });
+        ui.text(t("Encrypted chat"), .{ .font_size = 17, .weight = 700, .color = col.text, .text_align = .center });
+        ui.text(t("Messages, files and calls in this chat are encrypted on your devices before they are sent."), body);
+        const verify: Msg = if (c.is("private") and peer != null) .{ .menu = .{ .safety = Id.of(peer.?.s("id") orelse "") } } else .{ .open_info = Id.of(c.id()) };
+        ui.begin(.{ .padding = .xy(8, 4), .radius = 8, .pressed_opacity = 0.7 }, .{ .on_press = verify, .key = key(.{"verify-code"}) });
+        ui.text(t("Verify the security code"), .{ .font_size = 13.5, .weight = 650, .color = col.accent });
+        ui.end();
     } else {
         ui.text(t("No messages here yet"), .{ .font_size = 17, .weight = 700, .color = col.text, .text_align = .center });
     }
@@ -890,7 +921,8 @@ fn chatMenu(cx: Cx, target: Id) void {
             return .{ .chat_action = .{ .what = what, .chat = chat } };
         }
     }.f;
-    views.menuItem(cx, icons.info, t("Info"), act(.info, id), false);
+    const info_label = if (c.is("saved")) (if (c.o.b("primary")) t("About Saved") else t("Saved chat info")) else if (c.is("private") or c.is("bot") or s.store.isTeamStaff(c)) t("View profile") else if (c.is("channel")) t("Channel info") else t("Group info");
+    views.menuItem(cx, icons.info, info_label, act(.info, id), false);
     views.menuItem(cx, icons.search, t("Search in chat"), act(.search, id), false);
     if (!c.archived()) views.menuItem(cx, if (c.pinnedAt() != 0) icons.unpin else icons.pin, if (c.pinnedAt() != 0) t("Unpin") else t("Pin"), act(if (c.pinnedAt() != 0) .unpin else .pin, id), false);
     if (!c.is("saved")) {

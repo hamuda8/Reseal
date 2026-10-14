@@ -592,3 +592,15 @@ test "media viewer: next and previous across the chat's photos, reply from it" {
     try testing.expect(state().viewer == null);
     try testing.expect(state().reply_to.eql("m1"));
 }
+test "assistant chat: greeting and conversation starters" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"b1\",\"type\":\"bot\",\"encrypted\":false,\"peer\":{\"id\":\"u7\",\"displayName\":\"Helper\",\"isBot\":true,\"bot\":{\"description\":\"I plan trips.\",\"starters\":[\"Plan a weekend\"]}},\"me\":{\"role\":\"member\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Helper");
+    try testing.expect(D.respond("/chats/b1/messages", 200, "{\"messages\":[],\"floor\":0}"));
+    try testing.expect(D.findText("I plan trips.") != 0);
+    try D.press("Plan a weekend");
+    try testing.expect(std.mem.indexOf(u8, lastPost("/chats/b1/messages"), "Plan a weekend") != null);
+}

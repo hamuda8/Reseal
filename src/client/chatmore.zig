@@ -38,6 +38,7 @@ pub const Act = union(enum) {
     ttl_menu: Id,
     set_ttl: struct { chat: Id, secs: u32 },
     handoff: Id,
+    starter: struct { chat: Id, i: u8 },
 };
 
 fn openIt(s: *State, chat: Id) void {
@@ -60,6 +61,13 @@ pub fn act(s: *State, a: Act) void {
         .set_ttl => |x| {
             s.modal = null;
             app.api(s, .PATCH, std.fmt.allocPrint(tmp(), "/chats/{s}", .{x.chat.str()}) catch return, std.fmt.allocPrint(tmp(), "{{\"ttl\":{d}}}", .{x.secs}) catch return, .{ .chat_patch = x.chat });
+        },
+        .starter => |x| {
+            const c = s.store.chat(x.chat.str()) orelse return;
+            const p = s.store.peer(c) orelse return;
+            const list = j.arr(p.get("bot"), "starters");
+            if (x.i >= list.len or list[x.i] != .string) return;
+            @import("send.zig").sendText(s, x.chat.str(), list[x.i].string, .{});
         },
         .handoff => |chat| {
             s.modal = null;

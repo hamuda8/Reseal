@@ -238,17 +238,22 @@ fn stickerSheet(cx: Cx) void {
 fn scheduledSheet(cx: Cx) void {
     const s = cx.s;
     const ui = cx.ui;
-    views.sheet(cx, t("Scheduled messages"));
+    const saved = if (s.store.chat(s.open_chat.str())) |c| c.is("saved") else false;
+    views.sheet(cx, if (saved) t("Reminders") else t("Scheduled messages"));
     const list = if (s.compose.scheduled) |o| j.arr(o.v, "messages") else &.{};
     if (s.compose.scheduled == null) {
         kit.spinner(cx);
     } else if (list.len == 0) {
-        kit.emptyState(cx, icons.calendar, t("No scheduled messages"), t("Choose \"Schedule message\" in the send options."));
+        // How to schedule: right click on a computer, a long press on a phone.
+        const desk = zui.platform == .web and !cx.phone;
+        if (saved) {
+            kit.emptyState(cx, icons.calendar, t("No reminders"), if (desk) t("Write a note, then right-click the send button to set a reminder.") else t("Choose \"Schedule message\" in the send options."));
+        } else kit.emptyState(cx, icons.calendar, t("No scheduled messages"), if (desk) t("Right-click the send button to schedule a message.") else t("Choose \"Schedule message\" in the send options."));
     }
     for (list) |m| {
         const id = j.strOr(m, "id", "");
         const at = sys_parse(j.strOr(m, "scheduledAt", ""));
-        const when = if (j.truthy(m, "whenOnline")) t("When online") else if (at) |ms| fmt.fullDate(cx.a(), ms) else "";
+        const when = if (j.truthy(m, "whenOnline")) (if (s.store.chat(s.open_chat.str())) |c| fmt.tf("When {name} comes online", .{ .name = s.store.title(c) }) else t("When online")) else if (at) |ms| fmt.fullDate(cx.a(), ms) else "";
         ui.begin(.{ .gap = 6, .padding = .xy(12, 10), .radius = theme.radius, .background = cx.c.surface_2 }, .{ .key = key(.{ "sched", id }) });
         ui.text(when, .{ .font_size = 12.5, .weight = 650, .color = cx.c.accent });
         ui.text(scheduledLine(cx, m), .{ .font_size = 14.5, .color = cx.c.text, .max_lines = 3 });
