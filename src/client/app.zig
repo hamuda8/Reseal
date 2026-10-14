@@ -822,7 +822,10 @@ fn handle(s: *State, msg: Msg) void {
         .http => |r| onAnswer(s, r),
         .picked => |f| send.onPicked(s, f),
         .device => |e| switch (e) {
-            .visible => setVisible(s, true),
+            .visible => {
+                setVisible(s, true);
+                recheckSignIn(s);
+            },
             .hidden => setVisible(s, false),
             .online => if (s.ws.socket == 0 and !s.ws.stopped and s.phase == .ready) connect(s),
             .offline => {},
@@ -944,7 +947,8 @@ fn start(s: *State) void {
     if (std.mem.startsWith(u8, path_only, "/join/") and path_only.len > 6) s.pending_join = Id.of(std.mem.trimEnd(u8, path_only[6..], "/"));
     if (std.mem.startsWith(u8, path_only, "/@") and path_only.len > 2) s.pending_username = Id.of(std.mem.trimEnd(u8, path_only[2..], "/"));
     if (native_auth) {
-        const token = zui.storage.get(tmp(), "token", .{ .secure = true }) orelse {
+        // This app's token, else one another of our apps keeps (one sign-in on the phone).
+        const token = zui.wufour.saved(tmp()) orelse {
             s.phase = .sign_in;
             return;
         };
@@ -972,10 +976,19 @@ pub fn setLang(s: *State, lang: Lang) void {
     zui.i18n.setLanguage(@tagName(lang));
 }
 
-fn signInWufour(_: *State) void {
+fn signInWufour(s: *State) void {
     if (native_auth) {
-        // Phones: Wufour's own sign-in page inside the app; the answer is Msg.web_auth.
-        zui.wufour.signIn(Msg, fx, .{ .auth_host = auth_host, .callback = callback_url }, onWebAuth);
+        // Phones: Wufour's own sign-in page inside the app, as one of Reseal's pages (its bar
+        // and colours); the answer is Msg.web_auth.
+        const c = views.colorsFor(s, env.dark);
+        zui.wufour.signIn(Msg, fx, .{
+            .auth_host = auth_host,
+            .callback = callback_url,
+            .title = t("Sign in with Wufour"),
+            .bar = c.surface,
+            .ink = c.text,
+            .background = c.surface,
+        }, onWebAuth);
         return;
     }
     // The server's /login sends people to Wufour and back with the cookie set.
@@ -996,6 +1009,10 @@ fn webAuthDone(s: *State, r: zui.WebAuthResult) void {
     if (r == .cancelled or s.phase != .sign_in) return;
     const token = zui.wufour.tokenOfResult(tmp(), r) orelse return toastError(s, t("Could not sign in. Try again."));
     zui.wufour.save(token);
+    startWithToken(s, token);
+}
+
+fn startWithToken(s: *State, token: []const u8) void {
     s.bearer.set(token);
     s.phase = .loading;
     api(s, .GET, "/config", null, .config);
@@ -1010,10 +1027,37 @@ pub fn signedOut(s: *State) void {
     }
     stopSocket(s);
     if (native_auth) {
-        zui.wufour.forget();
+        // Not taken from another of our apps again (that one signs out on its own 401).
+        if (s.bearer.get().len > 0) zui.wufour.refused(s.bearer.get()) else zui.wufour.forget();
         s.bearer.clear();
     }
     s.phase = .sign_in;
+}
+
+/// Back on screen (phones): signed in or out in another of our apps meanwhile.
+fn recheckSignIn(s: *State) void {
+    if (!native_auth or s.mode == .embed) return;
+    const current: ?[]const u8 = if (s.bearer.get().len > 0) s.bearer.get() else null;
+    if (current == null and s.phase != .sign_in) return;
+    switch (zui.wufour.recheck(tmp(), current)) {
+        .same => {},
+        .signed_out => {
+            stopSocket(s);
+            s.bearer.clear();
+            s.phase = .sign_in;
+        },
+        .signed_in => |tok| {
+            if (current != null) {
+                // Someone else signed in there: start again as them.
+                stopSocket(s);
+                s.store.reset();
+                s.open_chat = .{};
+                s.panes.clearRetainingCapacity();
+                s.modal = null;
+            }
+            startWithToken(s, tok);
+        },
+    }
 }
 
 /// Log out of this device: forget the keys here and the session.
@@ -1032,7 +1076,8 @@ pub fn logout(s: *State) void {
             s.next_op +%= 1;
             fx.fetch(q, onHttp);
         };
-        zui.wufour.forget();
+        // Our other apps on this phone are signed out too.
+        zui.wufour.signOutEverywhere();
         s.bearer.clear();
         s.phase = .sign_in;
     } else fx.openUrl("/logout", false);
