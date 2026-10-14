@@ -415,7 +415,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     const bg = if (media_only) null else if (out) col.bubble_out else col.bubble_in;
     const fg = if (out) col.bubble_out_text else col.bubble_in_text;
     const small: f32 = 7;
-    const big: f32 = theme.bubble_radius;
+    const big: f32 = if (s.prefs.square_bubbles) 6 else theme.bubble_radius;
     _ = small;
     ui.begin(.{ .max_width = max_w, .min_width = 60, .padding = if (media_only) .{} else .{ .top = 8, .bottom = 8, .start = 13, .end = 13 }, .radius = big, .background = bg, .gap = 2, .clip = media_only }, .{ .on_press = tap, .on_long_press = if (m.local_id == 0 and !s.selecting) Msg{ .message_action = .{ .what = .select, .msg = Id.of(m.id()) } } else null, .on_context = tap });
     if (group_names and run_start) {

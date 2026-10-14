@@ -30,6 +30,7 @@ pub const bots = @import("bots.zig");
 pub const dev = @import("dev.zig");
 pub const stories = @import("stories.zig");
 pub const voice = @import("voice.zig");
+pub const profile = @import("profile.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -161,6 +162,7 @@ pub const Field = enum {
     story_text,
     story_caption,
     story_reply,
+    delete_confirm,
 };
 
 pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
@@ -236,6 +238,9 @@ pub const Modal = union(enum) {
     story_compose,
     story_people,
     story_list,
+    profile_photo_menu,
+    delete_account,
+    features_tour,
 };
 
 pub const Msg = union(enum) {
@@ -304,6 +309,8 @@ pub const Msg = union(enum) {
     story_photo: zui.File,
     story_play: zui.PlayEvent,
     voice: voice.Act,
+    profile: profile.Act,
+    profile_photo: zui.File,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
     located: zui.Location,
@@ -365,7 +372,7 @@ pub const ChatAction = enum { export_chat, lock, unlock, add_to_folder, pin, unp
 pub const MessageAction = enum { reply, edit, copy, pin, unpin, delete, delete_everyone, save, select, details, forward, retract_vote, close_poll, open_map, open_link, reveal };
 pub const Theme = enum { auto, light, dark };
 pub const Lang = enum { en, ar };
-pub const Pref = enum { notifications, previews, sounds, send_with_enter, animations, link_previews };
+pub const Pref = enum { notifications, previews, sounds, send_with_enter, animations, link_previews, square_bubbles };
 pub const PrivacyKey = enum { lastSeen, avatar, calls, groups, forwards };
 pub const PrivacyValue = enum { everyone, contacts, nobody };
 pub const EmbedTarget = enum { bot, support };
@@ -411,6 +418,7 @@ pub const Prefs = struct {
     sounds: bool = true,
     send_with_enter: bool = true,
     link_previews: bool = true,
+    square_bubbles: bool = false,
     animations: bool = true,
 };
 
@@ -496,6 +504,7 @@ pub const State = struct {
     dev: dev.Dev = .{},
     stories: stories.Stories = .{},
     voice: voice.Voice = .{},
+    profile: profile.Profile = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -646,6 +655,12 @@ pub const Op = union(enum) {
     stories_pinned: bool,
     stories_deleted,
     stories_reply_chat,
+    profile_upload_create,
+    profile_upload_chunk: u32,
+    profile_upload_complete,
+    profile_saved_photo,
+    username_check: u32,
+    account_deleted,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -750,6 +765,8 @@ fn handle(s: *State, msg: Msg) void {
         .story_photo => |f| stories.onPicked(s, f),
         .story_play => |e| stories.onPlayEvent(s, e),
         .voice => |a| voice.act(s, a),
+        .profile => |a| profile.act(s, a),
+        .profile_photo => |f| profile.onPicked(s, f),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),
         .toast_hide => |id| if (id == s.toast.id) s.toast.text.clear(),
@@ -797,6 +814,7 @@ fn onTyped(s: *State, field: Field, text: []const u8) void {
     switch (field) {
         .search => views.runSearch(s),
         .picker => views.runPickerSearch(s),
+        .profile_username => profile.usernameTyped(s),
         .composer => {
             sync.typing(s);
             compose.typed(s);
@@ -1018,6 +1036,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (bots.onAnswer(s, op, r)) return;
             if (dev.onAnswer(s, op, r)) return;
             if (stories.onAnswer(s, op, r)) return;
+            if (profile.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

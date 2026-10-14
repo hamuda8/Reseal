@@ -49,6 +49,8 @@ pub const Bots = struct {
     groups: bool = true,
     vision: bool = false,
     own_key: bool = false,
+    /// The assistant's picture (a media id) when it has one.
+    avatar: Id = .{},
     stats: app.Text = .{},
     busy: bool = false,
     /// Set when editing from the developer console: the app the assistant belongs to.
@@ -91,6 +93,8 @@ pub fn act(s: *State, a: Act) void {
             b.groups = if (j.field(bot, "allowGroups")) |v| !(v == .bool and !v.bool) else true;
             b.vision = j.truthy(bot, "vision");
             b.own_key = j.truthy(bot, "ownKey");
+            b.avatar = Id.of(j.strOr(bot, "avatar", ""));
+            s.profile.bot_avatar = .{};
             b.stats.clear();
             if (j.obj(bot, "stats")) |st| b.stats.set(fmt.tf("{replies} replies · {tokens} tokens used", .{ .replies = j.intOr(st, "replies", 0), .tokens = j.intOr(st, "promptTokens", 0) + j.intOr(st, "completionTokens", 0) }));
             const f = &s.fields;
@@ -184,6 +188,7 @@ fn save(s: *State) void {
     if (un.len > 0) out.print(a, ",\"username\":{s}", .{j.quote(a, un) catch return}) catch {};
     const k = f.get(.bot_key).trimmed();
     if (k.len > 0) out.print(a, ",\"apiKey\":{s}", .{j.quote(a, k) catch return}) catch {};
+    if (s.profile.bot_avatar.isSet()) out.print(a, ",\"avatar\":{s}", .{if (s.profile.bot_avatar.eql("none")) "null" else path("\"{s}\"", .{s.profile.bot_avatar.str()})}) catch {};
     if (b.app_id.isSet() and !b.id.isSet()) out.print(a, ",\"appId\":\"{s}\"", .{b.app_id.str()}) catch {};
     out.append(a, '}') catch {};
     b.busy = true;
@@ -288,6 +293,7 @@ pub fn editPane(cx: Cx) void {
     vlist.paneHeader(cx, if (b.id.isSet()) t("Edit assistant") else t("New assistant"), true, false);
     vlist.endHeader(cx);
     ui.beginScroll(.{ .grow = 1, .width = .fill, .height = .fill, .padding = .{ .start = 16, .end = 16, .top = 8, .bottom = 28 } }, key(.{"bot-edit"}));
+    @import("profile.zig").editableAvatar(cx, .{ .name = s.fields.get(.bot_name).get(), .color = 4, .image = if (s.profile.bot_avatar.isSet()) (if (s.profile.bot_avatar.eql("none")) null else s.profile.bot_avatar.str()) else (if (b.avatar.isSet()) b.avatar.str() else null), .icon = icons.sparkles, .size = 110 }, .bot, true);
     kit.field(cx, .bot_name, .{ .label = t("Name"), .placeholder = t("e.g. Travel Planner") });
     kit.field(cx, .bot_username, .{ .label = t("Username"), .placeholder = "travel_planner_bot", .hint = t("Must end in “bot”. Lets people find it and mention it in groups.") });
     kit.field(cx, .bot_description, .{ .label = t("Description"), .placeholder = t("What does it help with?"), .multiline = true });

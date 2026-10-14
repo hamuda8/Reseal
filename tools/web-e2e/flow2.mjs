@@ -203,6 +203,10 @@ try {
     await setCookie(b, 'tok_bob', '127.0.0.1');
     await a.go(APP);
     await b.go(APP2);
+    // English (an earlier scenario may have switched the app to Arabic).
+    for (const t of [a, b]) await t.evaluate(`localStorage.setItem('zui:lang', 'en')`);
+    await a.go(APP);
+    await b.go(APP2);
     await a.waitText('Bob Haddad');
     await b.waitText('Alice Carter');
     await a.clickText('Bob Haddad');

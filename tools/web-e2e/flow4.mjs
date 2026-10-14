@@ -3,6 +3,7 @@
 //   node flow4.mjs <outdir> [scenario...]
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { startAll, giveKeys, rotate, keyOf, E, PROXY_PORT, devDb } from './env.mjs';
 import { launch, tab } from './cdp.mjs';
@@ -163,6 +164,35 @@ try {
     check('voice: plays back', playing);
   }
 
+  if (want('profile')) {
+    const png = makePng(80, 80);
+    const file = path.resolve(out, 'me.png');
+    fs.writeFileSync(file, png);
+    await a.send('Page.setInterceptFileChooserDialog', { enabled: true });
+    await a.go(APP);
+    await a.waitText('Bob Haddad');
+    const gear = await a.evaluate(`(() => { const b = [...document.querySelectorAll('[role=button]')].map(b => b.getBoundingClientRect()).filter(r => r.x < 80 && r.y > 600); const r = b[0]; return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+    await a.click(gear[0], gear[1]);
+    await sleep(500);
+    await a.clickText('My account');
+    // The camera badge on the big avatar opens the photo menu.
+    const av = await a.evaluate(`(() => { const r = [...document.querySelectorAll('[role=button]')].map(b => b.getBoundingClientRect()).filter(b => b.width === 120 && b.height === 120)[0]; return r ? [r.x + r.width / 2, r.y + r.height / 2] : null; })()`);
+    await a.click(av[0], av[1]);
+    await sleep(400);
+    await a.clickText('Upload a photo');
+    const opened = await a.waitEvent('Page.fileChooserOpened', 5000);
+    if (opened) await a.send('DOM.setFileInputFiles', { files: [file], backendNodeId: opened.params.backendNodeId });
+    let me = null;
+    for (let i = 0; i < 30 && !me?.avatar; i++) { await sleep(300); me = (await alice.api.get('/api/me')).user; }
+    check('profile: photo uploaded and set', Boolean(me?.avatar), JSON.stringify(me?.avatar));
+    await carol.api.patch('/api/me', { username: 'carol_taken' });
+    await a.typeIn('username', 'carol_taken');
+    check('profile: a taken username is flagged', await a.waitText('That username is taken.', 4000));
+    await a.typeIn('username', 'alice_new_name');
+    check('profile: a free username is confirmed', await a.waitText('is available', 4000));
+    await a.shot('107-profile');
+  }
+
   if (want('select')) {
     await alice.api.post(`/api/chats/${group.id}/messages`, { text: 'one to delete', clientId: 's1' });
     await alice.api.post(`/api/chats/${group.id}/messages`, { text: 'two to delete', clientId: 's2' });
@@ -302,3 +332,12 @@ await (await devDb()).drop();
 wufour.close();
 proxy.close();
 process.exit(0);
+function makePng(w, h) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (buf) => { let c = 0xffffffff; for (const x of buf) c = crcTable[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const rows = [];
+  for (let y = 0; y < h; y++) { rows.push(0); for (let x = 0; x < w; x++) rows.push(x * 4, y * 5, 200); }
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.from(rows))), chunk('IEND', Buffer.alloc(0))]);
+}

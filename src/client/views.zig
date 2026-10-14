@@ -234,6 +234,7 @@ pub fn onUi(s: *State, msg: Msg) void {
                 .sounds => s.prefs.sounds = !s.prefs.sounds,
                 .send_with_enter => s.prefs.send_with_enter = !s.prefs.send_with_enter,
                 .link_previews => s.prefs.link_previews = !s.prefs.link_previews,
+                .square_bubbles => s.prefs.square_bubbles = !s.prefs.square_bubbles,
                 .animations => s.prefs.animations = !s.prefs.animations,
             }
             app.savePrefs(s);
@@ -1196,6 +1197,9 @@ fn modal(cx: Cx) void {
         .story_compose => @import("stories.zig").composer(cx),
         .story_people => @import("stories.zig").peopleSheet(cx),
         .story_list => @import("stories.zig").listSheet(cx),
+        .profile_photo_menu => @import("profile.zig").photoMenu(cx),
+        .delete_account => @import("profile.zig").deleteSheet(cx),
+        .features_tour => @import("profile.zig").tourSheet(cx),
     }
 }
 

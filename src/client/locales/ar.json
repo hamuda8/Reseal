@@ -1446,6 +1446,8 @@
   "Sign in with your Wufour account. Your chats are encrypted on your devices automatically.": "سجّل الدخول بحساب وفور. تُشفَّر محادثاتك على أجهزتك تلقائيًا.",
   "Signing in happens on Wufour. Reseal never stores your password.": "يتم تسجيل الدخول عبر وفور. ريسيل لا يخزّن كلمة مرورك أبدًا.",
   "Something went wrong. Try again.": "حدث خطأ ما. حاول مرة أخرى.",
+  "Take a photo": "التقط صورة",
+  "That username is taken.": "اسم المستخدم هذا مأخوذ.",
   "The key backup could not be opened": "تعذّر فتح النسخة الاحتياطية للمفاتيح",
   "This backup does not match your current keys": "هذه النسخة الاحتياطية لا تطابق مفاتيحك الحالية",
   "This person has not set up encryption yet.": "لم يُعِدّ هذا الشخص التشفير بعد.",

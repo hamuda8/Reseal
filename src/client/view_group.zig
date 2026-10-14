@@ -229,6 +229,7 @@ fn edit(cx: Cx, c: *const data.Chat) void {
     const ui = cx.ui;
     const a = cx.a();
     const channel = c.is("channel");
+    if (can(c, "changeInfo")) @import("profile.zig").editableAvatar(cx, .{ .name = cx.s.store.title(c), .color = c.o.i("color") orelse 0, .image = c.o.s("avatar"), .size = 110 }, .{ .chat = Id.of(c.id()) }, c.o.s("avatar") != null);
     if (can(c, "changeInfo")) {
         ui.begin(.{ .padding = .{ .start = 12, .end = 12, .top = 8 } }, .{});
         kit.field(cx, .info_title, .{ .label = if (channel) t("Channel name") else t("Group name") });

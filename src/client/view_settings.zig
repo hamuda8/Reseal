@@ -55,9 +55,11 @@ pub fn settingsRoot(cx: Cx) void {
     kit.row(cx, t("Privacy and security"), .{ .icon = icons.lock, .on = .{ .push_pane = .privacy } });
     kit.row(cx, t("Appearance"), .{ .icon = icons.palette, .on = .{ .push_pane = .appearance } });
     kit.row(cx, t("Chat folders"), .{ .icon = icons.folder, .on = .{ .push_pane = .folders } });
+    if (s.mode == .app) kit.row(cx, t("Glimpse archive"), .{ .icon = icons.archive, .on = .{ .stories = .archive } });
     if (s.mode == .app) kit.row(cx, t("AI assistants"), .{ .icon = icons.sparkles, .on = .{ .bots = .open_list } });
     if (s.mode == .app and !(if (s.store.me) |m| m.s("appId") != null else false)) kit.row(cx, t("Developers"), .{ .icon = icons.code, .on = .{ .dev = .open } });
     kit.row(cx, t("Language"), .{ .icon = icons.globe, .value = if (s.lang == .ar) "العربية" else "English", .on = .{ .push_pane = .language } });
+    kit.row(cx, t("Reseal features"), .{ .icon = icons.help, .on = .{ .profile = .tour } });
     ui.end();
     kit.divider(cx);
     ui.begin(.{ .padding = .all(8) }, .{});
@@ -99,13 +101,21 @@ fn profile(cx: Cx) void {
     vlist.paneHeader(cx, t("Edit profile"), true, false);
     vlist.endHeader(cx);
     padded(cx, "profile");
-    ui.begin(.{ .align_items = .center, .padding = .{ .top = 8, .bottom = 20 } }, .{});
-    kit.avatar(cx, .{ .name = me.s("displayName") orelse "", .color = me.i("color") orelse 0, .image = me.s("avatar"), .size = 120 }, key(.{"prof-av"}));
-    ui.end();
+    @import("profile.zig").editableAvatar(cx, .{ .name = me.s("displayName") orelse "", .color = me.i("color") orelse 0, .image = me.s("avatar"), .size = 120 }, .me, me.s("avatar") != null);
     kit.field(cx, .profile_name, .{ .label = t("Name") });
     kit.field(cx, .profile_bio, .{ .multiline = true, .label = t("Bio"), .hint = t("Any details such as age, occupation or city.") });
-    if (me.s("appId") == null) kit.field(cx, .profile_username, .{ .label = t("Username"), .placeholder = "username" });
+    if (me.s("appId") == null) {
+        ui.begin(.{ .padding = .{ .bottom = 0 } }, .{});
+        kit.field(cx, .profile_username, .{ .label = t("Username"), .placeholder = "username" });
+        ui.end();
+        @import("profile.zig").usernameHint(cx);
+    }
     kit.button(cx, t("Save"), .save_profile, .{ .block = true, .busy = s.busy });
+    if (me.s("appId") == null) {
+        ui.begin(.{ .padding = .{ .top = 24 } }, .{});
+        kit.row(cx, t("Delete my account"), .{ .icon = icons.trash, .danger = true, .on = .{ .profile = .delete_account } });
+        ui.end();
+    }
     ui.end();
     ui.end();
 }
@@ -180,6 +190,7 @@ fn privacy(cx: Cx) void {
     const receipts = j.field(me.v, "privacy.readReceipts") == null or j.truthy(me.v, "privacy.readReceipts");
     kit.row(cx, t("Read receipts"), .{ .subtitle = t("If off, you will not see read receipts from others either"), .switch_on = receipts, .on = .toggle_read_receipts });
     kit.row(cx, t("Blocked users"), .{ .chevron = true, .on = .{ .push_pane = .blocked } });
+    if (s.mode == .app) kit.row(cx, t("Devices"), .{ .icon = icons.devices, .subtitle = t("Signed-in devices are managed by Wufour"), .on = .{ .profile = .devices } });
     kit.row(cx, t("Chat lock"), .{ .chevron = true, .on = .{ .push_pane = .chat_lock } });
     kit.divider(cx);
     protection(cx);
@@ -259,6 +270,7 @@ fn appearance(cx: Cx) void {
     kit.iconButton(cx, icons.plus, .{ .set_font = 1 }, .{ .soft = true });
     ui.end();
     kit.sectionTitle(cx, t("Chats"));
+    kit.row(cx, t("Message corners"), .{ .icon = icons.chat, .value = if (s.prefs.square_bubbles) t("Square") else t("Rounded"), .on = .{ .toggle_pref = .square_bubbles } });
     kit.row(cx, t("Send with Enter"), .{ .switch_on = s.prefs.send_with_enter, .on = .{ .toggle_pref = .send_with_enter } });
     kit.row(cx, t("Link previews"), .{ .switch_on = s.prefs.link_previews, .on = .{ .toggle_pref = .link_previews } });
     ui.end();
