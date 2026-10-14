@@ -977,6 +977,8 @@ pub fn root(s: *const State, ui: *ui_kit.Ui) void {
     }
     if (s.modal != null) modal(cx);
     if (s.toast.text.get().len > 0) toastView(cx);
+    // The connection dropped after it had worked (shell.js connection pill).
+    if (s.phase == .ready and s.ws.ever and !s.ws.online and !s.ws.stopped) connectionPill(cx);
     ui.end();
 }
 
@@ -1140,6 +1142,16 @@ fn unlockGate(cx: Cx) void {
     ui.begin(.{ .padding = .{ .top = 14 } }, .{ .on_press = .start_fresh });
     ui.text(t("Forgot both? Start fresh"), .{ .font_size = 14, .weight = 500, .color = c.text_3 });
     ui.end();
+    ui.end();
+    ui.end();
+}
+
+fn connectionPill(cx: Cx) void {
+    const ui = cx.ui;
+    ui.begin(.{ .position = .absolute, .inset = .{ .top = 10, .start = 0, .end = 0 }, .align_items = .center }, .{});
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .xy(14, 7), .radius = 16, .background = cx.c.toast }, .{});
+    ui.spinner(14, Color.white, .{}, zui.key("conn-spin"));
+    ui.text(t("Connecting…"), .{ .font_size = 13.5, .weight = 600, .color = Color.white });
     ui.end();
     ui.end();
 }

@@ -850,7 +850,8 @@ fn callsPane(cx: Cx) void {
             var sub: std.ArrayList(u8) = .empty;
             sub.print(a, "{s} · {s}", .{ kind, fmt.shortDate(a, sys.parseIso(j.strOr(cl, "createdAt", "")) orelse 0) }) catch {};
             if (j.float(cl, "duration")) |d| if (d > 0) sub.print(a, " · {s}", .{fmt.duration(a, d)}) catch {};
-            ui.begin(.{ .direction = .row, .align_items = .center, .gap = 14, .min_height = 60, .padding = .xy(12, 8), .radius = theme.radius, .pressed_background = cx.c.active }, .{ .on_press = .{ .open_chat = Id.of(c.id()) }, .key = key(.{ "cl", i }) });
+            ui.begin(.{ .direction = .row, .align_items = .center, .gap = 4 }, .{ .key = key(.{ "clw", i }) });
+            ui.begin(.{ .direction = .row, .align_items = .center, .gap = 14, .min_height = 60, .padding = .xy(12, 8), .radius = theme.radius, .pressed_background = cx.c.active, .grow = 1, .width = .fill }, .{ .on_press = .{ .open_chat = Id.of(c.id()) }, .key = key(.{ "cl", i }) });
             chatAvatar(cx, c, 46);
             ui.begin(.{ .grow = 1, .width = .fill, .gap = 2 }, .{});
             ui.text(s.store.title(c), .{ .font_size = 15, .weight = 550, .color = if (missed) cx.c.danger else cx.c.text, .max_lines = 1 });
@@ -859,6 +860,9 @@ fn callsPane(cx: Cx) void {
             ui.text(sub.items, .{ .font_size = 13.5, .color = cx.c.text_2, .max_lines = 1 });
             ui.end();
             ui.end();
+            ui.end();
+            // Call back (one-to-one calls).
+            if (c.is("private")) kit.iconButton(cx, if (j.truthy(cl, "video")) icons.video else icons.phone, .{ .chat_action = .{ .what = if (j.truthy(cl, "video")) .call_video else .call_voice, .chat = Id.of(c.id()) } }, .{});
             ui.end();
         }
         if (shown == 0) kit.emptyState(cx, icons.phone, t("No calls yet"), t("Your recent calls will appear here."));

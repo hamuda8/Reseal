@@ -150,8 +150,9 @@ fn notifications(cx: Cx) void {
     vlist.endHeader(cx);
     body(cx, "notif");
     kit.sectionTitle(cx, t("Notifications"));
-    kit.row(cx, t("Notifications"), .{ .icon = icons.bell, .switch_on = s.prefs.notifications, .on = .{ .toggle_pref = .notifications } });
+    kit.row(cx, if (zui.platform == .web and !cx.phone) t("Desktop notifications") else t("Notifications"), .{ .icon = icons.bell, .switch_on = s.prefs.notifications, .on = .{ .toggle_pref = .notifications } });
     kit.row(cx, t("Message preview"), .{ .icon = icons.eye, .subtitle = t("Show message text in notifications"), .switch_on = s.prefs.previews, .on = .{ .toggle_pref = .previews } });
+    kit.row(cx, t("Sounds"), .{ .icon = icons.volume, .switch_on = s.prefs.sounds, .on = .{ .toggle_pref = .sounds } });
     kit.sectionNote(cx, t("Reseal notifies you of new messages while it is open in the background. Encrypted messages are decrypted on your device before being shown."));
     ui.end();
     ui.end();
