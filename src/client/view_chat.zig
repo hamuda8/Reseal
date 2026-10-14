@@ -880,9 +880,10 @@ fn chatMenu(cx: Cx, target: Id) void {
             views.menuItem(cx, icons.alertCircle, if (p.b("blocked")) t("Unblock user") else t("Block user"), act(if (p.b("blocked")) .unblock else .block, id), p.b("blocked") == false);
         }
     }
-    if (!c.is("saved") and !c.is("channel")) views.menuItem(cx, icons.trash, t("Clear history"), act(.clear, id), true);
+    if (!c.is("saved")) views.menuItem(cx, icons.trash, t("Clear history"), act(.clear, id), true);
+    if (c.is("saved") and !c.o.b("primary")) views.menuItem(cx, icons.trash, t("Clear history"), act(.clear, id), true);
     if (pair) {
-        views.menuItem(cx, icons.trash, if (c.is("saved")) (if (c.o.b("primary")) t("Clear history") else t("Delete saved chat")) else t("Delete chat"), act(.delete, id), true);
+        views.menuItem(cx, icons.trash, if (c.is("saved")) (if (c.o.b("primary")) t("Clear Saved Messages") else t("Delete saved chat")) else t("Delete chat"), act(.delete, id), true);
     } else if (std.mem.eql(u8, c.role(), "owner")) {
         views.menuItem(cx, icons.trash, if (c.is("channel")) t("Delete channel") else t("Delete group"), act(.delete, id), true);
     } else if (!s.store.isTeamStaff(c)) {

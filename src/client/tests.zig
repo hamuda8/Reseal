@@ -252,9 +252,12 @@ test "multi-select: pick two messages, delete both" {
     try testing.expect(D.findText("2 selected") != 0);
     D.R.dispatch(.select_delete);
     try testing.expect(D.findText("Delete 2 messages?") != 0);
+    // The owner may delete them for everyone; that is ticked to begin with.
+    try testing.expect(D.findText("Delete for everyone") != 0);
     D.R.dispatch(.confirm);
     const body = lastPost("/chats/g1/messages/delete");
     try testing.expect(std.mem.indexOf(u8, body, "\"ids\":[\"m1\",\"m2\"]") != null);
+    try testing.expect(std.mem.indexOf(u8, body, "\"forEveryone\":true") != null);
     try testing.expect(!state().selecting);
 }
 

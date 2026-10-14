@@ -167,7 +167,8 @@ pub fn onUi(s: *State, msg: Msg) void {
             s.modal = .{ .forward = .{} };
         },
         .select_delete => if (s.selected.items.len > 0) {
-            s.confirm_check = false;
+            // "For everyone" is ticked to begin with (Reseal-js deleteFlow).
+            s.confirm_check = true;
             s.modal = .{ .confirm = .{ .kind = .delete_messages, .target = s.open_chat } };
         },
         .select_copy => copySelected(s),
@@ -380,7 +381,10 @@ fn chatAction(s: *State, what: app.ChatAction, chat: []const u8) void {
         .export_chat => @import("export.zig").act(s, .{ .open = Id.of(chat) }),
         .unlock => @import("chatlock.zig").act(s, .{ .remove = Id.of(chat) }),
         .add_to_folder => s.modal = .{ .menu = .{ .kind = .folder_pick, .target = Id.of(chat) } },
-        .clear => s.modal = .{ .confirm = .{ .kind = .clear_history, .target = Id.of(chat) } },
+        .clear => {
+            s.confirm_check = false;
+            s.modal = .{ .confirm = .{ .kind = .clear_history, .target = Id.of(chat) } };
+        },
         .block => s.modal = .{ .confirm = .{ .kind = .block, .target = Id.of(chat) } },
         .unblock => if (c.peerId()) |pid| {
             app.api(s, .DELETE, path("/blocks/{s}", .{pid}), null, .unblock);
@@ -432,7 +436,9 @@ fn confirm(s: *State) void {
             } else for (s.selected.items, 0..) |id, i| {
                 ids.print(a, "{s}\"{s}\"", .{ if (i > 0) "," else "", id.str() }) catch {};
             }
-            app.api(s, .POST, path("/chats/{s}/messages/delete", .{chat}), path("{{\"ids\":[{s}],\"forEveryone\":{}}}", .{ ids.items, s.confirm_check }), .{ .delete_messages = x.target });
+            const all = if (s.store.chat(chat)) |c| deleteForAllAlways(c) else false;
+            const everyone = all or (s.confirm_check and if (s.store.chat(chat)) |c| canDeleteForEveryone(s, c, x.item) else false);
+            app.api(s, .POST, path("/chats/{s}/messages/delete", .{chat}), path("{{\"ids\":[{s}],\"forEveryone\":{}}}", .{ ids.items, everyone }), .{ .delete_messages = x.target });
             if (s.store.existingTimeline(chat)) |tl| {
                 if (x.item.isSet()) tl.remove(x.item.str()) else for (s.selected.items) |id| tl.remove(id.str());
             }
@@ -483,7 +489,10 @@ fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
         },
         .pin => @import("msgextras.zig").act(s, .{ .pin_ask = Id.of(msg_id) }),
         .unpin => app.api(s, .POST, path("/chats/{s}/messages/{s}/pin", .{ chat, msg_id }), "{\"unpin\":true}", .pin),
-        .delete, .delete_everyone => s.modal = .{ .confirm = .{ .kind = .delete_messages, .target = s.open_chat, .item = Id.of(msg_id) } },
+        .delete, .delete_everyone => {
+            s.confirm_check = true;
+            s.modal = .{ .confirm = .{ .kind = .delete_messages, .target = s.open_chat, .item = Id.of(msg_id) } };
+        },
         .save => {
             // Save to Saved Messages: a forward into the Saved chat, encrypted there.
             const saved = s.store.savedChat() orelse return;
@@ -854,7 +863,10 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) void {
             if (v) |x| for (j.arr(x, "calls")) |cl| sync.ensureChat(s, j.strOr(cl, "chatId", ""));
         },
         .blocked => replaceObj(&s.blocked, v),
-        .block, .unblock => app.api(s, .GET, "/blocks", null, .blocked),
+        .block, .unblock => {
+            app.toast(s, if (op == .block) t("User blocked") else t("User unblocked"));
+            app.api(s, .GET, "/blocks", null, .blocked);
+        },
         .members => |chat| {
             if (v) |x| for (j.arr(x, "members")) |m| if (j.obj(m, "user")) |u| {
                 _ = s.store.putUser(u) catch null;
@@ -1212,6 +1224,25 @@ fn modal(cx: Cx) void {
     }
 }
 
+/// Channels and Saved delete messages for everyone, without asking (Reseal-js deleteFlow).
+fn deleteForAllAlways(c: *const data.Chat) bool {
+    return c.is("channel") or c.is("saved");
+}
+
+/// Whether "for everyone" is offered: my own messages, a pair chat, or the right to delete others'.
+fn canDeleteForEveryone(s: *const State, c: *const data.Chat, one: Id) bool {
+    if (c.is("saved")) return false;
+    if (c.is("private") or c.is("bot") or @import("view_chat.zig").can(c, "deleteMessages")) return true;
+    const me = s.store.myId();
+    const tl = s.store.existingTimeline(c.id()) orelse return false;
+    if (one.isSet()) return if (tl.find(one.str())) |m| std.mem.eql(u8, m.authorId(), me) else false;
+    for (s.selected.items) |id| {
+        const m = tl.find(id.str()) orelse return false;
+        if (!std.mem.eql(u8, m.authorId(), me)) return false;
+    }
+    return true;
+}
+
 fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id, target_item: Id) void {
     const s = cx.s;
     const c = s.store.chat(target.str());
@@ -1247,16 +1278,26 @@ fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id, target_item: Id) void 
             action = t("Leave");
         },
         .clear_history => {
-            title = t("Clear history?");
-            text = t("All messages here will be deleted.");
             action = t("Clear");
-            if (c != null and c.?.is("private")) check = fmt.tf("Also delete for {name}", .{ .name = name });
+            if (c != null and c.?.is("saved")) {
+                title = if (c.?.o.b("primary")) t("Clear Saved Messages?") else fmt.tf("Clear {name}?", .{ .name = name });
+                text = t("All messages here will be deleted.");
+            } else {
+                title = t("Clear history?");
+                text = t("Messages will be removed from this chat.");
+                if (c) |cc| {
+                    if (cc.is("private")) check = fmt.tf("Also clear for {name}", .{ .name = name }) else if (cc.is("bot") or std.mem.eql(u8, cc.role(), "owner")) check = t("Clear for everyone");
+                }
+            }
         },
         .delete_messages => {
             const n = if (target_item.isSet()) 1 else s.selected.items.len;
             title = fmt.tn(tmp(), @intCast(n), "Delete message?", "Delete {n} messages?");
-            text = t("This cannot be undone.");
-            if (c != null and !c.?.is("saved")) check = t("Delete for everyone");
+            const all = if (c) |cc| deleteForAllAlways(cc) else true;
+            text = if (all) t("This cannot be undone.") else t("Delete for yourself, or for everyone in the chat.");
+            if (c) |cc| if (!all and canDeleteForEveryone(s, cc, target_item)) {
+                check = if (cc.is("private")) fmt.tf("Also delete for {name}", .{ .name = name }) else t("Delete for everyone");
+            };
         },
         .block => {
             title = fmt.tf("Block {name}?", .{ .name = name });
