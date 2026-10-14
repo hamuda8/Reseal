@@ -162,6 +162,11 @@ pub fn onUi(s: *State, msg: Msg) void {
                 .username => |name| {
                     app.api(s, .GET, path("/chats/by-username/{s}", .{j.urlEncode(tmp(), name) catch return}), null, .open_username);
                 },
+                .hashtag => |tag| searchFor(s, tag),
+                .code => |code| {
+                    app.fx.copy(code);
+                    app.toast(s, t("Copied"));
+                },
                 .none => {},
             }
         },
@@ -781,12 +786,21 @@ pub fn embedAfterChats(s: *State) void {
 // ---------------------------------------------------------------------------------------------
 // Answers to what the screens asked
 
+/// The open chat's search, filled in (a tapped #hashtag).
+pub fn searchFor(s: *State, q: []const u8) void {
+    if (!s.open_chat.isSet()) return;
+    s.modal = .{ .menu = .{ .kind = .chat_header, .target = s.open_chat, .item = Id.of("search") } };
+    s.fields.getPtr(.chat_search).set(q);
+    runChatSearch(s);
+}
+
 pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) void {
     const v = j.parse(tmp(), r.body);
     if (!r.ok()) {
         s.busy = false;
         switch (op) {
             .search, .msg_search, .picker_search, .members, .reactions => {},
+            .open_username => app.toastError(s, if (r.status == 404) t("Nobody has that username.") else app.apiError(r).message),
             else => app.toastError(s, app.apiError(r).message),
         }
         return;

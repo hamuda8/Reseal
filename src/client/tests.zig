@@ -763,3 +763,22 @@ test "assistant replies: Markdown, Copy on code, Regenerate the latest" {
     try D.press("Regenerate");
     try testing.expect(D.pending("/messages/m1/regenerate") != null);
 }
+
+test "hashtags open the chat's search, inline code copies, unknown usernames say so" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"see #launch then npm i and @nobody1\",\"entities\":[{\"t\":\"code\",\"o\":17,\"l\":5}],\"createdAt\":\"2026-10-12T14:00:00Z\"}],\"floor\":0}"));
+    D.R.dispatch(.{ .rich_link = .{ .msg = app.Id.of("m1"), .at = 4 } });
+    try testing.expectEqualStrings("#launch", state().fields.get(.chat_search).get());
+    D.R.dispatch(.close_modal);
+    D.R.dispatch(.{ .rich_link = .{ .msg = app.Id.of("m1"), .at = 17 } });
+    try testing.expectEqualStrings("Copied", state().toast.text.get());
+    try testing.expectEqualStrings("npm i", host.clipboard.items);
+    D.R.dispatch(.{ .rich_link = .{ .msg = app.Id.of("m1"), .at = 27 } });
+    try testing.expect(D.respond("/chats/by-username/nobody1", 404, "{\"error\":\"Not found\"}"));
+    try testing.expectEqualStrings("Nobody has that username.", state().toast.text.get());
+}

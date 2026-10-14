@@ -88,6 +88,14 @@ fn autoLinks(a: std.mem.Allocator, txt: []const u8, from: usize, to: usize) []Au
             i = e;
             continue;
         }
+        // #hashtags (they open the chat's search).
+        if (word_start and txt[i] == '#' and i + 1 < to and (std.ascii.isAlphabetic(txt[i + 1]) or txt[i + 1] >= 0x80)) {
+            var e = i + 1;
+            while (e < to and (std.ascii.isAlphanumeric(txt[e]) or txt[e] == '_' or txt[e] >= 0x80)) e += 1;
+            out.append(a, .{ .s = i, .e = e }) catch {};
+            i = e;
+            continue;
+        }
         if (word_start and txt[i] == '@' and i + 1 < to) {
             var e = i + 1;
             while (e < to and (std.ascii.isAlphanumeric(txt[e]) or txt[e] == '_')) e += 1;
@@ -147,7 +155,11 @@ fn run(cx: Cx, txt: []const u8, entities: []const Entity, from: usize, to: usize
             if (std.mem.eql(u8, ty, "italic")) sp.italic = true;
             if (std.mem.eql(u8, ty, "underline")) sp.underline = true;
             if (std.mem.eql(u8, ty, "strike")) sp.strike = true;
-            if (std.mem.eql(u8, ty, "code")) sp.mono = true;
+            if (std.mem.eql(u8, ty, "code")) {
+                sp.mono = true;
+                // A tap copies inline code.
+                if (link_at == null) link_at = r.s;
+            }
             if (std.mem.eql(u8, ty, "textlink") or std.mem.eql(u8, ty, "url") or std.mem.eql(u8, ty, "mention")) link_at = r.s;
         };
         for (autos) |r| if (r.s <= prev and r.e >= c and link_at == null) {
@@ -166,12 +178,16 @@ fn run(cx: Cx, txt: []const u8, entities: []const Entity, from: usize, to: usize
 }
 
 /// What a link at byte `at` of a message's text points to.
-pub const Target = union(enum) { url: []const u8, username: []const u8, none };
+pub const Target = union(enum) { url: []const u8, username: []const u8, hashtag: []const u8, code: []const u8, none };
 
 pub fn linkAt(txt: []const u8, entities: []const Entity, at: usize) Target {
     for (entities) |en| {
         if (markdown.byteAt(txt, en.o) != at) continue;
         if (std.mem.eql(u8, en.t, "textlink")) if (en.url) |u| return .{ .url = u };
+    }
+    for (entities) |en| {
+        if (markdown.byteAt(txt, en.o) != at or !std.mem.eql(u8, en.t, "code")) continue;
+        return .{ .code = txt[at..markdown.byteAt(txt, en.o + en.l)] };
     }
     if (at >= txt.len) return .none;
     const rest = txt[at..];
@@ -180,6 +196,11 @@ pub fn linkAt(txt: []const u8, entities: []const Entity, at: usize) Target {
         while (e < rest.len and !std.ascii.isWhitespace(rest[e])) e += 1;
         while (e > 0 and std.mem.indexOfScalar(u8, ".,!?;:)\"'", rest[e - 1]) != null) e -= 1;
         return .{ .url = rest[0..e] };
+    }
+    if (rest[0] == '#') {
+        var e: usize = 1;
+        while (e < rest.len and (std.ascii.isAlphanumeric(rest[e]) or rest[e] == '_' or rest[e] >= 0x80)) e += 1;
+        return .{ .hashtag = rest[0..e] };
     }
     if (rest[0] == '@') {
         var e: usize = 1;

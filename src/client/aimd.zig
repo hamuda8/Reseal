@@ -437,6 +437,11 @@ pub fn act(s: *State, a: Act) void {
             switch (rich.linkAt(p.text, p.entities, x.at)) {
                 .url => |u| app.fx.openUrl(u, true),
                 .username => |name| app.api(s, .GET, std.fmt.allocPrint(tmp(), "/chats/by-username/{s}", .{j.urlEncode(tmp(), name) catch return}) catch return, null, .open_username),
+                .hashtag => |tag| @import("views.zig").searchFor(s, tag),
+                .code => |code| {
+                    app.fx.copy(code);
+                    app.toast(s, t("Copied"));
+                },
                 .none => {},
             }
         },

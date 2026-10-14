@@ -50,7 +50,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Scheduled / Reminders sheet with Send now, delete, empty states, 'When {name} comes online'
 - [x] In-chat search for plain chats (server)
 - [ ] M15 In-chat search in encrypted chats over an on-device index ('Search everything', 'Indexing…')
-- [ ] M13 Hashtags open in-chat search; tapping inline code copies it; 'Nobody has that username.' for unknown mentions
+- [x] M13 Hashtags open in-chat search; tapping inline code copies it; 'Nobody has that username.' for unknown mentions
 - [x] Avatars and sender names open profiles; voice messages play the next one
 - [x] M11 Inline bot buttons (URL buttons open, callback buttons call the server and toast)
 - [x] M12 AI replies: Markdown rendering (headings, lists, tables, code blocks with Copy → 'Code copied') and Stop / Copy / Regenerate
