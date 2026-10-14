@@ -80,7 +80,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Spoiler cover on media, upload progress, file card with size and download
 - [x] Voice bubble play/pause, waveform, time
 - [x] M10 Seek by tapping the waveform
-- [~] Voice speed 1× / 1.5× / 2×: zui playback has no rate control
+- [x] Voice speed 1× / 1.5× / 2× while playing, remembered (zui fx.playbackRate, zig-core 793051d)
 - [x] Round video bubble
 - [x] Polls (tap to vote, several answers + Vote, results, quiz marks, View votes, explanation)
 - [x] Location card (opens Wufour Maps), link preview card, sticker, big emoji
@@ -110,7 +110,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [~] M21 Devices menu (Microphone / Camera / Speaker): zui media has no device list or choice (only front/back camera, which the Flip button uses); 'Open chat' is the call screen's top-bar button
 - [x] M22 Floating emoji reactions in group calls; 'Reconnected. If someone cannot hear you…' after a group call reconnects
 - [~] Ringtone, dial tone, connect and hang-up sounds: zui only has fx.beep (the phones ring through their system call screens)
-- [~] 'Voice call' / 'Video call' on the phones' system call screen are hard-coded in zig-core's ZuiCallService (zui.Call needs a label field; zig-core is read-only here)
+- [x] 'Voice call' / 'Video call' on Android's ringing screen in the app's language (zui Call.label, zig-core 70d5fe9); CallKit names the kind itself in the phone's language
 
 ## Viewer (viewer.js)
 - [x] Sender, date, 'i / n', Show in chat, Reply, Forward, Download, Close, Previous/Next, caption, protected content, 'Could not load this file.'
@@ -127,7 +127,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Privacy rules, read receipts, link previews, blocked users
 - [x] Encryption (automatic / advanced protection, passcode change, new recovery key, fingerprint), Security (chat lock, devices, log out)
 - [x] Appearance: theme, accent colour, text size, message corners, send with Enter
-- [~] 'Animations' switch: the zui client has no animations to turn off
+- [x] 'Animations' switch: turns transitions off and on everywhere (zui fx.reduceMotion, zig-core a95cee7); chat rows and poll bars animate
 - [~] Language: switches live, no 'Language changed. Reloading…'
 - [x] Chat folders pane, suggested folders, folder editor
 - [x] Contacts pane, calls history with Call back

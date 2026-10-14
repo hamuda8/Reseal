@@ -58,7 +58,7 @@ fn message(s: *app.State, text: []const u8) void {
         const call_id = j.strOr(v, "callId", "");
         if (call_id.len == 0) return;
         const video = std.mem.eql(u8, j.strOr(v, "video", ""), "1") or std.mem.eql(u8, j.strOr(v, "video", ""), "true");
-        app.fx.ringCall(.{ .id = call_id, .name = j.strOr(v, "title", "Reseal"), .video = video });
+        app.fx.ringCall(.{ .id = call_id, .name = j.strOr(v, "title", "Reseal"), .video = video, .label = if (video) zui.i18n.t("Video call") else zui.i18n.t("Voice call") });
         app.fx.after(ring_ms, .{ .push = .{ .ring_over = app.Id.of(call_id) } });
         return;
     }

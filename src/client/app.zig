@@ -553,6 +553,8 @@ pub const State = struct {
     common: ?*data.Obj = null,
     chat_button_text: Text = .{},
     badge_sent: i64 = -1,
+    /// What zui was last told about animations.
+    motion_on: bool = true,
     shared: sharedmedia.Shared = .{},
     polls: pollx.Polls = .{},
     attach: attachx.Attach = .{},
@@ -790,6 +792,11 @@ pub fn update(s: *State, msg: Msg, e: zui.Env, f: zui.Fx(Msg)) void {
     }
     updateWidget(s);
     keyboard.remember(s);
+    // The Animations switch (Appearance): transitions on or off everywhere.
+    if (s.motion_on != s.prefs.animations) {
+        s.motion_on = s.prefs.animations;
+        fx.reduceMotion(!s.prefs.animations);
+    }
     // The page around the widget shows the unread count on its button (embed.js).
     if (s.mode == .embed and s.phase == .ready) {
         const n = s.store.totals().unread;

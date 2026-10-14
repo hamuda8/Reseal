@@ -779,7 +779,7 @@ fn pollBlock(cx: Cx, m: *const data.Message, p: j.Value, fg: Color) void {
             // The bar: a filled part and the rest, in proportion.
             ui.begin(.{ .direction = .row, .height = .{ .px = 4 }, .radius = 2, .background = fg.withAlpha(0.12), .clip = true }, .{});
             if (pct > 0) {
-                ui.begin(.{ .grow = @floatFromInt(pct), .height = .{ .px = 4 }, .background = if (right) col.success else if (wrong) col.danger else fg.withAlpha(0.7) }, .{});
+                ui.begin(.{ .grow = @floatFromInt(pct), .height = .{ .px = 4 }, .transition = .{ .duration_ms = 350 }, .background = if (right) col.success else if (wrong) col.danger else fg.withAlpha(0.7) }, .{});
                 ui.end();
             }
             if (pct < 100) {

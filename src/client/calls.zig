@@ -317,7 +317,7 @@ pub fn onAck(s: *State, req: SocketReq, ok: bool, result: ?j.Value, err: []const
                         return end(s, t("Line busy"));
                     }
                     c.status = .ringing;
-                    app.fx.startCall(.{ .id = c.id.str(), .name = title(s), .video = c.video });
+                    app.fx.startCall(.{ .id = c.id.str(), .name = title(s), .video = c.video, .label = if (c.video) t("Video call") else t("Voice call") });
                 },
                 .accept => for (j.arr(result, "peers")) |p| addPeer(s, p, false),
                 .join => {
@@ -580,7 +580,7 @@ pub fn onEvent(s: *State, typ: []const u8, d: j.Value) void {
         inc.avatar = Id.of(j.strOr(d, "from.avatar", ""));
         c.incoming = inc;
         // The phone's own incoming-call screen (also over the lock screen); the web draws its own.
-        app.fx.ringCall(.{ .id = call_id, .name = j.strOr(d, "from.displayName", "Reseal"), .video = inc.video });
+        app.fx.ringCall(.{ .id = call_id, .name = j.strOr(d, "from.displayName", "Reseal"), .video = inc.video, .label = if (inc.video) t("Video call") else t("Voice call") });
         if (c.answer_pending.eql(call_id)) {
             c.answer_pending = .{};
             accept(s, inc.video);

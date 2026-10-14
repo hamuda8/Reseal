@@ -42,6 +42,8 @@ pub const Act = union(enum) {
     play: struct { msg: Id, index: u8 },
     /// A tap on the waveform: play from there (bar of 48).
     seek: struct { msg: Id, index: u8, bar: u8 },
+    /// 1× → 1.5× → 2× (player.js), remembered.
+    speed,
     stop,
 };
 
@@ -64,6 +66,8 @@ pub const Voice = struct {
     duration_ms: u32 = 0,
     /// Where to start once the player is ready (a waveform tap before playing).
     seek_permille: ?u16 = null,
+    /// Voice messages play at this percent of normal speed (100, 150, 200).
+    speed: u16 = 0,
     /// Waiting for the file to download before it can play.
     waiting: bool = false,
 };
@@ -129,8 +133,27 @@ pub fn act(s: *State, a: Act) void {
             togglePlay(s, x.msg.str(), x.index);
             v.seek_permille = permille;
         },
+        .speed => {
+            v.speed = switch (speedOf(s)) {
+                100 => 150,
+                150 => 200,
+                else => 100,
+            };
+            zui.storage.set("voiceSpeed", std.fmt.allocPrint(tmp(), "{d}", .{v.speed}) catch "100", .{});
+            if (v.player != 0) app.fx.playbackRate(v.player, v.speed);
+        },
         .stop => stopPlaying(s),
     }
+}
+
+/// The remembered speed (read once).
+fn speedOf(s: *State) u16 {
+    if (s.voice.speed == 0) {
+        const raw = zui.storage.get(tmp(), "voiceSpeed", .{}) orelse "100";
+        const n = std.fmt.parseInt(u16, raw, 10) catch 100;
+        s.voice.speed = if (n == 150 or n == 200) n else 100;
+    }
+    return s.voice.speed;
 }
 
 fn endRecording(s: *State) void {
@@ -263,6 +286,8 @@ pub fn tryStart(s: *State) void {
         const url = if (std.mem.startsWith(u8, f.url, "/")) std.fmt.allocPrint(tmp(), "{s}{s}", .{ app.server, f.url }) catch return else f.url;
         v.player = app.fx.play(.{ .url = url, .mime = mime, .video = video }, onPlay);
     }
+    // Voice messages at the chosen speed.
+    if (std.mem.eql(u8, kind, "voice") and speedOf(s) != 100) app.fx.playbackRate(v.player, s.voice.speed);
 }
 
 pub fn stopPlaying(s: *State) void {
@@ -385,7 +410,16 @@ pub fn voiceBubble(cx: Cx, m: *const data.Message, item: j.Value, index: u8, fg:
     }
     ui.end();
     const shown_ms: f64 = if (mine and v.position_ms > 0) @floatFromInt(v.position_ms) else total_ms;
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
     ui.text(fmt.duration(a, shown_ms / 1000), .{ .font_size = 12.5, .color = fg, .opacity = 0.75 });
+    // The speed, while this one plays (player.js).
+    if (mine and v.player != 0) {
+        const sp = if (v.speed == 0) 100 else v.speed;
+        ui.begin(.{ .padding = .xy(7, 1), .radius = 8, .background = fg.withAlpha(0.15), .pressed_opacity = 0.7 }, .{ .on_press = msg(.speed), .key = key(.{"vspeed"}), .label = t("Speed") });
+        ui.text(if (sp == 150) "1.5×" else if (sp == 200) "2×" else "1×", .{ .font_size = 11.5, .weight = 750, .color = fg });
+        ui.end();
+    }
+    ui.end();
     ui.end();
     ui.end();
 }
