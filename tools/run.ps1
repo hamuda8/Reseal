@@ -75,5 +75,7 @@ if ($Mode -eq 'local') {
 # (zig-out is never committed).
 $vars.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" } | Set-Content -Encoding ascii (Join-Path $dir '.env')
 $cmd = "cmd /c `"`"$exe`" 1>server.log 2>server.err.log`""
-Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd; CurrentDirectory = $dir } | Out-Null
+# No window (ShowWindow 0): closing a console window would stop the server.
+$hidden = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd; CurrentDirectory = $dir; ProcessStartupInformation = $hidden } | Out-Null
 Write-Output "Reseal staging started (logs in $dir)"
