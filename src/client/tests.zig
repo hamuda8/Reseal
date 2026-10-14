@@ -572,3 +572,23 @@ test "polls: several answers ticked then Vote, View votes" {
     try testing.expect(D.findText("Pizza — 1") != 0);
     try testing.expect(D.findText("Salad — 0") != 0);
 }
+
+test "media viewer: next and previous across the chat's photos, reply from it" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"the view\",\"media\":[{\"id\":\"p1\",\"kind\":\"photo\",\"w\":100,\"h\":100}],\"createdAt\":\"2026-10-12T14:00:00Z\"},{\"id\":\"m2\",\"chatId\":\"g1\",\"seq\":2,\"senderId\":\"u9\",\"kind\":\"message\",\"media\":[{\"id\":\"p2\",\"kind\":\"photo\",\"w\":100,\"h\":100}],\"createdAt\":\"2026-10-12T14:01:00Z\"}],\"floor\":0}"));
+    D.R.dispatch(.{ .open_media = .{ .msg = app.Id.of("m1"), .index = 0 } });
+    D.R.dispatch(.{ .viewer_x = .{ .go = 1 } });
+    try testing.expect(state().viewer.?.msg.eql("m2"));
+    D.R.dispatch(.{ .viewer_x = .{ .go = 1 } });
+    try testing.expect(state().viewer.?.msg.eql("m2"));
+    D.R.dispatch(.{ .viewer_x = .{ .go = -1 } });
+    try testing.expect(state().viewer.?.msg.eql("m1"));
+    D.R.dispatch(.{ .viewer_x = .reply });
+    try testing.expect(state().viewer == null);
+    try testing.expect(state().reply_to.eql("m1"));
+}

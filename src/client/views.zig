@@ -972,7 +972,7 @@ pub fn root(s: *const State, ui: *ui_kit.Ui) void {
     }
     if (s.phase == .ready) {
         vcall.overlay(cx);
-        if (s.viewer != null) vchat.viewer(cx);
+        if (s.viewer != null) @import("viewerx.zig").view(cx);
         if (s.stories.viewer != null) @import("stories.zig").viewer(cx);
     }
     if (s.modal != null) modal(cx);

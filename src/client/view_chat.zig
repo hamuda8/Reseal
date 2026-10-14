@@ -1136,44 +1136,6 @@ fn userCard(cx: Cx, u: *const data.Obj, c: ?*const data.Chat) void {
     return @import("userinfo.zig").card(cx, u, c);
 }
 
-// ---------------------------------------------------------------------------------------------
-// Media viewer
-
-pub fn viewer(cx: Cx) void {
-    const s = cx.s;
-    const ui = cx.ui;
-    const v = s.viewer orelse return;
-    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .background = Color.hex("#0a0b14f2"), .align_items = .center, .justify = .center }, .{});
-    var shown_any = false;
-    if (s.store.existingTimeline(s.open_chat.str())) |tl| if (tl.find(v.msg.str())) |m| {
-        const items = m.media();
-        if (v.index < items.len) {
-            const item = items[v.index];
-            const w0: f32 = @floatFromInt(j.intOr(item, "w", 800));
-            const h0: f32 = @floatFromInt(j.intOr(item, "h", 600));
-            const scale = @min((cx.w - 40) / @max(1, w0), (cx.h - 120) / @max(1, h0), 1);
-            const w = w0 * scale;
-            const h = h0 * scale;
-            if (media.shown(s, item)) |f| {
-                if (f.state == .ready) {
-                    media.draw(ui, f, j.strOr(item, "id", ""), .{ .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "view", j.strOr(item, "id", "") }));
-                    shown_any = true;
-                }
-            }
-            if (!shown_any) if (j.str(item, "thumb")) |th| {
-                ui.image(th, .{ .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "vthumb", j.strOr(item, "id", "") }));
-                shown_any = true;
-            };
-        }
-    };
-    if (!shown_any) kit.spinner(cx);
-    ui.begin(.{ .position = .absolute, .inset = .{ .top = 16, .end = 16 }, .direction = .row, .gap = 8 }, .{});
-    kit.iconButton(cx, icons.download, .{ .download = .{ .msg = v.msg, .index = v.index } }, .{ .color = Color.white, .background = Color.hex("#ffffff1f") });
-    kit.iconButton(cx, icons.close, .close_viewer, .{ .color = Color.white, .background = Color.hex("#ffffff1f") });
-    ui.end();
-    ui.end();
-}
-
 // Loading pictures as messages are shown: views cannot fetch, so the chat asks after updates.
 pub fn wantMedia(s: *app.State) void {
     if (!s.open_chat.isSet()) return;
