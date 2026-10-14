@@ -63,6 +63,8 @@ pub const Draft = struct {
     sticker: ?[]const u8 = null,
     /// A link preview ({url,title,description,siteName,image}) as JSON.
     preview_json: ?[]const u8 = null,
+    /// A reply to a glimpse: {id, thumb, at} (encrypted payload only, as messages.js).
+    story_json: ?[]const u8 = null,
     silent: bool = false,
     /// Milliseconds since 1970, or 0.
     scheduled_at: i64 = 0,
@@ -184,6 +186,10 @@ pub fn queueDraft(s: *State, chat_id: []const u8, d: Draft) ?u32 {
         pay.print(a, ",\"preview\":{s}", .{pj}) catch {};
         plain.print(a, ",\"preview\":{s}", .{pj}) catch {};
         if (j.parse(m.o.alloc(), pj)) |pv| content.put(m.o.alloc(), "preview", pv) catch {};
+    }
+    if (d.story_json) |sj| {
+        pay.print(a, ",\"story\":{s}", .{sj}) catch {};
+        if (j.parse(m.o.alloc(), sj)) |sv| content.put(m.o.alloc(), "story", sv) catch {};
     }
     if (d.mentions.len > 0) both.print(a, ",\"mentions\":{s}", .{jsonArrayOfStrings(a, d.mentions)}) catch {};
     if (d.silent) both.appendSlice(a, ",\"silent\":true") catch {};

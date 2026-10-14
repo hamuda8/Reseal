@@ -69,6 +69,7 @@ pub const Act = union(enum) {
     new,
     pick_photo,
     take_photo,
+    pick_video,
     text,
     bg: u8,
     audience: Audience,
@@ -96,7 +97,8 @@ pub const Viewer = struct {
 };
 
 pub const Draft = struct {
-    kind: enum { text, photo } = .text,
+    kind: enum { text, photo, video } = .text,
+    mime: app.Text = .{},
     bg: u8 = 0,
     photo: []u8 = &.{},
     w: u32 = 0,
@@ -306,6 +308,10 @@ pub fn act(s: *State, a: Act) void {
             s.modal = null;
             app.fx.pickPhoto(.{ .camera = a == .take_photo, .max_size = 1920, .quality = 85 }, onPhoto);
         },
+        .pick_video => {
+            s.modal = null;
+            app.fx.pickFile(.{ .accept = "video/*" }, onPhoto);
+        },
         .text => {
             resetDraft(s);
             st.draft.kind = .text;
@@ -350,7 +356,11 @@ fn onPhoto(f: zui.File) Msg {
 pub fn onPicked(s: *State, f: zui.File) void {
     resetDraft(s);
     const d = &s.stories.draft;
-    d.kind = .photo;
+    const video = std.mem.startsWith(u8, f.mime, "video/");
+    if (!video and !std.mem.startsWith(u8, f.mime, "image/") and f.mime.len > 0) return app.toastError(s, t("Choose a photo or a video."));
+    if (f.data.len > 200 * 1024 * 1024) return app.toastError(s, t("Glimpse videos can be up to 200 MB."));
+    d.kind = if (video) .video else .photo;
+    d.mime.set(if (f.mime.len > 0) f.mime else "image/jpeg");
     d.photo = gpa.dupe(u8, f.data) catch return;
     d.w = f.width;
     d.h = f.height;
@@ -604,11 +614,11 @@ fn share(s: *State) void {
     if (d.kind == .text and s.fields.get(.story_text).trimmed().len == 0) return app.toastError(s, t("Type something"));
     if (keys.myPublic(s) == null) return app.toastError(s, t("Unlock encryption first"));
     d.busy = true;
-    if (d.kind == .photo) {
-        // The photo goes up first (encrypted), then the glimpse.
+    if (d.kind != .text) {
+        // The photo or video goes up first (encrypted), then the glimpse.
         d.fk = crypto.newFileKey(sys.random());
         d.next = 0;
-        const body = path("{{\"size\":{d},\"encrypted\":true,\"mime\":\"image/jpeg\",\"name\":\"glimpse.jpg\",\"purpose\":\"story\"}}", .{d.photo.len});
+        const body = path("{{\"size\":{d},\"encrypted\":true,\"mime\":\"{s}\",\"name\":\"glimpse\",\"purpose\":\"story\"}}", .{ d.photo.len, d.mime.get() });
         app.api(s, .POST, "/media", body, .stories_upload_create);
         return;
     }
@@ -636,10 +646,10 @@ fn seal(s: *State, media_json: ?[]const u8) void {
     if (d.kind == .text) {
         payload.print(a, "{{\"v\":1,\"kind\":\"text\",\"text\":{s},\"bg\":{d}", .{ j.quote(a, s.fields.get(.story_text).trimmed()) catch return, d.bg }) catch return;
     } else {
-        payload.print(a, "{{\"v\":1,\"kind\":\"photo\",\"media\":{s}", .{media_json orelse return}) catch return;
+        payload.print(a, "{{\"v\":1,\"kind\":\"{s}\",\"media\":{s}", .{ @tagName(d.kind), media_json orelse return }) catch return;
     }
     const caption = s.fields.get(.story_caption).trimmed();
-    if (caption.len > 0 and d.kind == .photo) payload.print(a, ",\"caption\":{s}", .{j.quote(a, caption) catch ""}) catch {};
+    if (caption.len > 0 and d.kind != .text) payload.print(a, ",\"caption\":{s}", .{j.quote(a, caption) catch ""}) catch {};
     payload.append(a, '}') catch return;
     var ref_raw: [16]u8 = undefined;
     sys.random().bytes(&ref_raw);
@@ -738,7 +748,7 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
             if (!r.ok()) return uploadFailed(s, r);
             const d = &st.draft;
             const a = tmp();
-            const mj = std.fmt.allocPrint(a, "{{\"id\":\"{s}\",\"key\":\"{s}\",\"iv\":\"{s}\",\"mime\":\"image/jpeg\",\"size\":{d},\"w\":{d},\"h\":{d}}}", .{ d.media.str(), crypto.toB64(a, &d.fk.key) catch return true, crypto.toB64(a, &d.fk.iv) catch return true, d.photo.len, d.w, d.h }) catch return true;
+            const mj = std.fmt.allocPrint(a, "{{\"id\":\"{s}\",\"key\":\"{s}\",\"iv\":\"{s}\",\"mime\":\"{s}\",\"size\":{d},\"w\":{d},\"h\":{d}}}", .{ d.media.str(), crypto.toB64(a, &d.fk.key) catch return true, crypto.toB64(a, &d.fk.iv) catch return true, d.mime.get(), d.photo.len, d.w, d.h }) catch return true;
             seal(s, mj);
         },
         .stories_posted => {
@@ -765,13 +775,10 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
             if (!r.ok()) return toastFail(s, r);
             const raw = j.obj(v, "chat") orelse return true;
             const c = s.store.putChat(raw) catch return true;
-            // Sent as a message in that chat, through the composer's path.
-            const chat_id = c.id();
-            const prev = s.open_chat;
-            s.open_chat = Id.of(chat_id);
-            s.fields.getPtr(.composer).set(st.reply_text.get());
-            app.compose.sendNow(s, .{});
-            s.open_chat = prev;
+            // A message in that chat that points at the glimpse (messages.js draft.story).
+            const story = current(s, tmp());
+            const sj = if (story) |x| std.fmt.allocPrint(tmp(), "{{\"id\":\"{s}\",\"thumb\":null,\"at\":{s}}}", .{ j.strOr(x, "id", ""), j.quote(tmp(), j.strOr(x, "createdAt", "")) catch "null" }) catch null else null;
+            if (@import("send.zig").queueDraft(s, c.id(), .{ .text = st.reply_text.get(), .story_json = sj }) != null) @import("send.zig").pump(s, c.id());
             app.toast(s, t("Reply sent"));
             if (st.viewer) |*vw| vw.paused = false;
         },
@@ -1003,6 +1010,7 @@ pub fn kindSheet(cx: Cx) void {
     views.sheet(cx, t("New glimpse"));
     views.menuItem(cx, icons.image, if (zui.platform == .web) t("Photo") else t("Photo"), msg(.pick_photo), false);
     if (zui.platform != .web) views.menuItem(cx, icons.camera, t("Camera"), msg(.take_photo), false);
+    views.menuItem(cx, icons.video, t("Video"), msg(.pick_video), false);
     views.menuItem(cx, icons.edit, t("Text"), msg(.text), false);
     views.menuItem(cx, icons.archive, t("Glimpse archive"), msg(.archive), false);
     views.endSheet(cx);
@@ -1027,7 +1035,10 @@ pub fn composer(cx: Cx) void {
         ui.end();
     } else {
         ui.begin(.{ .width = .fill, .height = .{ .px = 260 }, .radius = 18, .clip = true, .background = cx.c.surface_2, .align_items = .center, .justify = .center }, .{});
-        if (d.photo.len > 0) ui.imageBytes(d.photo, "story-draft", .{ .width = .fill, .height = .fill, .fit = .contain }, key(.{"story-draft"}));
+        if (d.kind == .video) {
+            ui.icon(icons.video, 40, cx.c.text_2, .{}, 0);
+            ui.text(fmt.fileSize(a, @intCast(d.photo.len)), .{ .font_size = 13, .color = cx.c.text_2 });
+        } else if (d.photo.len > 0) ui.imageBytes(d.photo, "story-draft", .{ .width = .fill, .height = .fill, .fit = .contain }, key(.{"story-draft"}));
         ui.end();
         kit.field(cx, .story_caption, .{ .placeholder = t("Add a caption…") });
     }

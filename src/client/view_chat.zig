@@ -426,6 +426,13 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
             const from = if (j.str(fwd, "fromUserId")) |uid| s.store.displayName(uid) else j.str(fwd, "fromName") orelse t("Hidden sender");
             ui.text(std.fmt.allocPrint(a, "{s} {s}", .{ t("Forwarded from"), from }) catch "", .{ .font_size = 13, .color = fg, .opacity = 0.85 });
         }
+        if (j.obj(m.content, "story") != null) {
+            ui.begin(.{ .direction = .row, .gap = 8, .padding = .{ .bottom = 2 } }, .{});
+            ui.begin(.{ .width = .{ .px = 3 }, .radius = 2, .background = fg.withAlpha(0.55) }, .{});
+            ui.end();
+            ui.text(t("Replied to a glimpse"), .{ .font_size = 13, .weight = 600, .color = fg, .opacity = 0.85 });
+            ui.end();
+        }
         if (j.str(m.o.v, "replyTo.id")) |rid| replyQuote(cx, c, rid, out);
         if (media_items.len > 0) mediaBlock(cx, m, media_items, max_w, out);
         if (j.obj(m.content, "poll")) |p| pollBlock(cx, m, p, fg);
