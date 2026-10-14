@@ -70,7 +70,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Attach sheet: Send photo/video/file/{n} items, Compress images, Hide with spoiler, caption, size limit
 - [x] Poll sheet (question, options, anonymous, multiple, quiz with correct answer and explanation)
 - [x] Location, emoji panel with search and stickers
-- [ ] M24 Emoji panel section title 'Recently used'
+- [x] M24 Emoji panel section title 'Recently used'
 - [~] Sent / incoming sounds: zui has one beep; it plays for incoming messages when Sounds is on
 
 ## Bubbles (message.js, text.js, format.js, markdown.js)

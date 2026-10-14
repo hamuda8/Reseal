@@ -174,7 +174,7 @@ fn emojiSheet(cx: Cx) void {
     }
     // Tabs: words, not emoji.
     ui.begin(.{ .direction = .row, .gap = 6, .padding = .{ .bottom = 8 } }, .{});
-    tab(cx, t("Recent"), 255);
+    tab(cx, t("Recently used"), 255);
     ui.end();
     var row: usize = 0;
     while (row * 4 < emoji.categories.len) : (row += 1) {
