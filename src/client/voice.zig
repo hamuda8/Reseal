@@ -40,6 +40,8 @@ pub const Act = union(enum) {
     cancel,
     /// Play or pause a message's media item.
     play: struct { msg: Id, index: u8 },
+    /// A tap on the waveform: play from there (bar of 48).
+    seek: struct { msg: Id, index: u8, bar: u8 },
     stop,
 };
 
@@ -60,6 +62,8 @@ pub const Voice = struct {
     paused: bool = false,
     position_ms: u32 = 0,
     duration_ms: u32 = 0,
+    /// Where to start once the player is ready (a waveform tap before playing).
+    seek_permille: ?u16 = null,
     /// Waiting for the file to download before it can play.
     waiting: bool = false,
 };
@@ -108,6 +112,23 @@ pub fn act(s: *State, a: Act) void {
             endRecording(s);
         },
         .play => |x| togglePlay(s, x.msg.str(), x.index),
+        .seek => |x| {
+            const permille: u16 = @intCast(@min(1000, (@as(u32, x.bar) * 1000 + 500) / 48));
+            if (v.player != 0 and v.playing_msg.eql(x.msg.str()) and v.playing_index == x.index) {
+                if (v.duration_ms > 0) {
+                    const ms: u32 = @intCast(@as(u64, v.duration_ms) * permille / 1000);
+                    app.fx.seekPlayback(v.player, ms);
+                    v.position_ms = ms;
+                } else v.seek_permille = permille;
+                if (v.paused) {
+                    v.paused = false;
+                    app.fx.resumePlayback(v.player);
+                }
+                return;
+            }
+            togglePlay(s, x.msg.str(), x.index);
+            v.seek_permille = permille;
+        },
         .stop => stopPlaying(s),
     }
 }
@@ -259,6 +280,12 @@ pub fn onPlayEvent(s: *State, e: zui.PlayEvent) void {
         .ready, .progress => {
             v.position_ms = e.position_ms;
             if (e.duration_ms > 0) v.duration_ms = e.duration_ms;
+            if (v.seek_permille) |p| if (v.duration_ms > 0) {
+                v.seek_permille = null;
+                const ms: u32 = @intCast(@as(u64, v.duration_ms) * p / 1000);
+                app.fx.seekPlayback(v.player, ms);
+                v.position_ms = ms;
+            };
         },
         .ended => {
             const ended = v.playing_msg;
@@ -346,11 +373,14 @@ pub fn voiceBubble(cx: Cx, m: *const data.Message, item: j.Value, index: u8, fg:
     if (mine and v.waiting) ui.spinner(20, Color.white, .{}, 0) else ui.icon(if (playing) icons.pause else icons.play, 20, Color.white, .{}, 0);
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 4 }, .{});
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 2, .height = .{ .px = 26 } }, .{});
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 1, .height = .{ .px = 26 } }, .{});
     const bs = bars(a, j.str(item, "waveform"));
     const played: usize = @intFromFloat(@round(frac * @as(f32, @floatFromInt(bs.len))));
     for (bs, 0..) |b, i| {
+        // Each bar is a place to play from (a little wider than drawn, to be easy to hit).
+        ui.begin(.{ .height = .{ .px = 26 }, .align_items = .center, .justify = .center, .padding = .xy(0.5, 0) }, .{ .key = key(.{ "wbt", i }), .on_press = if (m.local_id == 0) msg(.{ .seek = .{ .msg = Id.of(m.id()), .index = index, .bar = @intCast(@min(i, 47)) } }) else null });
         ui.begin(.{ .width = .{ .px = 3 }, .height = .{ .px = @max(3, @as(f32, @floatFromInt(b)) / 31 * 24) }, .radius = 1.5, .background = if (i < played) fg else fg.withAlpha(0.35) }, .{ .key = key(.{ "wb", i }) });
+        ui.end();
         ui.end();
     }
     ui.end();

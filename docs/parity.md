@@ -79,7 +79,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] M9 Album grid for 2–10 photos/videos in one message (they stack now)
 - [x] Spoiler cover on media, upload progress, file card with size and download
 - [x] Voice bubble play/pause, waveform, time
-- [ ] M10 Seek by tapping the waveform
+- [x] M10 Seek by tapping the waveform
 - [~] Voice speed 1× / 1.5× / 2×: zui playback has no rate control
 - [x] Round video bubble
 - [x] Polls (tap to vote, several answers + Vote, results, quiz marks, View votes, explanation)
