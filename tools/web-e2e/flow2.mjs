@@ -240,6 +240,11 @@ try {
     await a.shot('72-call-active-caller');
     await b.shot('73-call-active-callee');
     check('call: emoji fingerprint shown on both', (await a.texts()).some(x => /\p{Extended_Pictographic}/u.test(x) && x.length <= 12) && (await b.texts()).some(x => /\p{Extended_Pictographic}/u.test(x) && x.length <= 12));
+    // The Devices menu lists the (fake) microphone and camera.
+    const dv = await a.evaluate(`(() => { const b = document.querySelector('[aria-label="Devices"]'); if (!b) return null; const r = b.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+    if (dv) await a.click(dv[0], dv[1]);
+    check('call: the Devices menu lists the microphones', await a.waitText('MICROPHONE', 4000) || await a.waitText('Microphone', 1000));
+    await a.key('Escape');
     await a.clickText('End');
     let gone = false;
     for (let i = 0; i < 30 && !gone; i++) { gone = !(await b.hasText('Mute')); if (!gone) await sleep(250); }

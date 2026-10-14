@@ -1024,3 +1024,19 @@ test "viewer gestures: pinch and double tap zoom, a swipe goes on; a double tap 
     try testing.expect(std.mem.indexOf(u8, lastPost("/messages/m1/react"), "\"on\":true") != null);
     try testing.expect(state().modal == null);
 }
+
+test "call devices: the list from zui, one chosen" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[]}"));
+    host.media_devices =
+        \\[{"k":1,"id":"m1","t":"builtin","c":true},{"k":3,"id":"e","t":"earpiece"},{"k":3,"id":"s","t":"speaker","c":true}]
+    ;
+    D.R.dispatch(.{ .call_devices = .open });
+    keyAnswers();
+    try testing.expect(D.findText("Phone") != 0);
+    try D.press("Phone");
+    try testing.expectEqualStrings("speaker:e", host.used_device.items);
+}

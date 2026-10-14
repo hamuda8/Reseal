@@ -75,6 +75,7 @@ fn callScreen(cx: Cx) void {
         ui.text(c.emoji.get(), .{ .font_size = 15, .line_height = 1.2 });
         ui.end();
     }
+    if (c.local != 0) kit.iconButton(cx, icons.settings, .{ .call_devices = .open }, .{ .label = t("Devices"), .color = Color.hex("#ffffffd9"), .background = Color.hex("#ffffff14") });
     if (ch != null and !c.group) kit.iconButton(cx, icons.chat, .{ .call = .open_chat }, .{ .color = Color.hex("#ffffffd9"), .background = Color.hex("#ffffff14") });
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill, .height = .fill, .align_items = .center, .justify = .center }, .{});

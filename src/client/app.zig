@@ -47,6 +47,7 @@ pub const chatindex = @import("chatindex.zig");
 pub const keyboard = @import("keyboard.zig");
 pub const sounds = @import("sounds.zig");
 pub const format = @import("format.zig");
+pub const calldevices = @import("calldevices.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -355,6 +356,7 @@ pub const Msg = union(enum) {
     reload_page,
     menu_due: u32,
     format: format.Act,
+    call_devices: calldevices.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -566,6 +568,7 @@ pub const State = struct {
     motion_on: bool = true,
     sounds: sounds.Sounds = .{},
     fmt: format.Format = .{},
+    call_devices: calldevices.Devices = .{},
     vzoom: viewerx.Zoom = .{},
     /// The message tapped last, and when (a double tap is a heart).
     tap_msg: Id = .{},
@@ -878,6 +881,7 @@ fn handle(s: *State, msg: Msg) void {
         .keys => |a| keyboard.act(s, a),
         .sound => {},
         .format => |a| format.act(s, a),
+        .call_devices => |a| calldevices.act(s, a),
         .reload_page => post("{\"t\":\"reload\"}"),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),

@@ -107,7 +107,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Minimize (mini bar), full screen, encryption emoji badge, unverified warning
 - [x] 1:1 and group views, 'Waiting for others to join…', hands on tiles
 - [x] Mute, Camera, Screen (desktop web), Flip (phones), Raise hand, End/Leave
-- [~] M21 Devices menu (Microphone / Camera / Speaker): zui media has no device list or choice (only front/back camera, which the Flip button uses); 'Open chat' is the call screen's top-bar button
+- [x] M21 Devices menu: microphones, cameras and where the sound plays (earpiece, loudspeaker, headset), the one in use ticked, and Open chat (zui fx.mediaDevices / useMediaDevice, zig-core 3cc227c: the web's enumerateDevices and setSinkId, Android's AudioManager routes, iOS's AVAudioSession)
 - [x] M22 Floating emoji reactions in group calls; 'Reconnected. If someone cannot hear you…' after a group call reconnects
 - [x] Ringtone, dial tone, connect and hang-up sounds, and the message chime and sent sound: Reseal-js's tones made as WAV here and played with fx.play (looped, on the ringtone or call stream; the phones also ring through their call screens)
 - [x] 'Voice call' / 'Video call' on Android's ringing screen in the app's language (zui Call.label, zig-core 70d5fe9); CallKit names the kind itself in the phone's language

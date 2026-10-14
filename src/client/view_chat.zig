@@ -1009,7 +1009,8 @@ pub fn menu(cx: Cx, kind: app.MenuKind, target: Id, item: Id) void {
         .folder_pick => @import("folders.zig").pickSheet(cx, target),
         .ttl => @import("chatmore.zig").ttlSheet(cx, target),
         .chip => @import("listextras.zig").chipSheet(cx),
-        .embed, .call_devices => {},
+        .embed => {},
+        .call_devices => @import("calldevices.zig").sheet(cx),
     }
 }
 
