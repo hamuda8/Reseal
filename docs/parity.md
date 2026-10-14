@@ -93,8 +93,8 @@ Missing items carry an id (M1…) and are worked through in that order.
 ## Info panel (info.js)
 - [x] User/bot info: Message, Call, Video, Mute; username (copied), bio, AI model, View safety number, glimpses, groups in common, shared media, contacts, export, block, delete
 - [x] Encryption pane with emoji, numbers and 'Mark as verified'
-- [ ] M5 Team info for customers ('About {team}', encryption row, 'Order' row, shared media, export, delete)
-- [ ] M4 Saved info ('About Saved' / 'Saved chat info': 'Only you can see this…', Purpose, items / photos & videos / files counts, shared media, export, delete)
+- [x] M5 Team info for customers ('About {team}', encryption row, 'Order' row, shared media, export, delete)
+- [x] M4 Saved info ('About Saved' / 'Saved chat info': 'Only you can see this…', Purpose, items / photos & videos / files counts, shared media, export, delete)
 - [x] Group/channel info: counts, Mute, Add, Leave, Description, Public link, Invite links, Encryption, Auto-delete, members, Edit
 - [ ] M6 Group info 'Voice chat' button
 - [ ] M7 'Search members' when there are more than 15

@@ -1150,22 +1150,31 @@ pub fn infoPanel(cx: Cx) void {
     const col = cx.c;
     ui.begin(.{ .width = .fill, .height = .fill }, .{});
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .height = .{ .px = theme.header_h }, .padding = .xy(14, 0) }, .{});
-    const gchat: ?*const data.Chat = if (s.user_info.isSet()) null else if (s.store.chat(s.info.str())) |c| (if (c.is("private") or c.is("bot") or c.is("saved")) null else c) else null;
+    const gchat: ?*const data.Chat = if (s.user_info.isSet()) null else if (s.store.chat(s.info.str())) |c| (if (c.is("private") or c.is("bot") or c.is("saved") or c.isTeamChat()) null else c) else null;
     if (gchat != null and s.group.page != .main) {
         kit.iconButton(cx, icons.back, .{ .group = .{ .page = if (s.group.page == .admins or s.group.page == .banned) .edit else .main } }, .{ .rtl = icons.back_rtl });
     } else kit.iconButton(cx, icons.close, .close_info, .{});
-    ui.text(if (gchat) |c| vgroup.pageTitle(s, c) orelse t("Info") else t("Info"), .{ .font_size = 20, .weight = 750, .color = col.text, .grow = 1, .width = .fill, .max_lines = 1 });
+    const ptitle = if (gchat) |c| vgroup.pageTitle(s, c) orelse t("Info") else if (s.user_info.isSet()) (if (s.store.user(s.user_info.str())) |u| (if (u.b("isBot")) t("Bot info") else t("User info")) else t("Info")) else if (s.store.chat(s.info.str())) |c| @import("infopanes.zig").title(s, c) else t("Info");
+    ui.text(ptitle, .{ .font_size = 20, .weight = 750, .color = col.text, .grow = 1, .width = .fill, .max_lines = 1 });
     ui.end();
     ui.beginScroll(.{ .grow = 1, .width = .fill, .height = .fill, .padding = .{ .start = 8, .end = 8, .bottom = 24 } }, key(.{"info"}));
     if (s.user_info.isSet()) {
         if (s.store.user(s.user_info.str())) |u| userCard(cx, u, null);
     } else if (s.store.chat(s.info.str())) |c| {
+        const panes = @import("infopanes.zig");
         if (c.is("private") or c.is("bot")) {
             if (s.store.peer(c)) |u| userCard(cx, u, c);
+        } else if (c.is("saved")) {
+            panes.savedBody(cx, c);
+        } else if (c.isTeamChat() and !s.store.isTeamStaff(c)) {
+            panes.teamBody(cx, c);
+        } else if (c.isTeamChat()) {
+            // Team staff see the customer.
+            if (s.store.user(j.strOr(c.o.v, "visitor.id", ""))) |u| userCard(cx, u, c);
         } else {
             vgroup.body(cx, c);
+            @import("sharedmedia.zig").section(cx, c);
         }
-        if (!c.is("private") and !c.is("bot")) @import("sharedmedia.zig").section(cx, c);
     }
     ui.end();
     ui.end();

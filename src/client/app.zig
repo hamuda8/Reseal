@@ -41,6 +41,7 @@ pub const sharedmedia = @import("sharedmedia.zig");
 pub const pollx = @import("pollx.zig");
 pub const viewerx = @import("viewerx.zig");
 pub const attachx = @import("attachx.zig");
+pub const infopanes = @import("infopanes.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -545,6 +546,7 @@ pub const State = struct {
     shared: sharedmedia.Shared = .{},
     polls: pollx.Polls = .{},
     attach: attachx.Attach = .{},
+    saved_counts: infopanes.Counts = .{},
     /// Messages whose spoilers were shown.
     revealed: std.ArrayList(Id) = .empty,
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
@@ -705,6 +707,7 @@ pub const Op = union(enum) {
     common_groups,
     shared: u32,
     poll_voters,
+    media_counts,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -1100,6 +1103,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (userinfo.onAnswer(s, op, r)) return;
             if (sharedmedia.onAnswer(s, op, r)) return;
             if (pollx.onAnswer(s, op, r)) return;
+            if (infopanes.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

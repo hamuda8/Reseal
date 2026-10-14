@@ -78,6 +78,7 @@ pub fn onUi(s: *State, msg: Msg) void {
             s.info = id;
             s.user_info = .{};
             @import("sharedmedia.zig").opened(s, id);
+            if (s.store.chat(id.str())) |c| @import("infopanes.zig").opened(s, c);
             if (s.store.chat(id.str())) |c| if (!c.is("private") and !c.is("saved") and !c.is("bot")) {
                 group.opened(s, c);
                 if (!c.is("channel") or vchat.isAdmin(c)) loadMembers(s, id.str());

@@ -667,3 +667,20 @@ test "AI section: the assistants list from the rail and from 'Ask AI'" {
     try testing.expectEqual(app.Section.ai, state().section);
     try testing.expect(D.findText("Create an assistant") != 0);
 }
+
+test "info: About Saved with counts, a team's About for its customer" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"s1\",\"type\":\"saved\",\"primary\":true,\"seq\":12,\"about\":\"Trip ideas\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}},{\"id\":\"t1\",\"type\":\"support\",\"encrypted\":false,\"team\":{\"id\":\"tm\",\"name\":\"Acme Store\"},\"externalId\":\"o-1\",\"metadata\":{\"orderId\":\"A-1001\"},\"me\":{\"role\":\"member\",\"status\":\"active\",\"unread\":0}}]}"));
+    D.R.dispatch(.{ .open_info = app.Id.of("s1") });
+    try testing.expect(D.findText("About Saved") != 0);
+    try testing.expect(D.findText("Only you can see this. Encrypted on your devices.") != 0);
+    try testing.expect(D.respond("/chats/s1/media-counts", 200, "{\"counts\":{\"photo\":3,\"video\":1,\"file\":2}}"));
+    try testing.expect(D.findText("4") != 0);
+    try testing.expect(D.findText("Trip ideas") != 0);
+    D.R.dispatch(.{ .open_info = app.Id.of("t1") });
+    try testing.expect(D.findText("About Acme Store") != 0);
+    try testing.expect(D.findText("A-1001") != 0);
+}
