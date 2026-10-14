@@ -142,6 +142,10 @@ fn sendAll(s: *State) void {
     const p = markdown.parse(a, raw) catch return clear(s);
     const local = send.queueDraft(s, chat, .{ .text = p.text, .entities = p.entities, .reply_to = s.reply_to }) orelse return clear(s);
     s.reply_to = .{};
+    // The others see "sending a photo…" (composer.js).
+    const k0 = at.items.items[0].kind();
+    const action = if (std.mem.eql(u8, k0, "photo") and at.compress) "uploading_photo" else if (std.mem.eql(u8, k0, "video")) "uploading_video" else "uploading_file";
+    app.wsSend(s, "typing", std.fmt.allocPrint(a, "{{\"chatId\":\"{s}\",\"action\":\"{s}\"}}", .{ chat, action }) catch "{}");
     for (at.items.items) |*x| {
         const kind = x.kind();
         const as_file = !at.compress and !std.mem.eql(u8, kind, "video");

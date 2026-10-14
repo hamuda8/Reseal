@@ -65,7 +65,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] @mention suggestions, typing indicator, drafts, link preview with dismiss, edit/reply bars, length limit
 - [x] Send menu: without sound, Schedule / Set a reminder, Send when online, Send as disappearing…
 - [x] Voice/round mode switch, recording bar, limits, recording typing actions
-- [ ] M14 Typing actions 'sending a photo/video/file' while uploading and 'choosing a sticker'
+- [x] M14 Typing actions 'sending a photo/video/file' while uploading (Reseal-js never sends 'choosing a sticker'; it only names it)
 - [x] Attach menu: Photo or video, File, Poll, Location
 - [x] Attach sheet: Send photo/video/file/{n} items, Compress images, Hide with spoiler, caption, size limit
 - [x] Poll sheet (question, options, anonymous, multiple, quiz with correct answer and explanation)
