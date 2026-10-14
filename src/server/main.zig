@@ -168,10 +168,32 @@ fn ensureIndexes(arena: std.mem.Allocator) void {
 const CSP_BASE = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' {s} ws: wss:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'";
 
 fn csp(q: *Req, frame_ancestors: []const u8) ![]const u8 {
+    return cspFor(q, frame_ancestors, "");
+}
+
+/// The policy for a page: the zui web app compiles WebAssembly and starts from small inline
+/// scripts, which are allowed by their SHA-256 (Reseal-js's pages have none, so they are unchanged).
+fn cspFor(q: *Req, frame_ancestors: []const u8, html: []const u8) ![]const u8 {
     const pub_url = A.app.config.public_url;
     // config.publicUrl.replace(/^http/, 'ws')
     const ws_origin = if (std.mem.startsWith(u8, pub_url, "http")) try q.r.fmt("ws{s}", .{pub_url[4..]}) else pub_url;
-    return q.r.fmt(CSP_BASE ++ "; frame-ancestors {s}", .{ ws_origin, frame_ancestors });
+    var scripts: std.ArrayList(u8) = .empty;
+    try scripts.appendSlice(q.r.a, "'self' 'wasm-unsafe-eval'");
+    var rest = html;
+    while (std.mem.indexOf(u8, rest, "<script")) |open| {
+        const tag_end = std.mem.indexOfScalarPos(u8, rest, open, '>') orelse break;
+        const close = std.mem.indexOfPos(u8, rest, tag_end, "</script>") orelse break;
+        if (std.mem.indexOf(u8, rest[open..tag_end], " src=") == null) {
+            var digest: [32]u8 = undefined;
+            std.crypto.hash.sha2.Sha256.hash(rest[tag_end + 1 .. close], &digest, .{});
+            var b64: [44]u8 = undefined;
+            try scripts.print(q.r.a, " 'sha256-{s}'", .{std.base64.standard.Encoder.encode(&b64, &digest)});
+        }
+        rest = rest[close + 9 ..];
+    }
+    const base = try std.mem.replaceOwned(u8, q.r.a, CSP_BASE, "script-src 'self'", try q.r.fmt("script-src {s}", .{scripts.items}));
+    const with_ws = try std.mem.replaceOwned(u8, q.r.a, base, "{s}", ws_origin);
+    return q.r.fmt("{s}; frame-ancestors {s}", .{ with_ws, frame_ancestors });
 }
 
 fn handle(ctx: *http.Context) anyerror!void {
@@ -295,10 +317,10 @@ fn readPublic(q: *Req, rel: []const u8) ![]const u8 {
 }
 
 fn page(q: *Req, file: []const u8, frame_ancestors: []const u8) !void {
-    try q.setHeader("content-security-policy", try csp(q, frame_ancestors));
+    const data = readPublic(q, file) catch return web.cannot(q);
+    try q.setHeader("content-security-policy", try cspFor(q, frame_ancestors, data));
     try q.setHeader("cache-control", "no-cache");
     if (std.mem.eql(u8, frame_ancestors, "'none'")) try q.setHeader("x-frame-options", "DENY");
-    const data = readPublic(q, file) catch return web.cannot(q);
     return q.send(200, "text/html; charset=utf-8", data);
 }
 
