@@ -72,6 +72,8 @@ pub const Compose = struct {
     scheduled: ?*data.Obj = null,
     /// Recently used emoji (newest first), kept on the device.
     recent: std.ArrayList([]u8) = .empty,
+    /// Picking an emoji reacts to this message ("More reactions") instead of typing it.
+    react_to: Id = .{},
 };
 
 pub const poll_fields = [_]app.Field{ .poll_o0, .poll_o1, .poll_o2, .poll_o3, .poll_o4, .poll_o5, .poll_o6, .poll_o7, .poll_o8, .poll_o9, .poll_o10, .poll_o11 };
@@ -140,6 +142,7 @@ pub fn act(s: *State, a: Act) void {
             if (sheet == .schedule) s.fields.getPtr(.schedule_at).set(defaultCustomTime());
             if (sheet == .scheduled) loadScheduled(s);
             if (sheet == .emoji or sheet == .sticker) loadRecent(s);
+            if (sheet == .emoji) c.react_to = .{};
             s.modal = .{ .compose = sheet };
         },
         .silent => sendNow(s, .{ .silent = true }),
@@ -181,6 +184,12 @@ pub fn act(s: *State, a: Act) void {
         .emoji => |e| {
             const ch = emojiAt(s, e.cat, e.i) orelse return;
             remember(s, ch);
+            if (c.react_to.isSet()) {
+                const msg_id = c.react_to;
+                c.react_to = .{};
+                s.modal = null;
+                return @import("views.zig").reactEmoji(s, msg_id.str(), ch);
+            }
             const field = s.fields.getPtr(.composer);
             const text = std.fmt.allocPrint(tmp(), "{s}{s}", .{ field.get(), ch }) catch return;
             field.set(text);

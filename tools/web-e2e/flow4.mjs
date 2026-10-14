@@ -193,6 +193,38 @@ try {
     await a.shot('107-profile');
   }
 
+  if (want('extras')) {
+    const anchor = (await bob.api.post(`/api/chats/${group.id}/messages`, { text: 'Anchor message far above', clientId: 'x0' })).message;
+    for (let i = 0; i < 40; i++) await carol.api.post(`/api/chats/${group.id}/messages`, { text: `Filler ${i}`, clientId: `f${i}` });
+    await bob.api.post(`/api/chats/${group.id}/messages`, { text: 'Replying to the anchor', replyTo: anchor.id, clientId: 'x1' });
+    await a.go(APP);
+    await a.waitText('Plain crew');
+    await a.clickText('Plain crew');
+    await a.waitText('Replying to the anchor');
+    await sleep(800);
+    // The quote inside the reply (its text is the anchor's).
+    const q = await a.evaluate(`(() => { const els = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Anchor message far above'); const vis = els.map(e => e.getBoundingClientRect()).filter(r => r.width > 0 && r.y > 0 && r.y < 800); const r = vis[vis.length - 1]; return r ? [r.x + r.width / 2, r.y + r.height / 2] : null; })()`);
+    await a.click(q[0], q[1]);
+    await sleep(1500);
+    const anchorVisible = await a.evaluate(`(() => { const els = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Anchor message far above'); return els.some(e => { const r = e.getBoundingClientRect(); return r.y > 80 && r.y < 700 && r.x > 470; }) ; })()`);
+    check('extras: the reply quote jumps to the message', anchorVisible);
+    await a.shot('108-jumped');
+    // Pin with the dialog.
+    await a.clickText('Replying to the anchor');
+    await a.clickText('Pin');
+    check('extras: pin asks whether to notify', await a.waitText('Notify all members', 3000));
+    await a.clickText('Pin');
+    await sleep(1000);
+    const chat = (await bob.api.get(`/api/chats/${group.id}`)).chat;
+    check('extras: pinned', (chat.pinned || []).length === 1, JSON.stringify(chat.pinned));
+    // Details.
+    await a.clickText('Filler 39');
+    await a.clickText('Details');
+    check('extras: details show the encryption', await a.waitText('Not end-to-end encrypted', 3000));
+    await a.key('Escape');
+    await sleep(400);
+  }
+
   if (want('select')) {
     await alice.api.post(`/api/chats/${group.id}/messages`, { text: 'one to delete', clientId: 's1' });
     await alice.api.post(`/api/chats/${group.id}/messages`, { text: 'two to delete', clientId: 's2' });

@@ -234,7 +234,7 @@ fn topBars(cx: Cx, c: *const data.Chat) void {
         if (s.store.existingTimeline(c.id())) |tl| if (tl.find(pid)) |m| {
             line = text.summary(s, m, true);
         };
-        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 50, .padding = .{ .start = 14, .end = 10, .top = 7, .bottom = 7 }, .radius = 16, .background = col.surface_2 }, .{});
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 50, .padding = .{ .start = 14, .end = 10, .top = 7, .bottom = 7 }, .radius = 16, .background = col.surface_2, .pressed_opacity = 0.85 }, .{ .on_press = .{ .extras = .{ .jump = .{ .msg = Id.of(pid) } } } });
         ui.begin(.{ .width = .{ .px = 3 }, .height = .{ .px = 34 }, .radius = 2, .background = col.accent }, .{});
         ui.end();
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
@@ -291,15 +291,11 @@ fn messages(cx: Cx, c: *const data.Chat) void {
     }
     ui.end();
     ui.end();
-    if (tl) |list| if (list.has_newer) {
-        ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 90, .end = 22 } }, .{});
-        kit.iconButton(cx, icons.arrowDown, .jump_latest, .{ .soft = true, .size = 44 });
-        ui.end();
-    };
+    @import("msgextras.zig").bottomButton(cx, c);
 }
 
 fn onScroll(e: zui.ScrollEvent) Msg {
-    return if (e.reached_start) .reached_top else .scrolled;
+    return if (e.reached_start) .reached_top else .{ .scroll_end = e.at_end };
 }
 
 /// A full-width row (separators, notes).
@@ -385,7 +381,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     const run_start = !sameRun(older, m);
     const run_end = !sameRun(newer, m);
     const max_w = @min(580, (if (cx.phone) cx.w else cx.w - 400) * if (cx.phone) @as(f32, 0.84) else 0.76);
-    const selected = s.selecting and m.local_id == 0 and s.isSelected(m.id());
+    const selected = (s.selecting and m.local_id == 0 and s.isSelected(m.id())) or (m.local_id == 0 and s.extras.highlight.eql(m.id()));
     ui.begin(.{ .direction = .row, .align_items = .end, .gap = 8, .width = .fill, .justify = if (out) .end else .start, .padding = .{ .top = if (run_start) 10 else 1.5, .bottom = 1.5 }, .background = if (selected) col.accent_soft else null, .radius = if (selected) 12 else 0 }, .{ .key = k });
     if (s.selecting and m.local_id == 0) {
         // The selection mark, on the far side from the bubble's tail.
@@ -438,7 +434,12 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
             ui.text(t("Replied to a glimpse"), .{ .font_size = 13, .weight = 600, .color = fg, .opacity = 0.85 });
             ui.end();
         }
-        if (j.str(m.o.v, "replyTo.id")) |rid| replyQuote(cx, c, rid, out);
+        if (j.str(m.o.v, "replyTo.id")) |rid| {
+            // Pressing the quote shows the message it answers.
+            ui.begin(.{}, .{ .on_press = .{ .extras = .{ .jump = .{ .msg = Id.of(rid), .seq = j.intOr(m.o.v, "replyTo.seq", 0) } } } });
+            replyQuote(cx, c, rid, out);
+            ui.end();
+        }
         if (media_items.len > 0) mediaBlock(cx, m, media_items, max_w, out);
         if (j.obj(m.content, "poll")) |p| pollBlock(cx, m, p, fg);
         if (j.obj(m.content, "location")) |loc| card(cx, icons.location, j.str(loc, "title") orelse t("Location"), j.str(loc, "address") orelse std.fmt.allocPrint(a, "{d:.5}, {d:.5}", .{ j.floatOr(loc, "lat", 0), j.floatOr(loc, "lng", 0) }) catch "", fg);
@@ -967,6 +968,10 @@ fn messageMenu(cx: Cx, chat_id: Id, item: Id) void {
             ui.text(e, .{ .font_size = 24, .line_height = 1.1 });
             ui.end();
         }
+        // More reactions: any emoji.
+        ui.begin(.{ .width = .{ .px = 42 }, .height = .{ .px = 42 }, .radius = 21, .align_items = .center, .justify = .center, .pressed_background = cx.c.hover }, .{ .on_press = .{ .extras = .{ .more_reactions = id } }, .key = key(.{"rx-more"}) });
+        ui.icon(icons.chevronDown, 20, cx.c.text_2, .{}, 0);
+        ui.end();
         ui.end();
     }
     const content_ok = !m.deleted() and m.decrypt == .ok;
@@ -997,7 +1002,10 @@ fn messageMenu(cx: Cx, chat_id: Id, item: Id) void {
     } else false;
     if (can(c, "pinMessages") and !m.deleted()) views.menuItem(cx, if (pinned) icons.unpin else icons.pin, if (pinned) t("Unpin") else t("Pin"), act(if (pinned) .unpin else .pin, id), false);
     if (content_ok and !c.o.b("protectedContent") and feature(s, "forwarding")) views.menuItem(cx, icons.forward, t("Forward"), act(.forward, id), false);
+    if (!m.deleted() and !c.o.b("protectedContent") and m.seq() != null) views.menuItem(cx, icons.link, t("Copy message link"), .{ .extras = .{ .copy_link = id } }, false);
+    if (mine and !c.is("private") and !c.is("saved") and !c.is("channel") and (c.o.i("memberCount") orelse 0) <= 100) views.menuItem(cx, icons.eye, t("Seen by…"), .{ .extras = .{ .seen_by = id } }, false);
     if (s.mode == .app) views.menuItem(cx, icons.selectCircle, t("Select"), act(.select, id), false);
+    views.menuItem(cx, icons.info, t("Details"), .{ .extras = .{ .details = id } }, false);
     if (content_ok and !c.is("saved") and s.mode == .app and m.text().len > 0) views.menuItem(cx, icons.bookmark, t("Save to Saved Messages"), act(.save, id), false);
     if (j.arr(m.o.v, "reactions").len > 0) views.menuItem(cx, icons.heart, t("Reactions"), .{ .menu = .{ .reactions = id } }, false);
     const deletable = mine or can(c, "deleteMessages") or c.is("private") or c.is("saved") or c.is("bot") or !c.is("channel");

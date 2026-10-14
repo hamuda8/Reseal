@@ -129,6 +129,7 @@ fn onMessages(s: *State, x: app.MessagesOp, r: zui.Response) void {
             const c = s.store.chat(chat);
             tl.has_newer = if (c) |cc| (tl.lastSeq() orelse 0) < cc.seq() else true;
             list.clearRetainingCapacity();
+            @import("msgextras.zig").afterLoad(s);
         },
         .older => {
             tl.prepend(list.items) catch {};

@@ -481,7 +481,8 @@ fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
             app.fx.copy(m.text());
             app.toast(s, t("Copied"));
         },
-        .pin, .unpin => app.api(s, .POST, path("/chats/{s}/messages/{s}/pin", .{ chat, msg_id }), if (what == .unpin) "{\"unpin\":true}" else "{\"silent\":true}", .pin),
+        .pin => @import("msgextras.zig").act(s, .{ .pin_ask = Id.of(msg_id) }),
+        .unpin => app.api(s, .POST, path("/chats/{s}/messages/{s}/pin", .{ chat, msg_id }), "{\"unpin\":true}", .pin),
         .delete, .delete_everyone => s.modal = .{ .confirm = .{ .kind = .delete_messages, .target = s.open_chat, .item = Id.of(msg_id) } },
         .save => {
             // Save to Saved Messages: a forward into the Saved chat, encrypted there.
@@ -584,9 +585,13 @@ fn forwardOne(s: *State, to: []const u8, msg_id: []const u8) void {
 }
 
 fn react(s: *State, msg_id: []const u8, emoji_index: u8) void {
-    s.modal = null;
     if (emoji_index >= quick_reactions.len) return;
-    const emoji = quick_reactions[emoji_index];
+    reactEmoji(s, msg_id, quick_reactions[emoji_index]);
+}
+
+/// Toggles my reaction `emoji` on a message of the open chat.
+pub fn reactEmoji(s: *State, msg_id: []const u8, emoji: []const u8) void {
+    s.modal = null;
     const chat = s.open_chat.str();
     const tl = s.store.existingTimeline(chat) orelse return;
     const m = tl.find(msg_id) orelse return;
@@ -1201,6 +1206,9 @@ fn modal(cx: Cx) void {
         .profile_photo_menu => @import("profile.zig").photoMenu(cx),
         .delete_account => @import("profile.zig").deleteSheet(cx),
         .features_tour => @import("profile.zig").tourSheet(cx),
+        .seen_by => @import("msgextras.zig").seenBySheet(cx),
+        .message_details => @import("msgextras.zig").detailsSheet(cx),
+        .pin_message => @import("msgextras.zig").pinSheet(cx),
     }
 }
 

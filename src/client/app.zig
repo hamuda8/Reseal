@@ -32,6 +32,7 @@ pub const stories = @import("stories.zig");
 pub const voice = @import("voice.zig");
 pub const profile = @import("profile.zig");
 pub const drafts = @import("drafts.zig");
+pub const extras = @import("msgextras.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -242,6 +243,9 @@ pub const Modal = union(enum) {
     profile_photo_menu,
     delete_account,
     features_tour,
+    seen_by,
+    message_details,
+    pin_message,
 };
 
 pub const Msg = union(enum) {
@@ -313,6 +317,8 @@ pub const Msg = union(enum) {
     profile: profile.Act,
     profile_photo: zui.File,
     draft_due: struct { chat: Id, seq: u32 },
+    extras: extras.Act,
+    scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
     located: zui.Location,
@@ -508,6 +514,7 @@ pub const State = struct {
     voice: voice.Voice = .{},
     profile: profile.Profile = .{},
     drafts: drafts.Drafts = .{},
+    extras: extras.Extras = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -665,6 +672,8 @@ pub const Op = union(enum) {
     username_check: u32,
     account_deleted,
     draft_saved: Id,
+    seen_by,
+    jump_lookup,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -772,6 +781,8 @@ fn handle(s: *State, msg: Msg) void {
         .profile => |a| profile.act(s, a),
         .profile_photo => |f| profile.onPicked(s, f),
         .draft_due => |x| drafts.due(s, x.chat, x.seq),
+        .extras => |a| extras.act(s, a),
+        .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),
         .toast_hide => |id| if (id == s.toast.id) s.toast.text.clear(),
@@ -1044,6 +1055,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (stories.onAnswer(s, op, r)) return;
             if (profile.onAnswer(s, op, r)) return;
             if (drafts.onAnswer(s, op, r)) return;
+            if (extras.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }
