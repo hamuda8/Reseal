@@ -34,6 +34,7 @@ pub const profile = @import("profile.zig");
 pub const drafts = @import("drafts.zig");
 pub const extras = @import("msgextras.zig");
 pub const chatmore = @import("chatmore.zig");
+pub const fwdpick = @import("fwdpick.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -148,6 +149,7 @@ pub const Field = enum {
     bot_context,
     model_search,
     dev_app_name,
+    forward_search,
     dev_origins,
     dev_storage_url,
     dev_webhook_url,
@@ -320,6 +322,7 @@ pub const Msg = union(enum) {
     draft_due: struct { chat: Id, seq: u32 },
     extras: extras.Act,
     chat_more: chatmore.Act,
+    fwd_pick: fwdpick.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -520,6 +523,7 @@ pub const State = struct {
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
+    fwd: fwdpick.Pick = .{},
     /// Messages whose spoilers were shown.
     revealed: std.ArrayList(Id) = .empty,
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
@@ -786,6 +790,7 @@ fn handle(s: *State, msg: Msg) void {
         .draft_due => |x| drafts.due(s, x.chat, x.seq),
         .extras => |a| extras.act(s, a),
         .chat_more => |a| chatmore.act(s, a),
+        .fwd_pick => |a| fwdpick.act(s, a),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),

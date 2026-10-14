@@ -163,9 +163,7 @@ pub fn onUi(s: *State, msg: Msg) void {
             }
         },
         .select_cancel => endSelection(s),
-        .select_forward => if (s.selected.items.len > 0) {
-            s.modal = .{ .forward = .{} };
-        },
+        .select_forward => if (s.selected.items.len > 0) @import("fwdpick.zig").open(s, .{}, false),
         .select_delete => if (s.selected.items.len > 0) {
             // "For everyone" is ticked to begin with (Reseal-js deleteFlow).
             s.confirm_check = true;
@@ -494,15 +492,21 @@ fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
             s.modal = .{ .confirm = .{ .kind = .delete_messages, .target = s.open_chat, .item = Id.of(msg_id) } };
         },
         .save => {
-            // Save to Saved Messages: a forward into the Saved chat, encrypted there.
-            const saved = s.store.savedChat() orelse return;
-            if (m.text().len > 0) {
-                send.sendText(s, saved.id(), m.text(), .{});
-                app.toast(s, t("Saved to Saved Messages"));
-            }
+            // A forward into a saved chat (asking which one when there are several).
+            var only: ?*data.Chat = null;
+            var n: usize = 0;
+            var it = s.store.chats.valueIterator();
+            while (it.next()) |c| if (c.*.is("saved") and !s.open_chat.eql(c.*.id())) {
+                n += 1;
+                only = c.*;
+            };
+            if (n > 1) return @import("fwdpick.zig").open(s, Id.of(msg_id), true);
+            const saved = only orelse return;
+            forwardMessages(s, saved.id(), Id.of(msg_id));
+            app.toast(s, if (saved.o.b("primary")) t("Saved to Saved Messages") else fmt.tf("Saved to {name}", .{ .name = s.store.title(saved) }));
         },
         .retract_vote => app.api(s, .POST, path("/chats/{s}/messages/{s}/vote", .{ chat, msg_id }), "{\"options\":[]}", .{ .vote = .{ .chat = s.open_chat, .msg = Id.of(msg_id) } }),
-        .forward => s.modal = .{ .forward = Id.of(msg_id) },
+        .forward => @import("fwdpick.zig").open(s, Id.of(msg_id), false),
         .close_poll => app.api(s, .POST, path("/chats/{s}/messages/{s}/close-poll", .{ chat, msg_id }), "{}", .{ .vote = .{ .chat = s.open_chat, .msg = Id.of(msg_id) } }),
         .open_map => if (j.obj(m.content, "location")) |loc| {
             const base = if (s.store.config) |cfg| cfg.s("mapsUrl") orelse "http://localhost:5005" else "http://localhost:5005";
@@ -530,15 +534,16 @@ fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
 fn forwardTo(s: *State, to: []const u8) void {
     const m_id = if (s.modal) |m| (if (m == .forward) m.forward else return) else return;
     s.modal = null;
-    if (m_id.isSet()) {
-        forwardOne(s, to, m_id.str());
-    } else {
-        // The selection, oldest first (as they appear in the chat).
-        const tl = s.store.existingTimeline(s.open_chat.str()) orelse return;
-        for (tl.items.items) |m| if (s.isSelected(m.id())) forwardOne(s, to, m.id());
-        endSelection(s);
-    }
+    forwardMessages(s, to, m_id);
+    if (!m_id.isSet()) endSelection(s);
     app.toast(s, t("Forwarded"));
+}
+
+/// Forwards one message of the open chat, or (`m_id` unset) the selection, oldest first.
+pub fn forwardMessages(s: *State, to: []const u8, m_id: Id) void {
+    if (m_id.isSet()) return forwardOne(s, to, m_id.str());
+    const tl = s.store.existingTimeline(s.open_chat.str()) orelse return;
+    for (tl.items.items) |m| if (s.isSelected(m.id())) forwardOne(s, to, m.id());
 }
 
 fn toggleSelected(s: *State, id: Id) void {
@@ -1192,7 +1197,7 @@ fn modal(cx: Cx) void {
         .fingerprint => vset.fingerprint(cx),
         .safety => |uid| vset.safety(cx, uid.str()),
         .reactions => vchat.reactionsSheet(cx),
-        .forward => vchat.forwardSheet(cx),
+        .forward => @import("fwdpick.zig").sheet(cx),
         .join => vchat.joinSheet(cx),
         .compose => |which| vcompose.sheet(cx, which),
         .admin_rights => vgroup.adminRights(cx),
