@@ -929,3 +929,17 @@ test "voice speed: 1x, 1.5x, 2x, remembered" {
     try testing.expectEqual(@as(u16, 100), state().voice.speed);
     try testing.expectEqualStrings("100", host.stored.get("voiceSpeed").?);
 }
+
+test "reaction chips: faces of who reacted, a tap toggles mine" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"lunch?\",\"reactions\":[{\"emoji\":\"👍\",\"count\":2,\"recent\":[\"u9\",\"u8\"]}],\"createdAt\":\"2026-10-12T14:00:00Z\"}],\"floor\":0}"));
+    // Two faces instead of the count.
+    try testing.expect(D.findText("2") == 0);
+    D.R.dispatch(.{ .extras = .{ .react_chip = .{ .msg = app.Id.of("m1"), .index = 0 } } });
+    try testing.expect(std.mem.indexOf(u8, lastPost("/messages/m1/react"), "\"on\":true") != null);
+}

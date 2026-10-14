@@ -87,7 +87,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] M25 Contact card: tap opens the profile
 - [x] Decrypt states, Deleted message, Unverified sender, Not sent + Retry/Delete
 - [x] Reactions row (tap toggles), service messages, selection mark
-- [~] Reaction chips show counts, not reactor avatars and hover names (no hover tooltips in zui)
+- [x] Reaction chips: up to three reactors' faces (not in channels) or the count, their names as the label (web tooltip), a tap toggles mine, a long press or right click lists them
 - [x] Summaries, service texts, typing texts, presence texts, rich text entities and links
 
 ## Info panel (info.js)

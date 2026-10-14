@@ -527,7 +527,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
         }
     }
     metaRow(cx, c, m, out, media_only);
-    reactions(cx, m, out);
+    reactions(cx, c, m, out);
     if (m.state == .failed) {
         ui.begin(.{ .direction = .row, .gap = 8, .align_items = .center, .padding = .{ .top = 6 } }, .{});
         ui.icon(icons.alertCircle, 16, if (out) Color.white else col.danger, .{}, 0);
@@ -845,19 +845,45 @@ fn metaRow(cx: Cx, c: *const data.Chat, m: *const data.Message, out: bool, overl
     ui.end();
 }
 
-fn reactions(cx: Cx, m: *const data.Message, out: bool) void {
+/// Reactions under a bubble (message.js reactionsRow): a tap toggles mine, a long press or right
+/// click lists who reacted; up to three reactors' faces (not in channels), else the count; their
+/// names as the chip's label.
+fn reactions(cx: Cx, c: *const data.Chat, m: *const data.Message, out: bool) void {
     const list = j.arr(m.o.v, "reactions");
     if (list.len == 0) return;
     const ui = cx.ui;
+    const s = cx.s;
     const col = cx.c;
-    ui.begin(.{ .direction = .row, .gap = 5, .padding = .{ .top = 7 } }, .{});
-    for (list) |r| {
+    const a = cx.a();
+    ui.begin(.{ .direction = .row, .wrap = true, .gap = 5, .padding = .{ .top = 7 } }, .{});
+    for (list, 0..) |r, i| {
         const me = j.truthy(r, "me");
         const bg = if (out) (if (me) Color.white else Color.hex("#ffffff2e")) else if (me) col.accent_soft else col.surface;
         const fg = if (out) (if (me) col.accent else Color.white) else if (me) col.accent else col.text;
-        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 5, .height = .{ .px = 28 }, .padding = .{ .start = 6, .end = 9 }, .radius = 10, .background = bg, .border_width = if (out) 0 else 1, .border_color = if (me) col.accent else col.border }, .{});
+        const recent = j.arr(r, "recent");
+        const count = j.intOr(r, "count", 0);
+        var names: std.ArrayList(u8) = .empty;
+        for (recent, 0..) |u, k| if (u == .string) {
+            if (k > 0) names.appendSlice(a, ", ") catch {};
+            names.appendSlice(a, s.store.displayName(u.string)) catch {};
+        };
+        const can_press = m.local_id == 0 and i < 32;
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 5, .height = .{ .px = 28 }, .padding = .{ .start = 6, .end = 9 }, .radius = 10, .background = bg, .border_width = if (out) 0 else 1, .border_color = if (me) col.accent else col.border, .pressed_opacity = 0.8 }, .{
+            .on_press = if (can_press) Msg{ .extras = .{ .react_chip = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } else null,
+            .on_long_press = if (can_press) Msg{ .menu = .{ .reactions = Id.of(m.id()) } } else null,
+            .on_context = if (can_press) Msg{ .menu = .{ .reactions = Id.of(m.id()) } } else null,
+            .label = names.items,
+            .key = key(.{ "rx", m.id(), i }),
+        });
         ui.text(j.strOr(r, "emoji", ""), .{ .font_size = 16, .line_height = 1.1 });
-        ui.text(fmt.number(cx.a(), j.intOr(r, "count", 0)), .{ .font_size = 13, .weight = 700, .color = fg });
+        if (!c.is("channel") and count <= 3 and recent.len > 0) {
+            ui.begin(.{ .direction = .row, .gap = -6 }, .{});
+            for (recent[0..@min(recent.len, 3)]) |u| if (u == .string) {
+                const usr = s.store.user(u.string);
+                kit.avatar(cx, .{ .name = s.store.displayName(u.string), .color = if (usr) |x| x.i("color") orelse 0 else 0, .image = if (usr) |x| x.s("avatar") else null, .size = 20 }, key(.{ "rxa", m.id(), i, u.string }));
+            };
+            ui.end();
+        } else ui.text(fmt.number(a, count), .{ .font_size = 13, .weight = 700, .color = fg });
         ui.end();
     }
     ui.end();

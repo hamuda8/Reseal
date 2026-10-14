@@ -30,6 +30,8 @@ pub const Act = union(enum) {
     seen_by: Id,
     details: Id,
     more_reactions: Id,
+    /// A reaction chip under a bubble: toggles mine.
+    react_chip: struct { msg: Id, index: u8 },
     pin_ask: Id,
     pin_notify,
     pin_confirm,
@@ -90,6 +92,13 @@ pub fn act(s: *State, a: Act) void {
         .details => |id| {
             x.target = id;
             s.modal = .message_details;
+        },
+        .react_chip => |rc| {
+            const tl = s.store.existingTimeline(s.open_chat.str()) orelse return;
+            const m = tl.find(rc.msg.str()) orelse return;
+            const list = j.arr(m.o.v, "reactions");
+            if (rc.index >= list.len) return;
+            @import("views.zig").reactEmoji(s, rc.msg.str(), j.strOr(list[rc.index], "emoji", ""));
         },
         .more_reactions => |id| {
             s.compose.react_to = id;
