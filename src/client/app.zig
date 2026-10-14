@@ -31,6 +31,7 @@ pub const dev = @import("dev.zig");
 pub const stories = @import("stories.zig");
 pub const voice = @import("voice.zig");
 pub const profile = @import("profile.zig");
+pub const drafts = @import("drafts.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -311,6 +312,7 @@ pub const Msg = union(enum) {
     voice: voice.Act,
     profile: profile.Act,
     profile_photo: zui.File,
+    draft_due: struct { chat: Id, seq: u32 },
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
     located: zui.Location,
@@ -505,6 +507,7 @@ pub const State = struct {
     stories: stories.Stories = .{},
     voice: voice.Voice = .{},
     profile: profile.Profile = .{},
+    drafts: drafts.Drafts = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -661,6 +664,7 @@ pub const Op = union(enum) {
     profile_saved_photo,
     username_check: u32,
     account_deleted,
+    draft_saved: Id,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -767,6 +771,7 @@ fn handle(s: *State, msg: Msg) void {
         .voice => |a| voice.act(s, a),
         .profile => |a| profile.act(s, a),
         .profile_photo => |f| profile.onPicked(s, f),
+        .draft_due => |x| drafts.due(s, x.chat, x.seq),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),
         .toast_hide => |id| if (id == s.toast.id) s.toast.text.clear(),
@@ -818,6 +823,7 @@ fn onTyped(s: *State, field: Field, text: []const u8) void {
         .composer => {
             sync.typing(s);
             compose.typed(s);
+            drafts.typed(s);
         },
         .chat_search => views.runChatSearch(s),
         else => {},
@@ -1037,6 +1043,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (dev.onAnswer(s, op, r)) return;
             if (stories.onAnswer(s, op, r)) return;
             if (profile.onAnswer(s, op, r)) return;
+            if (drafts.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

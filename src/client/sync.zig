@@ -64,6 +64,7 @@ pub fn onChats(s: *State, r: zui.Response) void {
     if (s.open_chat.isSet()) {
         if (s.store.chat(s.open_chat.str()) == null) s.open_chat = .{};
     }
+    @import("drafts.zig").refresh(s);
 }
 
 pub fn ensureChat(s: *State, id: []const u8) void {

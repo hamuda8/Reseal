@@ -276,6 +276,7 @@ pub fn sendNow(s: *State, o: Options) void {
     s.reply_to = .{};
     sync.cancelTyping(s);
     s.fields.getPtr(.composer).clear();
+    @import("drafts.zig").clear(s, chat);
     if (s.compose.preview) |pv| pv.destroy();
     s.compose.preview = null;
     s.compose.preview_dismissed.clear();

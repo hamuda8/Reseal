@@ -422,3 +422,30 @@ test "keys: private keys gone from this device, public ones kept: restored from 
     try testing.expect(D.pending("/api/keys/restore") != null);
     try testing.expect(state().keys.recovering);
 }
+
+test "drafts: kept when leaving a chat, synced, shown in the list, restored" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}},{\"id\":\"g2\",\"type\":\"group\",\"title\":\"Book club\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/chats/g1/messages", 200, "{\"messages\":[],\"floor\":0}"));
+    try D.typeInto("Message", "half a thought");
+    // 1.5 s later it goes to the server.
+    const n = host.timers.items.len;
+    for (0..n) |_| {
+        const tm = host.timers.orderedRemove(0);
+        D.R.timerDone(tm.id);
+    }
+    var body: []const u8 = "";
+    for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, "/chats/g1/state")) {
+        body = f.body;
+    };
+    try testing.expect(std.mem.indexOf(u8, body, "\"text\":\"half a thought\"") != null);
+    try D.press("Book club");
+    try testing.expect(D.findText("Draft: half a thought") != 0);
+    try testing.expectEqualStrings("", state().fields.get(.composer).get());
+    try D.press("Launch crew");
+    try testing.expectEqualStrings("half a thought", state().fields.get(.composer).get());
+}

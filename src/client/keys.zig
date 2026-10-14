@@ -645,6 +645,7 @@ fn processWraps(s: *State, chat: []const u8, body: []const u8, can_wait: bool) v
 fn keysLoaded(s: *State, chat: []const u8) void {
     if (s.store.chat(chat)) |c| c.keys_fetched = true;
     retryChat(s, chat);
+    @import("drafts.zig").refresh(s);
     // Key requests that waited for this chat's keys.
     var i: usize = 0;
     while (i < s.keys.waiting.items.len) {

@@ -278,6 +278,7 @@ pub fn openChat(s: *State, id: []const u8) void {
         s.editing = .{};
         s.fields.getPtr(.composer).clear();
         s.show_count = 60;
+        @import("drafts.zig").restore(s, id);
     }
     s.open_chat = Id.of(id);
     if (s.mode == .app) app.fx.setLink(path("/c/{s}", .{id}));
