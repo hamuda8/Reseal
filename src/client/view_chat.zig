@@ -607,7 +607,7 @@ fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out:
 }
 
 /// A poll or quiz (pollView): results once voted (or closed, or for the author of a public poll);
-/// votes are cast from the message menu (zui has no pressables inside the pressable bubble yet).
+/// a tap on an option votes (several answers: ticks it for the Vote button).
 fn pollBlock(cx: Cx, m: *const data.Message, p: j.Value, fg: Color) void {
     const ui = cx.ui;
     const col = cx.c;
@@ -619,6 +619,9 @@ fn pollBlock(cx: Cx, m: *const data.Message, p: j.Value, fg: Color) void {
     const total = j.intOr(state, "total", 0);
     const show = my_vote.len > 0 or closed or (cx.s.store.isMe(m.authorId()) and total > 0 and !anonymous);
     const correct: i64 = j.intOr(p, "correct", j.intOr(state, "correct", -1));
+    const multiple = j.truthy(state, "multiple");
+    const pollx = @import("pollx.zig");
+    const can_vote = !show and !closed and m.local_id == 0 and !cx.s.selecting;
     ui.begin(.{ .gap = 6, .min_width = 260, .padding = .xy(0, 3) }, .{});
     ui.text(j.strOr(p, "question", ""), .{ .font_size = 15, .weight = 700, .color = fg });
     const kind = if (closed) t("Final results") else if (quiz) (if (anonymous) t("Anonymous quiz") else t("Quiz")) else if (anonymous) t("Anonymous poll") else t("Public poll");
@@ -633,12 +636,14 @@ fn pollBlock(cx: Cx, m: *const data.Message, p: j.Value, fg: Color) void {
         const right = quiz and show and correct == @as(i64, @intCast(i));
         const wrong = quiz and show and mine and !right;
         const pct: i64 = if (total > 0) @divTrunc(n * 100 + @divTrunc(total, 2), total) else 0;
-        ui.begin(.{ .gap = 5, .padding = .xy(10, 8), .radius = 12, .background = fg.withAlpha(0.07) }, .{});
+        const ticked = pollx.chosen(cx.s, m.id(), i);
+        ui.begin(.{ .gap = 5, .padding = .xy(10, 8), .radius = 12, .background = fg.withAlpha(0.07), .pressed_background = fg.withAlpha(0.14) }, .{ .on_press = if (can_vote) pollx.msgOf(.{ .tap = .{ .msg = Id.of(m.id()), .option = @intCast(@min(i, 255)), .multiple = multiple } }) else null, .key = key(.{ "popt", m.id(), i }) });
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
         if (show) {
             ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{pct}) catch "", .{ .font_size = 13, .weight = 750, .color = fg, .min_width = 36 });
         } else {
-            ui.begin(.{ .width = .{ .px = 18 }, .height = .{ .px = 18 }, .radius = if (j.truthy(state, "multiple")) 5 else 9, .border_width = 1.5, .border_color = fg.withAlpha(0.45) }, .{});
+            ui.begin(.{ .width = .{ .px = 18 }, .height = .{ .px = 18 }, .radius = if (multiple) 5 else 9, .border_width = if (ticked) 0 else 1.5, .border_color = fg.withAlpha(0.45), .background = if (ticked) col.accent else null, .align_items = .center, .justify = .center }, .{});
+            if (ticked) ui.icon(icons.check, 12, Color.white, .{}, 0);
             ui.end();
         }
         ui.text(label, .{ .font_size = 14.5, .color = fg, .grow = 1, .width = .fill });
@@ -659,13 +664,24 @@ fn pollBlock(cx: Cx, m: *const data.Message, p: j.Value, fg: Color) void {
         }
         ui.end();
     }
-    ui.text(if (total > 0) fmt.tn(cx.a(), total, "{n} vote", "{n} votes") else t("No votes yet"), .{ .font_size = 12.5, .color = fg, .opacity = 0.7 });
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
+    ui.text(if (total > 0) fmt.tn(cx.a(), total, "{n} vote", "{n} votes") else t("No votes yet"), .{ .font_size = 12.5, .color = fg, .opacity = 0.7, .grow = 1, .width = .fill });
+    if (can_vote and multiple and pollx.anyChosen(cx.s, m.id())) pollButton(cx, t("Vote"), pollx.msgOf(.{ .vote = Id.of(m.id()) }), fg);
+    if (!anonymous and total > 0 and show) pollButton(cx, t("View votes"), pollx.msgOf(.{ .voters = Id.of(m.id()) }), fg);
+    ui.end();
     if (quiz and show) if (j.str(p, "explanation")) |ex| if (ex.len > 0) {
         ui.begin(.{ .direction = .row, .gap = 6, .align_items = .start }, .{});
         ui.icon(icons.info, 15, fg, .{}, 0);
         ui.text(ex, .{ .font_size = 13, .color = fg, .opacity = 0.85, .grow = 1, .width = .fill });
         ui.end();
     };
+    ui.end();
+}
+
+fn pollButton(cx: Cx, label: []const u8, msg: Msg, fg: Color) void {
+    const ui = cx.ui;
+    ui.begin(.{ .padding = .xy(12, 6), .radius = 10, .background = fg.withAlpha(0.1), .pressed_background = fg.withAlpha(0.2) }, .{ .on_press = msg, .key = key(.{ "pbtn", label }) });
+    ui.text(label, .{ .font_size = 13, .weight = 700, .color = fg });
     ui.end();
 }
 

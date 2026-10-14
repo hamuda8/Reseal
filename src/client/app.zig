@@ -38,6 +38,7 @@ pub const fwdpick = @import("fwdpick.zig");
 pub const listextras = @import("listextras.zig");
 pub const userinfo = @import("userinfo.zig");
 pub const sharedmedia = @import("sharedmedia.zig");
+pub const pollx = @import("pollx.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -244,6 +245,7 @@ pub const Modal = union(enum) {
     story_menu,
     story_kind,
     common_groups,
+    poll_voters,
     story_compose,
     story_people,
     story_list,
@@ -330,6 +332,7 @@ pub const Msg = union(enum) {
     list_extras: listextras.Act,
     user_info: userinfo.Act,
     shared: sharedmedia.Act,
+    poll: pollx.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -534,6 +537,7 @@ pub const State = struct {
     listx: listextras.ListExtras = .{},
     common: ?*data.Obj = null,
     shared: sharedmedia.Shared = .{},
+    polls: pollx.Polls = .{},
     /// Messages whose spoilers were shown.
     revealed: std.ArrayList(Id) = .empty,
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
@@ -693,6 +697,7 @@ pub const Op = union(enum) {
     handoff,
     common_groups,
     shared: u32,
+    poll_voters,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -807,6 +812,7 @@ fn handle(s: *State, msg: Msg) void {
         .list_extras => |a| listextras.act(s, a),
         .user_info => |a| userinfo.act(s, a),
         .shared => |a| sharedmedia.act(s, a),
+        .poll => |a| pollx.act(s, a),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),
@@ -1084,6 +1090,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (chatmore.onAnswer(s, op, r)) return;
             if (userinfo.onAnswer(s, op, r)) return;
             if (sharedmedia.onAnswer(s, op, r)) return;
+            if (pollx.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

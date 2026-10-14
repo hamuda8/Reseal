@@ -553,3 +553,22 @@ test "user info: actions, username copied, groups in common, shared media" {
     try testing.expect(D.respond("/users/u3/common-groups", 200, "{\"chats\":[{\"id\":\"g1\",\"title\":\"Launch crew\",\"memberCount\":4}]}"));
     try testing.expect(D.findText("Launch crew") != 0);
 }
+
+test "polls: several answers ticked then Vote, View votes" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"poll\":{\"question\":\"Lunch?\",\"options\":[\"Pizza\",\"Salad\",\"Soup\"],\"multiple\":true,\"anonymous\":false,\"total\":0,\"counts\":[0,0,0]},\"createdAt\":\"2026-10-12T14:00:00Z\"}],\"floor\":0}"));
+    try D.press("Pizza");
+    try D.press("Soup");
+    try D.press("Vote");
+    try testing.expectEqualStrings("{\"options\":[0,2]}", lastPost("/messages/m1/vote"));
+    try testing.expect(D.respond("/messages/m1/vote", 200, "{\"poll\":{\"question\":\"Lunch?\",\"options\":[\"Pizza\",\"Salad\",\"Soup\"],\"multiple\":true,\"anonymous\":false,\"total\":1,\"counts\":[1,0,1],\"myVote\":[0,2]}}"));
+    try D.press("View votes");
+    try testing.expect(D.respond("/messages/m1/voters", 200, "{\"voters\":[{\"userId\":\"u9\",\"options\":[0,2]}]}"));
+    try testing.expect(D.findText("Pizza — 1") != 0);
+    try testing.expect(D.findText("Salad — 0") != 0);
+}
