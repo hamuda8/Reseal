@@ -49,7 +49,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Block flow and toasts; Clear history with 'Also clear for {name}' / 'Clear for everyone'
 - [x] Scheduled / Reminders sheet with Send now, delete, empty states, 'When {name} comes online'
 - [x] In-chat search for plain chats (server)
-- [x] M15 In-chat search in encrypted chats over an on-device index ('Search everything', 'Indexing…'); kept in memory for the session (Reseal-js keeps it in IndexedDB; zui storage is for small values)
+- [x] M15 In-chat search in encrypted chats over an on-device index ('Search everything', 'Indexing…'); kept on the device encrypted (AES-GCM, key in secure storage), forgotten at log out
 - [x] M13 Hashtags open in-chat search; tapping inline code copies it; 'Nobody has that username.' for unknown mentions
 - [x] Avatars and sender names open profiles; voice messages play the next one
 - [x] M11 Inline bot buttons (URL buttons open, callback buttons call the server and toast)

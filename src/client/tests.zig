@@ -840,7 +840,7 @@ test "search everything: an encrypted chat's older history indexed here and sear
     defer arena.deinit();
     try bootAsBob(arena.allocator());
     defer D.reset();
-    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"e1\",\"type\":\"group\",\"title\":\"Secret crew\",\"seq\":120,\"encrypted\":true,\"keyEpoch\":1,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"s9\",\"type\":\"group\",\"title\":\"Other crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}},{\"id\":\"e1\",\"type\":\"group\",\"title\":\"Secret crew\",\"seq\":120,\"encrypted\":true,\"keyEpoch\":1,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
     try D.press("Secret crew");
     // A full page: older history exists.
     var pg: std.ArrayList(u8) = .empty;
@@ -856,6 +856,22 @@ test "search everything: an encrypted chat's older history indexed here and sear
     try testing.expect(D.respond("before=71", 200, "{\"messages\":[{\"id\":\"m5\",\"chatId\":\"e1\",\"seq\":5,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"Meet at the harbour\",\"createdAt\":\"2026-10-01T10:00:00Z\"}],\"floor\":0}"));
     try testing.expect(D.findText("Meet at the harbour") != 0);
     try testing.expect(state().chat_index.complete);
+    // Kept on this device, encrypted: another chat, then back, and it is found without a walk.
+    D.R.dispatch(.close_modal);
+    D.R.dispatch(.{ .open_chat = app.Id.of("s9") });
+    D.R.dispatch(.{ .chat_action = .{ .what = .search, .chat = app.Id.of("s9") } });
+    D.R.dispatch(.close_modal);
+    D.R.dispatch(.{ .open_chat = app.Id.of("e1") });
+    D.R.dispatch(.{ .chat_action = .{ .what = .search, .chat = app.Id.of("e1") } });
+    try D.typeInto("Search messages", "harbor");
+    try D.typeInto("Search messages", "harbour");
+    try testing.expect(D.findText("Meet at the harbour") != 0);
+    var plain_kept = false;
+    var it = host.stored.iterator();
+    while (it.next()) |e| if (std.mem.indexOf(u8, e.value_ptr.*, "harbour") != null) {
+        plain_kept = true;
+    };
+    try testing.expect(!plain_kept);
 }
 
 test "saved editor: the default saved chat keeps its name" {

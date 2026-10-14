@@ -164,6 +164,7 @@ fn recover(s: *State) void {
 
 /// Sign out: forget this device's keys.
 pub fn forgetDevice(s: *State) void {
+    @import("chatindex.zig").forgetAll(s);
     if (myId(s).len > 0) {
         zui.storage.remove(storageKey(s), .{ .secure = true });
         zui.storage.remove(publicKey(s), .{});

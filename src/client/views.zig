@@ -739,6 +739,8 @@ pub fn runPickerSearch(s: *State) void {
 }
 
 pub fn runChatSearch(s: *State) void {
+    // An encrypted chat's history indexed earlier on this device.
+    @import("chatindex.zig").ensureLoaded(s);
     const q = s.fields.get(.chat_search).trimmed();
     s.search_seq += 1;
     if (q.len < 2 or !s.open_chat.isSet()) return replaceObj(&s.msg_search, null);

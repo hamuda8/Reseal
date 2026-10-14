@@ -1,6 +1,7 @@
 //! Searching an encrypted chat's whole history (Reseal-js data/index.js): the server cannot read
 //! it, so "Search everything" walks the history page by page, decrypts it here and keeps the
-//! texts for this session (in memory only: nothing decrypted is written to the device).
+//! texts on this device, encrypted (AES-GCM) with a key kept in secure storage, one record per
+//! chat; logging out forgets them.
 
 const std = @import("std");
 const zui = @import("zui");
@@ -8,6 +9,8 @@ const app = @import("app.zig");
 const j = @import("j.zig");
 const data = @import("data.zig");
 const keys = @import("keys.zig");
+const crypto = @import("crypto.zig");
+const sys = @import("sys.zig");
 
 const State = app.State;
 const Id = app.Id;
@@ -79,6 +82,7 @@ pub fn act(s: *State, a: Act) void {
             if (!x.chat.eql(chat.str())) {
                 x.reset();
                 x.chat = chat;
+                load(s);
             }
             if (x.running or x.complete) return;
             if (x.before == 0) {
@@ -138,6 +142,7 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
             .text = gpa.dupe(u8, text) catch continue,
         }) catch {};
     }
+    defer save(s);
     const floor = j.intOr(v, "floor", 0);
     if (list.len < page or oldest <= @max(1, floor + 1) or oldest >= x.before) {
         x.running = false;
@@ -148,6 +153,103 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
     x.before = oldest;
     app.fx.after(pace_ms, .{ .chat_index = .{ .next = x.seq } });
     return true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// On the device, encrypted
+
+const max_bytes = 3 * 1024 * 1024;
+
+fn recordKey(s: *const State, chat: []const u8) []const u8 {
+    return std.fmt.allocPrint(tmp(), "idx:{s}:{s}", .{ s.store.myId(), chat }) catch "";
+}
+
+/// This device's index key (made once, kept in secure storage).
+fn indexKey(s: *const State) ?[32]u8 {
+    const name = std.fmt.allocPrint(tmp(), "idxkey:{s}", .{s.store.myId()}) catch return null;
+    if (zui.storage.get(tmp(), name, .{ .secure = true })) |b64| {
+        const raw = crypto.fromB64(tmp(), b64) catch return null;
+        if (raw.len == 32) return raw[0..32].*;
+    }
+    const k = sys.randomBytes(32);
+    zui.storage.set(name, crypto.toB64(tmp(), &k) catch return null, .{ .secure = true });
+    return k;
+}
+
+/// The chats with a record (to forget them all at log out).
+fn listKey(s: *const State) []const u8 {
+    return std.fmt.allocPrint(tmp(), "idx:{s}", .{s.store.myId()}) catch "";
+}
+
+fn save(s: *State) void {
+    const x = &s.chat_index;
+    if (!x.chat.isSet() or s.store.myId().len == 0) return;
+    const key = indexKey(s) orelse return;
+    const a = tmp();
+    var out: std.ArrayList(u8) = .empty;
+    out.print(a, "{{\"before\":{d},\"complete\":{},\"e\":[", .{ x.before, x.complete }) catch return;
+    for (x.entries.items, 0..) |e, i| {
+        if (out.items.len > max_bytes) break;
+        out.print(a, "{s}[\"{s}\",{d},{d},\"{s}\",{s}]", .{ if (i > 0) "," else "", e.id.str(), e.seq, e.at, e.sender.str(), j.quote(a, e.text) catch "\"\"" }) catch return;
+    }
+    out.appendSlice(a, "]}") catch return;
+    const iv = sys.randomBytes(12);
+    const sealed = crypto.seal(a, key, iv, x.chat.str(), out.items) catch return;
+    const rec = std.fmt.allocPrint(a, "{s}.{s}", .{ crypto.toB64(a, &iv) catch return, crypto.toB64(a, sealed) catch return }) catch return;
+    zui.storage.set(recordKey(s, x.chat.str()), rec, .{});
+    // Remember the chat for log out.
+    const list = zui.storage.get(a, listKey(s), .{}) orelse "";
+    if (std.mem.indexOf(u8, list, x.chat.str()) == null)
+        zui.storage.set(listKey(s), std.fmt.allocPrint(a, "{s}{s}{s}", .{ list, if (list.len > 0) "," else "", x.chat.str() }) catch return, .{});
+}
+
+fn load(s: *State) void {
+    const x = &s.chat_index;
+    const a = tmp();
+    const rec = zui.storage.get(a, recordKey(s, x.chat.str()), .{}) orelse return;
+    const dot = std.mem.indexOfScalar(u8, rec, '.') orelse return;
+    const key = indexKey(s) orelse return;
+    const iv = crypto.fromB64(a, rec[0..dot]) catch return;
+    if (iv.len != 12) return;
+    const sealed = crypto.fromB64(a, rec[dot + 1 ..]) catch return;
+    const plain = crypto.open(a, key, iv[0..12].*, x.chat.str(), sealed) catch return;
+    const v = j.parse(a, plain) orelse return;
+    x.before = j.intOr(v, "before", 0);
+    x.complete = j.truthy(v, "complete");
+    for (j.arr(v, "e")) |e| {
+        if (e != .array or e.array.items.len < 5) continue;
+        const it = e.array.items;
+        if (it[0] != .string or it[3] != .string or it[4] != .string) continue;
+        x.entries.append(gpa, .{
+            .id = Id.of(it[0].string),
+            .seq = if (it[1] == .integer) it[1].integer else 0,
+            .at = if (it[2] == .integer) it[2].integer else 0,
+            .sender = Id.of(it[3].string),
+            .text = gpa.dupe(u8, it[4].string) catch continue,
+        }) catch {};
+    }
+}
+
+/// The open chat's saved index, if it is not in memory yet (the search sheet opened).
+pub fn ensureLoaded(s: *State) void {
+    const x = &s.chat_index;
+    if (x.chat.eql(s.open_chat.str()) or !s.open_chat.isSet()) return;
+    x.reset();
+    x.chat = s.open_chat;
+    load(s);
+}
+
+/// Log out: every saved index and its key go.
+pub fn forgetAll(s: *State) void {
+    const a = tmp();
+    if (s.store.myId().len == 0) return;
+    const list = zui.storage.get(a, listKey(s), .{}) orelse "";
+    var it = std.mem.splitScalar(u8, list, ',');
+    while (it.next()) |chat| if (chat.len > 0) zui.storage.remove(recordKey(s, chat), .{});
+    zui.storage.remove(listKey(s), .{});
+    zui.storage.remove(std.fmt.allocPrint(a, "idxkey:{s}", .{s.store.myId()}) catch return, .{ .secure = true });
+    s.chat_index.reset();
+    s.chat_index.chat = .{};
 }
 
 /// Index entries of the open chat (none for another chat).
