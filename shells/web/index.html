@@ -117,6 +117,12 @@
         case 'save': return save(msg.name, msg.url);
         case 'push': return pushSetup(msg.key);
         case 'origins': allowed = Array.isArray(msg.origins) ? msg.origins : []; return;
+        case 'badge': {
+          const n = Number(msg.count) || 0;
+          document.title = n > 0 ? `(${n > 99 ? '99+' : n}) Reseal` : 'Reseal';
+          if (navigator.setAppBadge) (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+          return;
+        }
         case 'fastclock': clearInterval(fast); fast = msg.on ? setInterval(() => send(env('clock')), 1000) : 0; return;
       }
       // Anything else is for the page that embeds the widget.

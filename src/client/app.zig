@@ -549,6 +549,7 @@ pub const State = struct {
     listx: listextras.ListExtras = .{},
     common: ?*data.Obj = null,
     chat_button_text: Text = .{},
+    badge_sent: i64 = -1,
     shared: sharedmedia.Shared = .{},
     polls: pollx.Polls = .{},
     attach: attachx.Attach = .{},
@@ -792,6 +793,15 @@ pub fn update(s: *State, msg: Msg, e: zui.Env, f: zui.Fx(Msg)) void {
         if (n != s.embed.unread_sent) {
             s.embed.unread_sent = n;
             post(std.fmt.allocPrint(tmp(), "{{\"type\":\"reseal:unread\",\"count\":{d}}}", .{n}) catch return);
+        }
+    }
+    // The web app: "(N) Reseal" in the tab and the installed app's badge (chatlist.js).
+    if (zui.platform == .web and s.mode == .app and s.phase == .ready) {
+        const tot = s.store.totals();
+        const n = tot.unread + tot.saved_unread;
+        if (n != s.badge_sent) {
+            s.badge_sent = n;
+            post(std.fmt.allocPrint(tmp(), "{{\"t\":\"badge\",\"count\":{d}}}", .{n}) catch return);
         }
     }
 }

@@ -56,6 +56,8 @@ const tapMessage = async (t, text) => {
 
 try {
   if (want('chat')) {
+    // The tab title counts unread chats (chatlist.js).
+    { let title = ''; for (let i = 0; i < 20 && !title.startsWith('('); i++) { title = await a.evaluate('document.title'); if (!title.startsWith('(')) await sleep(250); } check('tab title shows the unread count', title.startsWith('('), title); }
     await a.clickText('Bob Haddad');
     await b.clickText('Alice Carter');
     await a.waitText('Ping from Bob');
