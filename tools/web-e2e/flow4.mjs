@@ -72,6 +72,18 @@ try {
     check('format: entities (bold 0..4, spoiler) in the payload', Array.isArray(p?.ent) && p.ent.some(e => e.t === 'bold' && e.o === 0 && e.l === 4) && p.ent.some(e => e.t === 'spoiler'), JSON.stringify(p?.ent));
     check('format: spoiler hidden in the bubble', await a.waitText('░░░░░░', 4000));
     await a.shot('90-format');
+    // Ctrl+B on a selection wraps it (the format bar's shortcut).
+    await typeComposer('make it loud');
+    await a.evaluate(`(() => { const el = [...document.querySelectorAll('input,textarea')].find(i => i.placeholder === 'Message'); el.focus(); el.setSelectionRange(8, 12); el.dispatchEvent(new Event('select')); })()`);
+    await sleep(300);
+    check('format: the bar shows over a selection', await a.evaluate(`!!document.querySelector('[aria-label="Bold"]')`));
+    await a.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'b', code: 'KeyB', windowsVirtualKeyCode: 66, modifiers: 2 });
+    await a.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'b', code: 'KeyB', windowsVirtualKeyCode: 66, modifiers: 2 });
+    await sleep(400);
+    const val = await a.evaluate(`[...document.querySelectorAll('input,textarea')].find(i => i.placeholder === 'Message').value`);
+    check('format: Ctrl+B wraps the selection', val === 'make it **loud**', val);
+    await a.key('Enter');
+    await sleep(1200);
   }
 
   if (want('poll')) {

@@ -61,7 +61,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 ## Composer (composer.js)
 - [x] Attach, text, emoji, send / mic / round / edit button; Send with Enter
 - [x] M2 Placeholders 'Broadcast' (channels) and 'Write a note…' (Saved)
-- [~] Formatting shortcuts (Ctrl+B/I/U, Ctrl+Shift+X/M/P), the floating format bar and the Ctrl+K link prompt: zui text inputs expose no selection or key events; markdown typed by hand works (**, __, ++, ~~, `, ||, ```, >)
+- [x] Formatting: the bar over a selection (Bold, Italic, Underline, Strikethrough, Monospace, Spoiler, Link), Ctrl/Command+B, I, U, +Shift X, M, P, the link prompt (Ctrl+K, 'Add link'), Ctrl+Shift+F to search chats (zui selection and shortcut letters, zig-core 454ca90; iOS: the bar needs a multi-line composer, shortcuts on hardware keyboards)
 - [x] @mention suggestions, typing indicator, drafts, link preview with dismiss, edit/reply bars, length limit
 - [x] Send menu: without sound, Schedule / Set a reminder, Send when online, Send as disappearing…
 - [x] Voice/round mode switch, recording bar, limits, recording typing actions

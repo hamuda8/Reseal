@@ -278,7 +278,7 @@ pub fn onUi(s: *State, msg: Msg) void {
     }
 }
 
-fn isPhone() bool {
+pub fn isPhone() bool {
     return app.env.width <= theme.phone_max;
 }
 
@@ -1239,6 +1239,7 @@ fn modal(cx: Cx) void {
         .common_groups => @import("userinfo.zig").commonSheet(cx),
         .poll_voters => @import("pollx.zig").votersSheet(cx),
         .attach_preview => @import("attachx.zig").sheet(cx),
+        .link_prompt => @import("format.zig").linkSheet(cx),
         .story_compose => @import("stories.zig").composer(cx),
         .story_people => @import("stories.zig").peopleSheet(cx),
         .story_list => @import("stories.zig").listSheet(cx),

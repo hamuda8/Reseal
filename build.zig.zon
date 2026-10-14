@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .zig_core = .{
-            .url = "git+https://github.com/hamuda8/zig-core#5d3b53d59eca4956f4ce0a7b4ac6e9c66c7d1cb1",
-            .hash = "zig_core-0.0.1-Ozygwg0fHgBsmW11LMRwt6yJZDv8HHVpekOMf_RSWKxd",
+            .url = "git+https://github.com/hamuda8/zig-core#454ca909edab1b7c3fa1ac0aecdf1f62126f7693",
+            .hash = "zig_core-0.0.1-OzygwlhfHgBOP0pn2Gz-5LteCVq8Ed3WOHzqIlwE-VQq",
         },
         .reseal_rtc = .{
             .url = "git+https://github.com/hamuda8/reseal-rtc#d77b0d54b093dfccca076b588a0ecf2022df55e2",

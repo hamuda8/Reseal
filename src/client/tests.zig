@@ -959,3 +959,27 @@ test "reaction chips: faces of who reacted, a tap toggles mine" {
     D.R.dispatch(.{ .extras = .{ .react_chip = .{ .msg = app.Id.of("m1"), .index = 0 } } });
     try testing.expect(std.mem.indexOf(u8, lastPost("/messages/m1/react"), "\"on\":true") != null);
 }
+
+test "formatting: the bar over a selection, Ctrl+B, a link" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/chats/g1/messages", 200, "{\"messages\":[],\"floor\":0}"));
+    try D.typeInto("Message", "see the plan");
+    D.R.dispatch(.{ .format = .{ .focus = true } });
+    try D.selectIn("Message", 4, 7);
+    try testing.expect(D.key(zui.KeyEvent.of('B', 2 | 8).?));
+    try testing.expectEqualStrings("see **the** plan", state().fields.get(.composer).get());
+    // The link prompt over "plan".
+    try D.selectIn("Message", 12, 16);
+    D.R.dispatch(.{ .format = .link_open });
+    try D.typeInto("https://", "ftp:/x");
+    D.R.dispatch(.{ .format = .link_add });
+    try testing.expect(D.findText("Enter a full link starting with https://") != 0);
+    try D.typeInto("https://", "https://wufour.com/plan");
+    D.R.dispatch(.{ .format = .link_add });
+    try testing.expectEqualStrings("see **the** [plan](https://wufour.com/plan)", state().fields.get(.composer).get());
+}

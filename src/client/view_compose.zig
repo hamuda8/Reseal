@@ -285,6 +285,7 @@ fn scheduledLine(cx: Cx, m: j.Value) []const u8 {
 
 /// The @mention suggestions and the link preview, inside the composer box.
 pub fn bars(cx: Cx, c: *const data.Chat) void {
+    @import("format.zig").bar(cx);
     mentionBar(cx, c);
     previewBar(cx);
 }

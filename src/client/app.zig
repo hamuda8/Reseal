@@ -46,6 +46,7 @@ pub const aimd = @import("aimd.zig");
 pub const chatindex = @import("chatindex.zig");
 pub const keyboard = @import("keyboard.zig");
 pub const sounds = @import("sounds.zig");
+pub const format = @import("format.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -159,6 +160,7 @@ pub const Field = enum {
     model_search,
     dev_app_name,
     forward_search,
+    link_url,
     member_search,
     attach_caption,
     dev_origins,
@@ -254,6 +256,7 @@ pub const Modal = union(enum) {
     common_groups,
     poll_voters,
     attach_preview,
+    link_prompt,
     story_compose,
     story_people,
     story_list,
@@ -350,6 +353,7 @@ pub const Msg = union(enum) {
     /// A sound's player events (nothing to do).
     sound: zui.PlayEvent,
     reload_page,
+    format: format.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -560,6 +564,7 @@ pub const State = struct {
     /// What zui was last told about animations.
     motion_on: bool = true,
     sounds: sounds.Sounds = .{},
+    fmt: format.Format = .{},
     shared: sharedmedia.Shared = .{},
     polls: pollx.Polls = .{},
     attach: attachx.Attach = .{},
@@ -866,6 +871,7 @@ fn handle(s: *State, msg: Msg) void {
         .chat_index => |a| chatindex.act(s, a),
         .keys => |a| keyboard.act(s, a),
         .sound => {},
+        .format => |a| format.act(s, a),
         .reload_page => post("{\"t\":\"reload\"}"),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),

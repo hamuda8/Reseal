@@ -23,6 +23,7 @@ const Snapshot = struct {
     panes: bool = false,
     chat: bool = false,
     composer_empty: bool = true,
+    composer_focused: bool = false,
     ready: bool = false,
 };
 
@@ -39,6 +40,7 @@ pub fn remember(s: *const State) void {
         .panes = s.panes.items.len > 0,
         .chat = s.open_chat.isSet(),
         .composer_empty = s.fields.get(.composer).get().len == 0,
+        .composer_focused = s.fmt.focused,
         .ready = s.phase == .ready,
     };
 }
@@ -46,6 +48,7 @@ pub fn remember(s: *const State) void {
 pub const Act = union(enum) {
     chat_step: i8,
     edit_last,
+    find,
 };
 
 pub fn keyEvent(e: zui.KeyEvent) ?Msg {
@@ -71,6 +74,14 @@ pub fn keyEvent(e: zui.KeyEvent) ?Msg {
             const forward = (e.key == .right) != zui.i18n.isRtl();
             return .{ .viewer_x = .{ .go = if (forward) 1 else -1 } };
         },
+        .letter => {
+            if (!e.ctrl) return null;
+            // Ctrl/Command+Shift+F: the chat list's search (main.js).
+            if (e.letter == 'f' and e.shift) return .{ .keys = .find };
+            if (!snap.composer_focused) return null;
+            if (@import("format.zig").shortcut(e.letter, e.shift)) |a| return .{ .format = a };
+            return null;
+        },
         else => return null,
     }
 }
@@ -79,6 +90,12 @@ pub fn act(s: *State, a: Act) void {
     switch (a) {
         .chat_step => |d| step(s, d),
         .edit_last => editLast(s),
+        .find => {
+            @import("views.zig").onUi(s, .{ .nav = .chats });
+            if (@import("views.zig").isPhone()) @import("views.zig").onUi(s, .close_chat);
+            @import("views.zig").onUi(s, .{ .toggle_search = true });
+            app.fx.focus(zui.key("search"));
+        },
     }
 }
 
