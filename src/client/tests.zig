@@ -142,6 +142,41 @@ test "phones: no token shows the welcome; Wufour's sign-in opens in the app and 
     try testing.expectEqual(app.Phase.sign_in, state().phase);
     try testing.expect(host.stored.get("token") == null);
     try testing.expect(D.findText("Sign in with Wufour") != 0);
+    // That refused token is not taken from another of our apps again.
+    try host.shared_token.appendSlice(std.heap.page_allocator, "tok_bob");
+    defer host.shared_token.clearRetainingCapacity();
+    D.device(.hidden);
+    D.device(.visible);
+    try testing.expectEqual(app.Phase.sign_in, state().phase);
+}
+
+test "phones: one sign-in for our apps (signed in in Turf: Reseal opens signed in; out there: out here)" {
+    zui.storage.remove("token", .{ .secure = true });
+    zui.storage.remove("token_refused", .{});
+    host.shared_token.clearRetainingCapacity();
+    defer host.shared_token.clearRetainingCapacity();
+    try host.shared_token.appendSlice(std.heap.page_allocator, "tok_turf");
+    D.start(400, 800);
+    defer D.reset();
+    // Straight to start-up with Turf's token: no welcome.
+    try testing.expectEqual(app.Phase.loading, state().phase);
+    try testing.expectEqualStrings("tok_turf", host.stored.get("token").?);
+    try testing.expect(D.respond("/api/config", 200, "{\"version\":\"test\"}"));
+    for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, "/api/me")) {
+        try testing.expect(std.mem.indexOf(u8, f.headers, "Authorization: Bearer tok_turf") != null);
+    };
+    // Turf signed out (its provider call cleared ours): back on screen, the welcome.
+    zui.storage.remove("token", .{ .secure = true });
+    host.shared_token.clearRetainingCapacity();
+    D.device(.hidden);
+    D.device(.visible);
+    try testing.expectEqual(app.Phase.sign_in, state().phase);
+    // Signed in in Turf again: Reseal follows when it comes back.
+    try host.shared_token.appendSlice(std.heap.page_allocator, "tok_turf2");
+    D.device(.hidden);
+    D.device(.visible);
+    try testing.expectEqual(app.Phase.loading, state().phase);
+    try testing.expectEqualStrings("tok_turf2", host.stored.get("token").?);
 }
 
 test "widget: handshake with the page, token, signed-out without one" {
