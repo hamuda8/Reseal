@@ -63,6 +63,7 @@ pub fn onUi(s: *State, msg: Msg) void {
             s.searching = false;
             if (sec == .contacts) app.api(s, .GET, "/contacts", null, .contacts);
             if (sec == .calls) app.api(s, .GET, "/calls", null, .calls_list);
+            if (sec == .ai) @import("bots.zig").openRoot(s);
             if (sec == .saved and !isPhone()) if (s.store.savedChat()) |c| openChat(s, c.id());
             if (isPhone()) closeChat(s);
         },

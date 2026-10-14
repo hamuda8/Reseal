@@ -6,7 +6,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 
 ## App shell (main.js, shell.js, router.js)
 - [x] Nav rail Chats / Calls / Saved / Contacts / Settings, profile avatar (opens profile), badges with 99+ cap
-- [ ] M3 'AI' section in the rail and tab bar, and the 'Ask AI' quick action on the empty main pane
+- [x] M3 'AI' section in the rail and tab bar, and the 'Ask AI' quick action on the empty main pane
 - [x] Phone tab bar; switching section closes the chat on phones
 - [x] Empty main pane: logo, text, 'New chat', 'New group', 'Saved'
 - [x] Routes /c/<id>#seq (message links), /join/<code> (invite sheet, request to join), /@username, /dev

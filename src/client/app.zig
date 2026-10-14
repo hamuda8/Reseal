@@ -188,7 +188,7 @@ pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
 // ---------------------------------------------------------------------------------------------
 // Messages
 
-pub const Section = enum { chats, calls, saved, contacts, settings };
+pub const Section = enum { chats, calls, saved, contacts, ai, settings };
 
 pub const Pane = union(enum) {
     archive,

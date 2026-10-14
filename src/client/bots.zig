@@ -238,11 +238,25 @@ fn msg(a: Act) Msg {
     return .{ .bots = a };
 }
 
+/// The AI section (Reseal-js botsPane({ root: true })).
+pub fn rootPane(cx: Cx) void {
+    listPaneOf(cx, true);
+}
+
+pub fn openRoot(s: *State) void {
+    s.bots.app_id = .{};
+    load(s);
+}
+
 pub fn listPane(cx: Cx) void {
+    listPaneOf(cx, false);
+}
+
+fn listPaneOf(cx: Cx, root: bool) void {
     const s = cx.s;
     const ui = cx.ui;
     ui.begin(.{ .width = .fill, .height = .fill }, .{});
-    vlist.paneHeader(cx, t("AI assistants"), true, false);
+    vlist.paneHeader(cx, if (root) t("AI") else t("AI assistants"), !root, root);
     vlist.endHeader(cx);
     ui.beginScroll(.{ .grow = 1, .width = .fill, .height = .fill, .padding = .{ .start = 8, .end = 8, .bottom = 28 } }, key(.{"bots"}));
     ui.begin(.{ .align_items = .center, .gap = 10, .padding = .xy(24, 18) }, .{});

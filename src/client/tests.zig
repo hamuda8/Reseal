@@ -656,3 +656,14 @@ test "next mention: jumps to the first unread message that mentions me" {
     D.R.dispatch(.{ .extras = .next_mention });
     try testing.expect(state().extras.highlight.eql("m2"));
 }
+
+test "AI section: the assistants list from the rail and from 'Ask AI'" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[]}"));
+    try D.press("Ask AI");
+    try testing.expectEqual(app.Section.ai, state().section);
+    try testing.expect(D.findText("Create an assistant") != 0);
+}

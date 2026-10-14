@@ -92,6 +92,7 @@ const nav_items = [_]NavItem{
     .{ .sec = .calls, .icon = icons.phone, .label = "Calls" },
     .{ .sec = .saved, .icon = icons.bookmark, .label = "Saved" },
     .{ .sec = .contacts, .icon = icons.contacts, .label = "Contacts" },
+    .{ .sec = .ai, .icon = icons.sparkles, .label = "AI" },
     .{ .sec = .settings, .icon = icons.settings, .label = "Settings" },
 };
 
@@ -175,6 +176,7 @@ fn sidebar(cx: Cx) void {
         .calls => callsPane(cx),
         .saved => savedPane(cx),
         .contacts => contactsPane(cx),
+        .ai => @import("bots.zig").rootPane(cx),
         .settings => vset.settingsRoot(cx),
     }
 }
@@ -213,6 +215,7 @@ fn emptyMain(cx: Cx) void {
         quickAction(cx, icons.compose, t("New chat"), .{ .push_pane = .{ .picker = .new_message } }, c.brand);
         quickAction(cx, icons.users, t("New group"), .{ .push_pane = .{ .picker = .new_group } }, Color.hex("#1fb3a0"));
         quickAction(cx, icons.bookmark, t("Saved"), .{ .nav = .saved }, Color.hex("#f37861"));
+        quickAction(cx, icons.sparkles, t("Ask AI"), .{ .nav = .ai }, Color.hex("#8b5cf6"));
         ui.end();
     }
     ui.begin(.{ .direction = .row, .gap = 7, .align_items = .center, .padding = .{ .top = 22 } }, .{});
