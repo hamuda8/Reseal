@@ -32,6 +32,8 @@ pub const Opts = struct {
     /// The message the links belong to ("" for none: no links).
     msg: []const u8 = "",
     font_size: f32,
+    /// An assistant's Markdown: which of the reply's texts this is (its links say so).
+    unit: ?u16 = null,
 };
 
 pub fn text(cx: Cx, txt: []const u8, entities: []const Entity, o: Opts) void {
@@ -152,7 +154,7 @@ fn run(cx: Cx, txt: []const u8, entities: []const Entity, from: usize, to: usize
             link_at = r.s;
         };
         if (link_at) |at| if (o.msg.len > 0) {
-            sp.link = .{ .rich_link = .{ .msg = Id.of(o.msg), .at = @intCast(at) } };
+            sp.link = if (o.unit) |u| .{ .ai = .{ .link = .{ .msg = Id.of(o.msg), .unit = u, .at = @intCast(at) } } } else .{ .rich_link = .{ .msg = Id.of(o.msg), .at = @intCast(at) } };
             sp.color = o.link;
             sp.underline = true;
         };

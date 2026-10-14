@@ -42,6 +42,7 @@ pub const pollx = @import("pollx.zig");
 pub const viewerx = @import("viewerx.zig");
 pub const attachx = @import("attachx.zig");
 pub const infopanes = @import("infopanes.zig");
+pub const aimd = @import("aimd.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -341,6 +342,7 @@ pub const Msg = union(enum) {
     poll: pollx.Act,
     viewer_x: viewerx.Act,
     attach_x: attachx.Act,
+    ai: aimd.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -828,6 +830,7 @@ fn handle(s: *State, msg: Msg) void {
         .poll => |a| pollx.act(s, a),
         .viewer_x => |a| viewerx.act(s, a),
         .attach_x => |a| attachx.act(s, a),
+        .ai => |a| aimd.act(s, a),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),

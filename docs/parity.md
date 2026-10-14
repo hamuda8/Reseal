@@ -53,7 +53,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [ ] M13 Hashtags open in-chat search; tapping inline code copies it; 'Nobody has that username.' for unknown mentions
 - [x] Avatars and sender names open profiles; voice messages play the next one
 - [x] M11 Inline bot buttons (URL buttons open, callback buttons call the server and toast)
-- [ ] M12 AI replies: Markdown rendering (headings, lists, tables, code blocks with Copy → 'Code copied') and Stop / Copy / Regenerate
+- [x] M12 AI replies: Markdown rendering (headings, lists, tables, code blocks with Copy → 'Code copied') and Stop / Copy / Regenerate
 - [x] Call service messages start a call again
 - [ ] M19 Web: paste and drag-and-drop files into the chat
 - [~] Double-click a message for ❤️: zui has no double-tap gesture (only press, long press, context, hover)

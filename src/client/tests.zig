@@ -748,3 +748,18 @@ test "inline bot buttons: a callback answers the bot, its text is the toast" {
     try testing.expect(D.respond("/messages/m1/button", 200, "{}"));
     try testing.expectEqualStrings("Confirm", state().toast.text.get());
 }
+
+test "assistant replies: Markdown, Copy on code, Regenerate the latest" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"b1\",\"type\":\"bot\",\"encrypted\":false,\"peer\":{\"id\":\"u7\",\"displayName\":\"Helper\",\"isBot\":true},\"me\":{\"role\":\"member\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Helper");
+    try testing.expect(D.respond("/chats/b1/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"b1\",\"seq\":1,\"senderId\":\"u7\",\"kind\":\"message\",\"bot\":true,\"text\":\"## Steps\\n\\n- **Pack** light\\n\\n```sh\\nls -la\\n```\",\"createdAt\":\"2026-10-12T14:00:00Z\"}],\"floor\":0}"));
+    try testing.expect(D.findText("Steps") != 0);
+    try D.press("Copy");
+    try testing.expectEqualStrings("Code copied", state().toast.text.get());
+    try D.press("Regenerate");
+    try testing.expect(D.pending("/messages/m1/regenerate") != null);
+}

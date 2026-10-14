@@ -493,11 +493,14 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
             const big_emoji = isEmojiOnly(txt);
             if (big_emoji) {
                 ui.text(txt, .{ .font_size = 42, .color = fg, .line_height = 1.15 });
+            } else if (@import("aimd.zig").isAi(s, c, m)) {
+                @import("aimd.zig").render(cx, m, fg, if (out) fg else col.accent, cx.fs + 0.5);
             } else {
                 rich.text(cx, txt, markdown.fromJson(a, j.field(m.content, "entities")), .{ .fg = fg, .link = if (out) fg else col.accent, .revealed = s.isRevealed(m.id()), .msg = if (m.local_id == 0) m.id() else "", .font_size = cx.fs + 0.5 });
             }
         }
         if (j.obj(m.content, "preview")) |pv| if (j.str(pv, "title") != null or j.str(pv, "description") != null) linkCard(cx, pv, fg);
+        if (!out and @import("aimd.zig").isAi(s, c, m)) @import("aimd.zig").actions(cx, c, m, fg);
         // Inline buttons (a link opens, the others answer the bot).
         for (j.arr(m.content, "buttons"), 0..) |row, ri| {
             ui.begin(.{ .direction = .row, .gap = 4, .padding = .{ .top = 4 } }, .{ .key = key(.{ "ibr", m.id(), ri }) });
