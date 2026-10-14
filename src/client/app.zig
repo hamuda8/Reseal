@@ -353,6 +353,7 @@ pub const Msg = union(enum) {
     /// A sound's player events (nothing to do).
     sound: zui.PlayEvent,
     reload_page,
+    menu_due: u32,
     format: format.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
@@ -565,6 +566,11 @@ pub const State = struct {
     motion_on: bool = true,
     sounds: sounds.Sounds = .{},
     fmt: format.Format = .{},
+    vzoom: viewerx.Zoom = .{},
+    /// The message tapped last, and when (a double tap is a heart).
+    tap_msg: Id = .{},
+    tap_at: i64 = 0,
+    tap_seq: u32 = 0,
     shared: sharedmedia.Shared = .{},
     polls: pollx.Polls = .{},
     attach: attachx.Attach = .{},

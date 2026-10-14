@@ -152,6 +152,22 @@ pub fn onUi(s: *State, msg: Msg) void {
             s.editing = .{};
         },
         .message_tap => |id| if (s.selecting) toggleSelected(s, id) else {
+            // A second tap soon after: a heart (message.js dblclick); else the menu, once that
+            // time has passed.
+            const now = sys.now();
+            if (s.tap_msg.eql(id.str()) and now - s.tap_at <= 300) {
+                s.tap_msg = .{};
+                s.tap_seq +%= 1;
+                return heart(s, id.str());
+            }
+            s.tap_msg = id;
+            s.tap_at = now;
+            s.tap_seq +%= 1;
+            app.fx.after(300, .{ .menu_due = s.tap_seq });
+        },
+        .menu_due => |seq| if (seq == s.tap_seq and s.tap_msg.isSet()) {
+            const id = s.tap_msg;
+            s.tap_msg = .{};
             s.modal = .{ .menu = .{ .kind = .message, .target = s.open_chat, .item = id } };
         },
         .rich_link => |x| if (s.store.existingTimeline(s.open_chat.str())) |tl| if (tl.find(x.msg.str())) |m| {
@@ -188,6 +204,7 @@ pub fn onUi(s: *State, msg: Msg) void {
         .cancel_send => |local| send.cancel(s, local),
         .open_media => |x| {
             s.viewer = .{ .msg = x.msg, .index = x.index };
+            s.vzoom = .{};
             if (mediaItem(s, x.msg.str(), x.index)) |item| _ = media.file(s, item, false);
         },
         .close_viewer => s.viewer = null,
@@ -615,6 +632,14 @@ fn forwardOne(s: *State, to: []const u8, msg_id: []const u8) void {
 fn react(s: *State, msg_id: []const u8, emoji_index: u8) void {
     if (emoji_index >= quick_reactions.len) return;
     reactEmoji(s, msg_id, quick_reactions[emoji_index]);
+}
+
+/// A heart on (a double tap): only adds it.
+fn heart(s: *State, msg_id: []const u8) void {
+    const tl = s.store.existingTimeline(s.open_chat.str()) orelse return;
+    const m = tl.find(msg_id) orelse return;
+    for (j.arr(m.o.v, "reactions")) |r| if (j.eqlStr(r, "emoji", quick_reactions[1]) and j.truthy(r, "me")) return;
+    reactEmoji(s, msg_id, quick_reactions[1]);
 }
 
 /// Toggles my reaction `emoji` on a message of the open chat.

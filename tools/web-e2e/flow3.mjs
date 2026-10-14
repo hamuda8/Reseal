@@ -51,7 +51,8 @@ const tapMessage = async (t, text) => {
   const p = await t.evaluate(`(() => { const els = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent.includes(${JSON.stringify(text)}) && d.getBoundingClientRect().x > 470); const el = els[0]; if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
   if (!p) throw new Error('no bubble ' + text);
   await t.click(p[0], p[1]);
-  await sleep(500);
+  // The menu opens once a double tap (a heart) is ruled out.
+  await sleep(900);
 };
 
 try {
@@ -88,6 +89,7 @@ try {
     await a.shot('102-reply-and-reaction');
     // Edit by Alice
     await tapMessage(a, 'Hello Bob!');
+    await a.shot('102b-edit-menu');
     await a.clickText('Edit');
     await a.send('Input.insertText', { text: ' (edited)' });
     await a.key('Enter');

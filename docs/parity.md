@@ -56,7 +56,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] M12 AI replies: Markdown rendering (headings, lists, tables, code blocks with Copy → 'Code copied') and Stop / Copy / Regenerate
 - [x] Call service messages start a call again
 - [x] M19 Web: paste and drag-and-drop files into the chat
-- [~] Double-click a message for ❤️: zui has no double-tap gesture (only press, long press, context, hover)
+- [x] A double tap (or double click) on a message adds a heart; one tap opens the menu once a double tap is ruled out (300 ms)
 
 ## Composer (composer.js)
 - [x] Attach, text, emoji, send / mic / round / edit button; Send with Enter
@@ -114,7 +114,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 
 ## Viewer (viewer.js)
 - [x] Sender, date, 'i / n', Show in chat, Reply, Forward, Download, Close, Previous/Next, caption, protected content, 'Could not load this file.'
-- [~] Zoom (wheel, double-click, pinch), swipe to change/close, arrow keys: zui has no wheel, pinch, swipe or key events
+- [x] Viewer: pinch, wheel and the Zoom button zoom 1-5x, a double tap toggles 2.5x, a drag moves a zoomed picture, a sideways swipe goes on (right to left aware), a vertical one closes, arrow keys (zui.gesture over pointer events, zig-core afa236e)
 
 ## Pickers (pickers.js)
 - [x] Chat picker with search, several chats, chips, Send, 'No chats found'

@@ -983,3 +983,44 @@ test "formatting: the bar over a selection, Ctrl+B, a link" {
     D.R.dispatch(.{ .format = .link_add });
     try testing.expectEqualStrings("see **the** [plan](https://wufour.com/plan)", state().fields.get(.composer).get());
 }
+
+test "viewer gestures: pinch and double tap zoom, a swipe goes on; a double tap on a message is a heart" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"look\",\"media\":[{\"id\":\"p1\",\"kind\":\"photo\",\"w\":100,\"h\":100}],\"createdAt\":\"2026-10-12T14:00:00Z\"},{\"id\":\"m2\",\"chatId\":\"g1\",\"seq\":2,\"senderId\":\"u9\",\"kind\":\"message\",\"media\":[{\"id\":\"p2\",\"kind\":\"photo\",\"w\":100,\"h\":100}],\"createdAt\":\"2026-10-12T14:01:00Z\"}],\"floor\":0}"));
+    D.R.dispatch(.{ .open_media = .{ .msg = app.Id.of("m1"), .index = 0 } });
+    const P = zui.Pointer;
+    const ptr = struct {
+        fn f(kind: P.Kind, id: u32, x: f32, y: f32, ms: i64) void {
+            D.R.dispatch(.{ .viewer_x = .{ .pointer = .{ .kind = kind, .id = id, .x = x, .y = y, .time_ms = ms } } });
+        }
+    }.f;
+    // Pinch out to twice the size.
+    ptr(.down, 1, 500, 400, 0);
+    ptr(.down, 2, 600, 400, 5);
+    ptr(.move, 2, 700, 400, 30);
+    ptr(.up, 1, 500, 400, 60);
+    ptr(.up, 2, 700, 400, 70);
+    try testing.expectApproxEqAbs(@as(f32, 2), state().vzoom.scale, 0.01);
+    // A double tap: back to the whole picture.
+    ptr(.down, 1, 500, 400, 1000);
+    ptr(.up, 1, 500, 400, 1050);
+    ptr(.down, 1, 502, 401, 1200);
+    ptr(.up, 1, 502, 401, 1250);
+    try testing.expectEqual(@as(f32, 1), state().vzoom.scale);
+    // A quick swipe left: the next picture.
+    ptr(.down, 1, 700, 400, 2000);
+    ptr(.move, 1, 600, 400, 2040);
+    ptr(.up, 1, 500, 400, 2080);
+    try testing.expect(state().viewer.?.msg.eql("m2"));
+    D.R.dispatch(.close_viewer);
+    // Two taps on a message: a heart, no menu.
+    D.R.dispatch(.{ .message_tap = app.Id.of("m1") });
+    D.R.dispatch(.{ .message_tap = app.Id.of("m1") });
+    try testing.expect(std.mem.indexOf(u8, lastPost("/messages/m1/react"), "\"on\":true") != null);
+    try testing.expect(state().modal == null);
+}

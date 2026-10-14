@@ -25,7 +25,32 @@ pub const Act = union(enum) {
     show_in_chat,
     reply,
     forward,
+    /// A finger, the mouse or the wheel on the picture (zui.gesture).
+    pointer: zui.Pointer,
+    zoom,
 };
+
+/// Zoom and pan (viewer.js): pinch or the wheel zoom 1-5x, a double tap toggles 2.5x, a drag
+/// moves a zoomed picture; unzoomed, a sideways swipe goes to the next or previous one and a
+/// vertical one closes.
+pub const Zoom = struct {
+    gestures: zui.gesture.Recognizer = .{},
+    scale: f32 = 1,
+    x: f32 = 0,
+    y: f32 = 0,
+};
+
+fn zoomTo(s: *State, z: f32) void {
+    s.vzoom.scale = std.math.clamp(z, 1, 5);
+    if (s.vzoom.scale == 1) {
+        s.vzoom.x = 0;
+        s.vzoom.y = 0;
+    }
+}
+
+fn onPointer(p: zui.Pointer) Msg {
+    return msgOf(.{ .pointer = p });
+}
 
 fn msgOf(a: Act) Msg {
     return .{ .viewer_x = a };
@@ -58,11 +83,37 @@ fn list(s: *const State, a: std.mem.Allocator) struct { items: []Item, at: usize
 pub fn act(s: *State, a: Act) void {
     const v = s.viewer orelse return;
     switch (a) {
+        .zoom => zoomTo(s, if (s.vzoom.scale > 1) 1 else 2),
+        .pointer => |p| {
+            const z = &s.vzoom;
+            switch (z.gestures.feed(p)) {
+                .pinch => |g| {
+                    zoomTo(s, z.scale * g.scale);
+                    if (z.scale > 1) {
+                        z.x += g.dx;
+                        z.y += g.dy;
+                    }
+                },
+                .wheel => |g| zoomTo(s, z.scale * (if (g.delta < 0) @as(f32, 1.15) else @as(f32, 1.0 / 1.15))),
+                .double_tap => zoomTo(s, if (z.scale > 1) 1 else 2.5),
+                .pan => |g| if (z.scale > 1) {
+                    z.x += g.dx;
+                    z.y += g.dy;
+                },
+                .swipe => |dir| if (z.scale == 1) switch (dir) {
+                    .left => act(s, .{ .go = if (zui.i18n.isRtl()) -1 else 1 }),
+                    .right => act(s, .{ .go = if (zui.i18n.isRtl()) 1 else -1 }),
+                    .up, .down => s.viewer = null,
+                },
+                else => {},
+            }
+        },
         .go => |d| {
             const l = list(s, app.tmp());
             const n = @as(i64, @intCast(l.at)) + d;
             if (n < 0 or n >= l.items.len) return;
             const next = l.items[@intCast(n)];
+            s.vzoom = .{};
             @import("views.zig").onUi(s, .{ .open_media = .{ .msg = Id.of(next.msg.id()), .index = next.index } });
         },
         .show_in_chat => {
@@ -105,18 +156,27 @@ pub fn view(cx: Cx) void {
             const w0: f32 = @floatFromInt(j.intOr(item, "w", 800));
             const h0: f32 = @floatFromInt(j.intOr(item, "h", 600));
             const scale = @min((cx.w - 40) / @max(1, w0), (cx.h - 180) / @max(1, h0), 1);
-            const w = w0 * scale;
-            const h = h0 * scale;
+            const z = s.vzoom;
+            const w = w0 * scale * z.scale;
+            const h = h0 * scale * z.scale;
+            // The whole screen hears the fingers; the picture sits in the middle, moved by the pan.
+            ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .clip = true }, .{ .on_pointer = onPointer, .key = key(.{"vstage"}) });
+            const left = (cx.w - w) / 2 + (if (zui.i18n.isRtl()) -z.x else z.x);
+            const top = (cx.h - h) / 2 + z.y;
+            const at: zui.Style = .{ .position = .absolute, .inset = .{ .top = top, .start = left }, .width = .{ .px = w }, .height = .{ .px = h } };
             if (media.shown(s, item)) |f| {
                 if (f.state == .ready) {
-                    media.draw(ui, f, j.strOr(item, "id", ""), .{ .width = .{ .px = w }, .height = .{ .px = h } }, key(.{ "view", j.strOr(item, "id", "") }));
+                    media.draw(ui, f, j.strOr(item, "id", ""), at, key(.{ "view", j.strOr(item, "id", "") }));
                     shown_any = true;
                 } else if (f.state == .failed) failed = true;
             }
             if (!shown_any and !failed) if (j.str(item, "thumb")) |th| {
-                ui.image(th, .{ .width = .{ .px = w }, .height = .{ .px = h }, .opacity = 0.6 }, key(.{ "vthumb", j.strOr(item, "id", "") }));
+                var st = at;
+                st.opacity = 0.6;
+                ui.image(th, st, key(.{ "vthumb", j.strOr(item, "id", "") }));
                 shown_any = true;
             };
+            ui.end();
         }
     };
     if (failed) {
@@ -146,6 +206,7 @@ pub fn view(cx: Cx) void {
         topButton(cx, icons.forward, msgOf(.forward));
         topButton(cx, icons.download, .{ .download = .{ .msg = v.msg, .index = v.index } });
     }
+    topButton(cx, icons.zoomIn, msgOf(.zoom));
     topButton(cx, icons.close, .close_viewer);
     ui.end();
 
