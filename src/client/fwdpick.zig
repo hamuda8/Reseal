@@ -88,6 +88,15 @@ fn send(s: *State) void {
     s.fwd.chosen.clearRetainingCapacity();
 }
 
+/// Under each chat (pickers.js): notes, presence, or what kind of chat it is.
+fn subtitle(s: *const State, c: *const data.Chat) []const u8 {
+    if (c.is("saved")) return if (c.o.s("about")) |x| (if (x.len > 0) x else t("Your notes")) else t("Your notes");
+    if (c.is("private")) return if (s.store.peer(c)) |p| @import("text.zig").presenceText(p.get("presence")) else "";
+    if (c.is("channel")) return t("channel");
+    if (c.is("bot")) return t("bot");
+    return t("group");
+}
+
 fn allowed(s: *const State, c: *const data.Chat) bool {
     if (c.o.b("preview")) return false;
     if (s.fwd.save) return c.is("saved") and !s.open_chat.eql(c.id());
@@ -126,7 +135,10 @@ pub fn sheet(cx: Cx) void {
         const on = has(s, c.id());
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52, .padding = .xy(12, 4), .radius = 12, .pressed_background = cx.c.active }, .{ .on_press = msgOf(.{ .toggle = Id.of(c.id()) }), .key = key(.{ "fwd", c.id() }) });
         vlist.chatAvatar(cx, c, 40);
-        ui.text(s.store.title(c), .{ .font_size = 15, .weight = 550, .color = cx.c.text, .max_lines = 1, .grow = 1, .width = .fill });
+        ui.begin(.{ .grow = 1, .width = .fill }, .{});
+        ui.text(s.store.title(c), .{ .font_size = 15, .weight = 550, .color = cx.c.text, .max_lines = 1 });
+        ui.text(subtitle(s, c), .{ .font_size = 13, .color = cx.c.text_2, .max_lines = 1 });
+        ui.end();
         ui.begin(.{ .width = .{ .px = 22 }, .height = .{ .px = 22 }, .radius = 11, .border_width = if (on) 0 else 1.5, .border_color = cx.c.border_strong, .background = if (on) cx.c.brand else null, .align_items = .center, .justify = .center }, .{});
         if (on) ui.icon(icons.check, 14, Color.white, .{}, 0);
         ui.end();

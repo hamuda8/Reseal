@@ -369,7 +369,7 @@ fn picker(cx: Cx, kind: app.Picker) void {
             personRow(cx, u, multi, &seen);
         }
     }
-    if (seen.count() == 0) kit.emptyState(cx, icons.search, t("Find people"), t("Search by name or @username."));
+    if (seen.count() == 0) kit.emptyState(cx, icons.search, if (q.len > 0) t("Nobody found") else t("Find people"), t("Search by name or @username."));
     ui.end();
     ui.end();
 }

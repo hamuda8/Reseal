@@ -500,6 +500,7 @@ test "forward: one message to two chats, from the chat picker" {
     try testing.expect(D.respond("/messages", 200, "{\"messages\":[{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"u9\",\"kind\":\"message\",\"text\":\"pass it on\",\"createdAt\":\"2026-10-12T14:00:00Z\"}],\"floor\":0}"));
     D.R.dispatch(.{ .message_action = .{ .what = .forward, .msg = app.Id.of("m1") } });
     try testing.expect(D.findText("Forward to…") != 0);
+    try testing.expect(D.findText("group") != 0);
     try D.typeInto("Search", "o");
     D.R.dispatch(.{ .fwd_pick = .{ .toggle = app.Id.of("g2") } });
     D.R.dispatch(.{ .fwd_pick = .{ .toggle = app.Id.of("g3") } });

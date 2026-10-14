@@ -118,7 +118,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 
 ## Pickers (pickers.js)
 - [x] Chat picker with search, several chats, chips, Send, 'No chats found'
-- [ ] M16 Chat picker row subtitles ('Your notes', presence, channel / bot / group); user picker title 'Add people' and empty state 'Nobody found' / 'Search by name or @username.'
+- [x] M16 Chat picker row subtitles ('Your notes', presence, channel / bot / group); user picker title 'Add people' and empty state 'Nobody found' / 'Search by name or @username.'
 
 ## Settings (settings.js, gates.js, theme.js, emoji.js, drafts.js)
 - [x] Compose menu (New message, group, channel, glimpse, Chat with AI), new group/channel sheet
