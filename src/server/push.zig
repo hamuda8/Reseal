@@ -81,9 +81,89 @@ fn toUrlSafe(a: std.mem.Allocator, s: []const u8) ![]const u8 {
     return out[0..n];
 }
 
+// ---- Phone apps: FCM and APNs tokens -------------------------------------------------------------
+// The zui apps register { token, kind } (kind: fcm, apns, voip). The tokens live in pushSubs
+// next to the browsers' subscriptions, with endpoint "<kind>:<token>" (unique, as before), `kind`
+// and `token`, and the owner in nativeUserId instead of userId: Reseal-js, which reads
+// { userId } and Web-Pushes every match, never sees them.
+
+pub var native: ?corepush.native.Sender = null;
+
+/// From main: FCM_SERVICE_ACCOUNT_FILE, APNS_KEY_FILE, APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID,
+/// APNS_SANDBOX=1 (unset: that service is off).
+pub fn initNative(gpa: std.mem.Allocator, io: std.Io, e: anytype) void {
+    native = corepush.native.Sender.init(gpa, io, .{
+        .fcm_service_account_file = e.get("FCM_SERVICE_ACCOUNT_FILE"),
+        .apns_key_file = e.get("APNS_KEY_FILE"),
+        .apns_key_id = e.get("APNS_KEY_ID"),
+        .apns_team_id = e.get("APNS_TEAM_ID"),
+        .apns_bundle_id = e.get("APNS_BUNDLE_ID"),
+        .apns_sandbox = std.mem.eql(u8, e.str("APNS_SANDBOX", ""), "1"),
+    });
+}
+
+fn nativeEnabled() bool {
+    const s = native orelse return false;
+    return s.enabled(.fcm) or s.enabled(.apns);
+}
+
+fn anyEnabled() bool {
+    return pushEnabled() or nativeEnabled();
+}
+
+pub fn saveNative(r: *Rq, user: Val, body: Val) !void {
+    const a = r.a;
+    const token = try r.str(body.get("token"));
+    const kind = corepush.native.Kind.parse(body.get("kind").asStr() orelse "") orelse return r.fail(400, "Invalid push token kind", null);
+    if (token.len == 0 or token.len > 4096) return r.fail(400, "Invalid push token", null);
+    const endpoint = try std.fmt.allocPrint(a, "{s}:{s}", .{ @tagName(kind), token });
+    _ = try col().pushSubs.updateOne(a, .{ .endpoint = endpoint }, .{
+        .@"$set" = .{ .nativeUserId = user.get("_id"), .endpoint = endpoint, .kind = @tagName(kind), .token = token, .updatedAt = A.now() },
+        .@"$setOnInsert" = .{ .createdAt = A.now() },
+    }, .{ .upsert = true });
+}
+
+/// Calls go to the phones as urgent data messages (a VoIP push on iPhones that have a VoIP
+/// token, which must ring CallKit), messages as notifications the system shows.
+fn pushNative(r: *Rq, user_ids: []const Val, payload: Val, ttl: u32) !void {
+    const a = r.a;
+    const sender = if (native) |*s| s else return;
+    const subs = try col().pushSubs.find(a, .{ .nativeUserId = .{ .@"$in" = user_ids } }, .{});
+    if (subs.len == 0) return;
+    const call = eq(payload.get("type"), "call");
+    var data: std.ArrayList([2][]const u8) = .empty;
+    if (payload == .obj) for (payload.obj.keys.items, payload.obj.vals.items) |k, v| switch (v) {
+        .str, .num, .bool, .id => try data.append(a, .{ k, try r.str(v) }),
+        else => {}, // the encrypted envelope stays for the browsers
+    };
+    for (subs) |sub| {
+        const kind = corepush.native.Kind.parse(sub.get("kind").asStr() orelse "") orelse continue;
+        // A call on an iPhone: its VoIP token rings CallKit; its alert token would only add a banner.
+        if (call and kind == .apns) {
+            var has_voip = false;
+            for (subs) |o| if (val.same(o.get("nativeUserId"), sub.get("nativeUserId")) and eq(o.get("kind"), "voip")) {
+                has_voip = true;
+            };
+            if (has_voip) continue;
+        }
+        if (!call and kind == .voip) continue; // VoIP pushes are for calls only
+        const res = sender.send(kind, sub.get("token").asStr() orelse continue, .{
+            .data = data.items,
+            .title = payload.get("title").asStr() orelse "Reseal",
+            .body = payload.get("body").asStr() orelse "",
+            .urgent = call,
+            .ttl_s = ttl,
+            .collapse = if (call) (payload.get("callId").asStr() orelse "") else (payload.get("chatId").asStr() orelse ""),
+        });
+        if (res == .gone) _ = col().pushSubs.deleteOne(a, .{ ._id = sub.get("_id") }) catch {};
+    }
+}
+
 fn pushToUsers(r: *Rq, user_ids: []const Val, payload: Val, ttl: u32) !void {
     const a = r.a;
-    if (!pushEnabled() or user_ids.len == 0) return;
+    if (user_ids.len == 0) return;
+    pushNative(r, user_ids, payload, ttl) catch |e| std.log.warn("push: phones: {t}", .{e});
+    if (!pushEnabled()) return;
     const subs = try col().pushSubs.find(a, .{ .userId = .{ .@"$in" = user_ids } }, .{});
     for (subs) |sub| {
         var p = payload;
@@ -124,7 +204,7 @@ pub fn onEvent(r: *Rq, kind: events.Kind, p: Val) !void {
     switch (kind) {
         .message_created => try onMessage(r, p.get("chat"), p.get("message"), p.get("sender")),
         .call_incoming => {
-            if (!pushEnabled()) return;
+            if (!anyEnabled()) return;
             const callee = p.get("calleeId");
             if (rt.isOnline(callee) and !rt.isAway(callee)) return;
             try pushToUsers(r, &.{callee}, try val.from(r.a, .{
@@ -133,6 +213,7 @@ pub fn onEvent(r: *Rq, kind: events.Kind, p: Val) !void {
                 .chatId = p.get("chatId"),
                 .title = p.get("callerName"),
                 .body = if (p.get("video").isTrue()) "Incoming video call" else "Incoming voice call",
+                .video = p.get("video").isTrue(),
             }), 45);
         },
         else => {},
@@ -141,7 +222,7 @@ pub fn onEvent(r: *Rq, kind: events.Kind, p: Val) !void {
 
 fn onMessage(r: *Rq, chat: Val, message: Val, sender: Val) !void {
     const a = r.a;
-    if (!pushEnabled() or (eq(message.get("kind"), "service") and !message.path("service.notify").truthy())) return;
+    if (!anyEnabled() or (eq(message.get("kind"), "service") and !message.path("service.notify").truthy())) return;
     if (eq(chat.get("type"), "channel") and (chat.get("memberCount").asInt() orelse 0) > 5000) return;
     const now = A.now();
     // Reminders in Saved chats go to the person who set them; everything else to the others.

@@ -38,6 +38,8 @@ pub fn main(init: std.process.Init) !void {
 
     const env = try env_mod.Env.loadApp(arena, io, init.environ_map, "reseal");
     const config = try A.Config.load(arena, io, &env);
+    // FCM and APNs for the phone apps (off unless their environment variables are set).
+    @import("push.zig").initNative(gpa, io, &env);
 
     const client = try mongo.Client.init(io, gpa, config.mongo_uri);
     defer client.deinit();

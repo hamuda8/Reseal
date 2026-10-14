@@ -195,6 +195,7 @@ fn deleteMe(q: *Req) !void {
     _ = try col().blocks.deleteMany(a, .{ .userId = me.get("_id") });
     _ = try col().folders.deleteMany(a, .{ .userId = me.get("_id") });
     _ = try col().pushSubs.deleteMany(a, .{ .userId = me.get("_id") });
+    _ = try col().pushSubs.deleteMany(a, .{ .nativeUserId = me.get("_id") });
     _ = try col().chatKeys.deleteMany(a, .{ .userId = me.get("_id") });
     _ = try col().sessions.deleteMany(a, .{ .userId = me.get("_id") });
     try stories.removeAllOf(r, me.get("_id"));
@@ -746,8 +747,14 @@ fn keyRequests(q: *Req) !void {
 
 fn pushSubscribe(q: *Req) !void {
     const r = &q.r;
+    const body = try q.bodyObj();
+    // The phone apps: { token, kind } (FCM, APNs, VoIP).
+    if (body.get("token").truthy()) {
+        try push.saveNative(r, q.user(), body);
+        return q.json(.{ .ok = true });
+    }
     try r.ensure(push.pushEnabled(), "Push notifications are not configured on this server", 501, "push_disabled");
-    try push.subscribe(r, q.user(), try q.bodyObj());
+    try push.subscribe(r, q.user(), body);
     return q.json(.{ .ok = true });
 }
 
