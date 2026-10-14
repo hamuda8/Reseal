@@ -45,6 +45,7 @@ pub const infopanes = @import("infopanes.zig");
 pub const aimd = @import("aimd.zig");
 pub const chatindex = @import("chatindex.zig");
 pub const keyboard = @import("keyboard.zig");
+pub const sounds = @import("sounds.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -346,6 +347,8 @@ pub const Msg = union(enum) {
     ai: aimd.Act,
     chat_index: chatindex.Act,
     keys: keyboard.Act,
+    /// A sound's player events (nothing to do).
+    sound: zui.PlayEvent,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -555,6 +558,7 @@ pub const State = struct {
     badge_sent: i64 = -1,
     /// What zui was last told about animations.
     motion_on: bool = true,
+    sounds: sounds.Sounds = .{},
     shared: sharedmedia.Shared = .{},
     polls: pollx.Polls = .{},
     attach: attachx.Attach = .{},
@@ -860,6 +864,7 @@ fn handle(s: *State, msg: Msg) void {
         .ai => |a| aimd.act(s, a),
         .chat_index => |a| chatindex.act(s, a),
         .keys => |a| keyboard.act(s, a),
+        .sound => {},
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),

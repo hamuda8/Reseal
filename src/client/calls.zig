@@ -10,6 +10,7 @@
 
 const std = @import("std");
 const zui = @import("zui");
+const sounds = @import("sounds.zig");
 const app = @import("app.zig");
 const j = @import("j.zig");
 const sys = @import("sys.zig");
@@ -317,10 +318,14 @@ pub fn onAck(s: *State, req: SocketReq, ok: bool, result: ?j.Value, err: []const
                         return end(s, t("Line busy"));
                     }
                     c.status = .ringing;
+                    // The dial tone while the other side rings (sounds.js startDialing).
+                    sounds.start(s, .dial);
                     app.fx.startCall(.{ .id = c.id.str(), .name = title(s), .video = c.video, .label = if (c.video) t("Video call") else t("Voice call") });
                 },
                 .accept => for (j.arr(result, "peers")) |p| addPeer(s, p, false),
                 .join => {
+                    sounds.stop(s);
+                    sounds.play(s, .connect);
                     c.status = .active;
                     c.started_at = sys.now();
                     for (j.arr(result, "peers")) |p| addPeer(s, p, true);
@@ -390,6 +395,8 @@ pub fn onPeerEvent(s: *State, e: zui.PeerEvent) void {
                 p.connected = true;
                 p.lost = false;
                 if (c.status != .active) {
+                    sounds.stop(s);
+                    sounds.play(s, .connect);
                     app.fx.callConnected(c.id.str());
                     c.status = .active;
                     // The web's clock comes every 20 s until the call asks for it every second:
@@ -515,6 +522,8 @@ fn stopScreen(s: *State) void {
 pub fn end(s: *State, reason: []const u8) void {
     const c = &s.call;
     if (c.status == .idle or c.status == .ended) return;
+    sounds.stop(s);
+    sounds.play(s, .hangup);
     for (c.peers.items) |p| app.fx.closePeer(p.peer);
     c.peers.clearRetainingCapacity();
     if (c.local != 0) app.fx.closeMedia(c.local);
@@ -557,6 +566,7 @@ fn activeText(c: anytype) []const u8 {
 // Incoming calls and socket events
 
 fn closeIncoming(s: *State) void {
+    if (s.call.incoming != null) sounds.stop(s);
     if (s.call.incoming) |inc| app.fx.endCall(inc.call.str());
     s.call.incoming = null;
     app.fx.cancelNotify(notify_id);
@@ -586,6 +596,8 @@ pub fn onEvent(s: *State, typ: []const u8, d: j.Value) void {
             accept(s, inc.video);
             return;
         }
+        // The web rings here; the phones ring through their own call screens.
+        if (zui.platform == .web) sounds.start(s, .ring);
         // Rings over the lock screen on phones; stays until answered on the web.
         app.fx.notify(.{ .id = notify_id, .title = j.strOr(d, "from.displayName", "Reseal"), .body = if (inc.video) t("Incoming video call") else t("Incoming voice call"), .urgent = true });
         return;

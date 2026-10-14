@@ -527,7 +527,7 @@ fn notify(s: *State, c: *data.Chat, m: *data.Message, open_visible: bool) void {
         app.post(std.fmt.allocPrint(a, "{{\"type\":\"reseal:message\",\"chatId\":\"{s}\",\"title\":{s},\"body\":{s}}}", .{ c.id(), j.quote(a, s.store.title(c)) catch "\"\"", j.quote(a, previewBody(s, c, m)) catch "\"\"" }) catch return);
     }
     // The incoming sound (sounds.js playIncoming; zui has one beep for it).
-    if (s.prefs.sounds) app.fx.beep();
+    @import("sounds.zig").play(s, .incoming);
     // While the page is in front of the person, the list's badge says enough (as on the web).
     if (zui.platform == .web and s.visible) return;
     const a = tmp();

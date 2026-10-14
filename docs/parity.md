@@ -71,7 +71,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Poll sheet (question, options, anonymous, multiple, quiz with correct answer and explanation)
 - [x] Location, emoji panel with search and stickers
 - [x] M24 Emoji panel section title 'Recently used'
-- [~] Sent / incoming sounds: zui has one beep; it plays for incoming messages when Sounds is on
+- [x] Sent and incoming sounds (sounds.js tones, when Sounds is on)
 
 ## Bubbles (message.js, text.js, format.js, markdown.js)
 - [x] Meta line: timer, lock on encrypted media, views, edited, channel signature, time, status icons
@@ -109,7 +109,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Mute, Camera, Screen (desktop web), Flip (phones), Raise hand, End/Leave
 - [~] M21 Devices menu (Microphone / Camera / Speaker): zui media has no device list or choice (only front/back camera, which the Flip button uses); 'Open chat' is the call screen's top-bar button
 - [x] M22 Floating emoji reactions in group calls; 'Reconnected. If someone cannot hear you…' after a group call reconnects
-- [~] Ringtone, dial tone, connect and hang-up sounds: zui only has fx.beep (the phones ring through their system call screens)
+- [x] Ringtone, dial tone, connect and hang-up sounds, and the message chime and sent sound: Reseal-js's tones made as WAV here and played with fx.play (looped, on the ringtone or call stream; the phones also ring through their call screens)
 - [x] 'Voice call' / 'Video call' on Android's ringing screen in the app's language (zui Call.label, zig-core 70d5fe9); CallKit names the kind itself in the phone's language
 
 ## Viewer (viewer.js)

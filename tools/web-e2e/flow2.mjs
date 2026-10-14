@@ -215,9 +215,13 @@ try {
     let p = null;
     for (let i = 0; i < 20 && !p; i++) { p = await a.evaluate(`(() => { let btns = [...document.querySelectorAll('[role=button]')].filter(b => { const r = b.getBoundingClientRect(); return r.y < 70 && r.x > 900; }); if (!btns.length) { btns = [...document.querySelectorAll('[role=button]')].filter(b => { const r = b.getBoundingClientRect(); return r.y < 70 && r.x < 400; }).sort((x, y) => y.getBoundingClientRect().x - x.getBoundingClientRect().x); } if (!btns.length) return null; const r = btns[0].getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`); if (!p) await sleep(250); }
     if (!p) await a.shot('70-call-no-header');
+    // Count the sounds the pages play (dial tone, ringtone).
+    for (const t of [a, b]) await t.evaluate(`(() => { window.__plays = 0; const o = HTMLMediaElement.prototype.play; HTMLMediaElement.prototype.play = function () { window.__plays++; return o.apply(this, arguments); }; })()`);
     await a.click(p[0], p[1]);
     check('call: ringing on the caller', await a.waitText('Ringing', 8000));
     check('call: incoming on the callee', await b.waitText('Incoming voice call', 8000));
+    const plays = [await a.evaluate('window.__plays'), await b.evaluate('window.__plays')];
+    check('call: dial tone and ringtone play', plays[0] >= 1 && plays[1] >= 1, JSON.stringify(plays));
     await a.shot('70-call-ringing');
     await b.shot('71-call-incoming');
     // Answer: the green phone at the end of the banner.

@@ -288,6 +288,8 @@ pub fn sendNow(s: *State, o: Options) void {
             .ttl = o.ttl,
         });
         s.first_unread = 0;
+        // The sent whoosh (sounds.js playSent).
+        if (o.scheduled_at == 0) @import("sounds.zig").play(s, .sent);
         if (o.scheduled_at > 0) {
             const reminder = if (s.store.chat(chat)) |ch| ch.is("saved") else false;
             app.toast(s, if (reminder) t("Reminder set") else t("Message scheduled"));
