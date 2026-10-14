@@ -114,18 +114,34 @@ test "a crypto.js message decrypts in the chat list and the chat" {
     try testing.expectEqualStrings("{\"v\":1,\"t\":\"Hi Alice\"}", d.payload);
 }
 
-test "phones: no token shows the sign-in form, which signs in with Wufour" {
+test "phones: no token shows the welcome; Wufour's sign-in opens in the app and gives the token" {
     zui.storage.remove("token", .{ .secure = true });
     D.start(400, 800);
     defer D.reset();
-    try testing.expectEqual(app.Phase.login, state().phase);
-    try D.typeInto("name@example.com", "bob@example.com");
-    try D.typeInto("Password", "secret");
-    try D.press("Sign in");
-    try testing.expect(D.pending("/api/auth/login") != null);
-    try testing.expect(D.respond("/api/auth/login", 200, "{\"success\":true,\"token\":\"tok_bob\"}"));
+    try testing.expectEqual(app.Phase.sign_in, state().phase);
+    // No email or password of our own.
+    try testing.expect(D.inputView("Password") == null);
+    try D.press("Sign in with Wufour");
+    try testing.expect(host.web_auth_open);
+    try testing.expectEqualStrings(app.auth_host ++ "/auth?returnTo=https%3A%2F%2Freseal.wreseal.com%2Fauth%2Fcallback%3Fnext%3D%252F", host.web_auth_url.items);
+    try testing.expectEqualStrings("https://reseal.wreseal.com/auth/callback", host.web_auth_prefix.items);
+    // Closed: still on the welcome.
+    try D.finishWebAuth(null);
+    try testing.expectEqual(app.Phase.sign_in, state().phase);
+    try D.press("Sign in with Wufour");
+    try D.finishWebAuth("https://reseal.wreseal.com/auth/callback?next=%2F&token=tok_bob");
     try testing.expectEqualStrings("tok_bob", host.stored.get("token").?);
     try testing.expect(D.pending("/api/config") != null);
+    try testing.expect(D.respond("/api/config", 200, "{\"version\":\"test\"}"));
+    // The Bearer token goes with every request.
+    for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, "/api/me")) {
+        try testing.expect(std.mem.indexOf(u8, f.headers, "Authorization: Bearer tok_bob") != null);
+    };
+    // A 401: the token is forgotten and the welcome shows again.
+    try testing.expect(D.respond("/api/me", 401, "{\"error\":\"unauthorized\"}"));
+    try testing.expectEqual(app.Phase.sign_in, state().phase);
+    try testing.expect(host.stored.get("token") == null);
+    try testing.expect(D.findText("Sign in with Wufour") != 0);
 }
 
 test "widget: handshake with the page, token, signed-out without one" {

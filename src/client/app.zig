@@ -105,8 +105,6 @@ pub const Text = struct {
 pub const Field = enum {
     search,
     composer,
-    login_email,
-    login_password,
     passcode,
     passcode_2,
     passcode_3,
@@ -290,7 +288,8 @@ pub const Msg = union(enum) {
 
     // Sign-in and keys
     sign_in_wufour,
-    login,
+    /// The phones' in-app Wufour sign-in ended (fx.webAuth).
+    web_auth: zui.WebAuthResult,
     unlock,
     toggle_recovery,
     start_fresh,
@@ -447,7 +446,7 @@ pub fn hostMessage(json: []const u8) ?Msg {
 // ---------------------------------------------------------------------------------------------
 // State
 
-pub const Phase = enum { loading, cannot_reach, sign_in, login, locked, ready, signed_out };
+pub const Phase = enum { loading, cannot_reach, sign_in, locked, ready, signed_out };
 
 pub const Prefs = struct {
     theme: Theme = .auto,
@@ -479,7 +478,6 @@ pub const State = struct {
     phase: Phase = .loading,
     mode: enum { app, embed } = .app,
     boot_error: Text = .{},
-    login_error: Text = .{},
     unlock_error: Text = .{},
     unlock_recovery: bool = false,
     busy: bool = false,
@@ -598,7 +596,6 @@ pub const Op = union(enum) {
     me,
     chats,
     folders,
-    login,
     keys_setup_auto: struct { id: *crypto.Identity },
     keys_restore,
     keys_backup_unlock,
@@ -864,7 +861,7 @@ fn handle(s: *State, msg: Msg) void {
         .typed => |ty| onTyped(s, ty.field, ty.text),
         .submit => |field| onSubmit(s, field),
         .sign_in_wufour => signInWufour(s),
-        .login => login(s),
+        .web_auth => |r| webAuthDone(s, r),
         .unlock => keys.unlockSubmit(s),
         .toggle_recovery => {
             s.unlock_recovery = !s.unlock_recovery;
@@ -915,7 +912,6 @@ fn onTyped(s: *State, field: Field, text: []const u8) void {
 fn onSubmit(s: *State, field: Field) void {
     switch (field) {
         .composer => if (s.prefs.send_with_enter) views.onUi(s, .send_text),
-        .login_email, .login_password => login(s),
         .passcode => if (s.phase == .locked) keys.unlockSubmit(s),
         else => {},
     }
@@ -942,7 +938,7 @@ fn start(s: *State) void {
     if (std.mem.startsWith(u8, path_only, "/@") and path_only.len > 2) s.pending_username = Id.of(std.mem.trimEnd(u8, path_only[2..], "/"));
     if (native_auth) {
         const token = zui.storage.get(tmp(), "token", .{ .secure = true }) orelse {
-            s.phase = .login;
+            s.phase = .sign_in;
             return;
         };
         s.bearer.set(token);
@@ -970,44 +966,36 @@ pub fn setLang(s: *State, lang: Lang) void {
 }
 
 fn signInWufour(_: *State) void {
+    if (native_auth) {
+        // Phones: Wufour's own sign-in page inside the app; the answer is Msg.web_auth.
+        zui.wufour.signIn(Msg, fx, .{ .auth_host = auth_host, .callback = callback_url }, onWebAuth);
+        return;
+    }
     // The server's /login sends people to Wufour and back with the cookie set.
     const next = if (env.link.len > 0) env.link else "/";
     fx.openUrl(std.fmt.allocPrint(tmp(), "/login?next={s}", .{j.urlEncode(tmp(), next) catch "/"}) catch "/login", false);
 }
 
-/// Phones: email and password to Wufour's /api/auth/login, which answers {success, token}.
-fn login(s: *State) void {
-    const email = s.fields.get(.login_email).trimmed();
-    const password = s.fields.get(.login_password).get();
-    if (email.len == 0 or password.len == 0) {
-        s.login_error.set(t("All fields are required"));
-        return;
-    }
-    s.login_error.clear();
-    s.busy = true;
-    const body = std.fmt.allocPrint(tmp(), "{{\"email\":{s},\"password\":{s}}}", .{ j.quote(tmp(), email) catch return, j.quote(tmp(), password) catch return }) catch return;
-    const tag = s.next_op;
-    s.next_op +%= 1;
-    s.ops.put(gpa, tag, .login) catch return;
-    fx.fetch(.{ .url = std.fmt.allocPrint(tmp(), "{s}/api/auth/login", .{auth_host}) catch return, .method = .POST, .body = body, .tag = tag }, onHttp);
+/// Where Wufour sends the phones' in-app sign-in: Reseal's /auth/callback (a host Wufour
+/// accepts). The app takes the token from that address without loading it.
+const callback_url = @import("app_config").server ++ "/auth/callback?next=%2F";
+
+fn onWebAuth(r: zui.WebAuthResult) Msg {
+    return .{ .web_auth = r };
 }
 
-fn onLogin(s: *State, r: zui.Response) void {
-    s.busy = false;
-    const v = j.parse(tmp(), r.body);
-    const token = j.str(v, "token");
-    if (r.ok() and j.truthy(v, "success") and token != null) {
-        zui.storage.set("token", token.?, .{ .secure = true });
-        s.bearer.set(token.?);
-        s.fields.getPtr(.login_password).clear();
-        s.phase = .loading;
-        api(s, .GET, "/config", null, .config);
-        return;
-    }
-    s.login_error.set(j.str(v, "message") orelse j.str(v, "error.message") orelse j.str(v, "error") orelse if (r.status == 0) t("Could not reach Wufour. Check your connection.") else t("Invalid credentials"));
+/// The in-app sign-in ended: keep the token and start as with one already kept; closed: stay.
+fn webAuthDone(s: *State, r: zui.WebAuthResult) void {
+    if (r == .cancelled or s.phase != .sign_in) return;
+    const token = zui.wufour.tokenOfResult(tmp(), r) orelse return toastError(s, t("Could not sign in. Try again."));
+    zui.wufour.save(token);
+    s.bearer.set(token);
+    s.phase = .loading;
+    api(s, .GET, "/config", null, .config);
 }
 
-/// Signed out (401): the web goes through Wufour's sign-in; phones show the sign-in form.
+/// Signed out (401): the web goes through Wufour's sign-in; phones forget the token and show
+/// the welcome with "Sign in with Wufour".
 pub fn signedOut(s: *State) void {
     if (s.mode == .embed) {
         embedTokenRequest(s);
@@ -1015,10 +1003,10 @@ pub fn signedOut(s: *State) void {
     }
     stopSocket(s);
     if (native_auth) {
-        zui.storage.remove("token", .{ .secure = true });
+        zui.wufour.forget();
         s.bearer.clear();
-        s.phase = .login;
-    } else s.phase = .sign_in;
+    }
+    s.phase = .sign_in;
 }
 
 /// Log out of this device: forget the keys here and the session.
@@ -1030,9 +1018,16 @@ pub fn logout(s: *State) void {
     s.panes.clearRetainingCapacity();
     s.modal = null;
     if (native_auth) {
-        zui.storage.remove("token", .{ .secure = true });
+        // The session ends at Wufour too (wufour-auth's logout); the answer is not awaited.
+        if (s.bearer.get().len > 0) if (zui.wufour.logoutRequest(tmp(), auth_host, s.bearer.get())) |req| {
+            var q = req;
+            q.tag = s.next_op;
+            s.next_op +%= 1;
+            fx.fetch(q, onHttp);
+        };
+        zui.wufour.forget();
         s.bearer.clear();
-        s.phase = .login;
+        s.phase = .sign_in;
     } else fx.openUrl("/logout", false);
 }
 
@@ -1093,7 +1088,6 @@ fn onAnswer(s: *State, r: zui.Response) void {
             } else api(s, .GET, "/me", null, .me);
         },
         .me => onMe(s, r),
-        .login => onLogin(s, r),
         .chats => sync.onChats(s, r),
         .folders => if (r.ok()) {
             if (j.parse(tmp(), r.body)) |v| {

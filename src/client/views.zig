@@ -982,7 +982,6 @@ pub fn root(s: *const State, ui: *ui_kit.Ui) void {
         .cannot_reach => notice(cx, icons.wifiOff, t("Cannot reach Reseal"), s.boot_error.get(), true),
         .signed_out => notice(cx, icons.user, t("Sign in to chat"), if (s.boot_error.get().len > 0) s.boot_error.get() else t("Sign in on this website to start chatting."), false),
         .sign_in => signInGate(cx),
-        .login => loginForm(cx),
         .locked => unlockGate(cx),
         .ready => vlist.shell(cx),
     }
@@ -1100,32 +1099,10 @@ fn signInGate(cx: Cx) void {
             point(c2, icons.video, t("Calls that just work"), t("Voice, video and group calls."));
             point(c2, icons.sparkles, t("AI when you want it"), t("Chat with assistants, or build your own."));
             ui.end();
-            ui_kit.button(c2, t("Continue with Wufour"), .sign_in_wufour, .{ .large = true, .block = true });
+            // Phones: Wufour's sign-in opens inside the app (fx.webAuth); the web goes to /login.
+            ui_kit.button(c2, if (app.native_auth) t("Sign in with Wufour") else t("Continue with Wufour"), .sign_in_wufour, .{ .large = true, .block = true });
             ui.begin(.{ .padding = .{ .top = 18 } }, .{});
             ui.text(t("Reseal never sees your password. Signing in happens on Wufour."), .{ .font_size = 12.5, .color = c2.c.text_3, .line_height = 1.5 });
-            ui.end();
-        }
-    }.f);
-}
-
-/// Phones: Wufour's email and password, in the app.
-fn loginForm(cx: Cx) void {
-    gateFrame(cx, struct {
-        fn f(c2: Cx) void {
-            const ui = c2.ui;
-            const s = c2.s;
-            ui.begin(.{ .padding = .{ .bottom = 22 } }, .{});
-            logo(c2, 64);
-            ui.end();
-            ui.text(t("Welcome to Reseal"), .{ .font_size = 32, .weight = 800, .color = c2.c.text });
-            ui.begin(.{ .padding = .{ .top = 10, .bottom = 26 } }, .{});
-            ui.text(t("Sign in with your Wufour account. Your chats are encrypted on your devices automatically."), .{ .font_size = 15, .color = c2.c.text_2, .line_height = 1.6 });
-            ui.end();
-            ui_kit.field(c2, .login_email, .{ .label = t("Email"), .placeholder = "name@example.com" });
-            ui_kit.field(c2, .login_password, .{ .label = t("Password"), .placeholder = t("Password"), .err = if (s.login_error.get().len > 0) s.login_error.get() else null });
-            ui_kit.button(c2, t("Sign in"), .login, .{ .large = true, .block = true, .busy = s.busy });
-            ui.begin(.{ .padding = .{ .top = 18 } }, .{});
-            ui.text(t("Signing in happens on Wufour. Reseal never stores your password."), .{ .font_size = 12.5, .color = c2.c.text_3, .line_height = 1.5 });
             ui.end();
         }
     }.f);

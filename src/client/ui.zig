@@ -289,7 +289,7 @@ pub const FieldOpts = struct {
 /// Fields whose text is hidden (passwords, passcodes, chat lock codes).
 fn isSecret(f: app.Field) bool {
     return switch (f) {
-        .login_password, .passcode, .passcode_2, .passcode_3, .lock_code, .lock_code_2, .lock_current => true,
+        .passcode, .passcode_2, .passcode_3, .lock_code, .lock_code_2, .lock_current => true,
         else => false,
     };
 }
@@ -308,7 +308,7 @@ pub fn field(cx: Cx, comptime f: app.Field, o: FieldOpts) void {
         .on_change = app.onField(f),
         .on_submit = o.submit orelse .{ .submit = f },
         .secure = comptime isSecret(f),
-        .keyboard = if (f == .login_email) .email else .text,
+        .keyboard = .text,
         .multiline = o.multiline,
         .style = .{ .width = .fill, .font_size = 15, .color = c.text, .mono = o.mono, .max_height = if (o.multiline) 160 else std.math.inf(f32) },
     });
