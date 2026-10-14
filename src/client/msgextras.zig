@@ -295,7 +295,7 @@ pub fn bottomButton(cx: Cx, c: *const data.Chat) void {
     if (c.meInt("mentions") > 0) {
         const up: f32 = if (s.extras.at_bottom) 0 else 56;
         cx.ui.begin(.{ .position = .absolute, .inset = .{ .bottom = (if (cx.phone) @as(f32, 80) else 96) + up, .end = if (cx.phone) 14 else 26 } }, .{ .key = key(.{"next-mention"}) });
-        cx.ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 23, .background = cx.c.surface, .border_width = 1, .border_color = cx.c.border, .shadow = .{ .y = 2, .blur = 10 }, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = msg(.next_mention) });
+        cx.ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 23, .background = cx.c.surface, .border_width = 1, .border_color = cx.c.border, .shadow = .{ .y = 2, .blur = 10 }, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = msg(.next_mention), .label = t("Next mention") });
         cx.ui.icon(icons.at, 22, cx.c.accent, .{}, 0);
         cx.ui.end();
         cx.ui.end();
@@ -305,7 +305,7 @@ pub fn bottomButton(cx: Cx, c: *const data.Chat) void {
     if (s.extras.at_bottom and !newer) return;
     const ui = cx.ui;
     ui.begin(.{ .position = .absolute, .inset = .{ .bottom = if (cx.phone) 80 else 96, .end = if (cx.phone) 14 else 26 } }, .{ .key = key(.{"to-bottom"}) });
-    ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 23, .background = cx.c.surface, .border_width = 1, .border_color = cx.c.border, .shadow = .{ .y = 2, .blur = 10 }, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = msg(.to_bottom) });
+    ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 23, .background = cx.c.surface, .border_width = 1, .border_color = cx.c.border, .shadow = .{ .y = 2, .blur = 10 }, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = msg(.to_bottom), .label = t("Scroll to bottom") });
     ui.icon(icons.arrowDown, 22, cx.c.text_2, .{}, 0);
     ui.end();
     const unread = c.unread();

@@ -917,7 +917,7 @@ fn composer(cx: Cx, c: *const data.Chat) void {
         const recording = s.voice.recording;
         const options: ?Msg = if (mic) Msg{ .voice = .toggle_mode } else if (!s.editing.isSet()) Msg{ .compose = .{ .open = .options } } else null;
         const press: Msg = if (recording) .{ .voice = .finish } else if (mic) .{ .voice = .record } else .send_text;
-        ui.begin(.{ .width = .{ .px = 50 }, .height = .{ .px = 50 }, .radius = 17, .background = if (recording) col.danger else col.brand, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = press, .on_long_press = if (recording) null else options, .on_context = if (recording) null else options });
+        ui.begin(.{ .width = .{ .px = 50 }, .height = .{ .px = 50 }, .radius = 17, .background = if (recording) col.danger else col.brand, .align_items = .center, .justify = .center, .pressed_opacity = 0.85 }, .{ .on_press = press, .on_long_press = if (recording) null else options, .on_context = if (recording) null else options, .label = if (recording or !mic) (if (s.editing.isSet()) t("Save") else t("Send")) else if (s.voice.mode == .round) t("Record video message") else t("Record voice message") });
         ui.icon(if (s.editing.isSet()) icons.check else if (mic and !recording) @import("voice.zig").micIcon(s) else if (s.lang == .ar) icons.send_rtl else icons.send, 22, col.on_accent, .{}, 0);
         ui.end();
         ui.end();

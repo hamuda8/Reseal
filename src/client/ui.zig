@@ -134,14 +134,34 @@ pub fn button(cx: Cx, label: []const u8, msg: Msg, o: ButtonOpts) void {
     ui.end();
 }
 
-pub const IconButtonOpts = struct { size: f32 = 40, soft: bool = false, active: bool = false, color: ?Color = null, background: ?Color = null, icon_size: f32 = 22, rtl: ?Icon = null };
+pub const IconButtonOpts = struct { label: ?[]const u8 = null, size: f32 = 40, soft: bool = false, active: bool = false, color: ?Color = null, background: ?Color = null, icon_size: f32 = 22, rtl: ?Icon = null };
+
+/// What an icon-only button does, for screen readers, the web's tooltip and a long press on
+/// the phones (zui box labels).
+fn labelOf(ic: Icon) []const u8 {
+    const names = .{
+        .{ "close", "Close" },              .{ "back", "Back" },                 .{ "plus", "Add" },
+        .{ "minus", "Remove" },             .{ "trash", "Delete" },              .{ "phone", "Call" },
+        .{ "edit", "Edit" },                .{ "copy", "Copy" },                .{ "video", "Video call" },
+        .{ "userPlus", "Add contact" },     .{ "smile", "Emoji" },               .{ "search", "Search" },
+        .{ "moreH", "More" },               .{ "more", "More" },                 .{ "minimize", "Minimize" },
+        .{ "forward", "Forward" },          .{ "compose", "New" },               .{ "chat", "Open chat" },
+        .{ "attach", "Attach" },            .{ "download", "Download" },         .{ "reply", "Reply" },
+        .{ "chevronLeft", "Previous" },     .{ "chevronRight", "Next" },         .{ "arrowDown", "Scroll to bottom" },
+        .{ "mic", "Record voice message" }, .{ "send", "Send" },                 .{ "at", "Next mention" },
+    };
+    inline for (names) |n| {
+        if (ic.paths.ptr == @field(icons, n[0]).paths.ptr) return zui.i18n.t(n[1]);
+    }
+    return "";
+}
 
 pub fn iconButton(cx: Cx, ic: Icon, msg: ?Msg, o: IconButtonOpts) void {
     const ui = cx.ui;
     const c = cx.c;
     const bg = o.background orelse if (o.active) c.accent_soft else if (o.soft) c.surface_2 else null;
     const fg = o.color orelse if (o.active) c.accent else if (o.soft) c.text else c.text_2;
-    ui.begin(.{ .width = .{ .px = o.size }, .height = .{ .px = o.size }, .radius = if (o.size >= 48) 16 else if (o.size <= 32) 10 else 13, .background = bg, .align_items = .center, .justify = .center, .pressed_background = c.active }, .{ .on_press = msg });
+    ui.begin(.{ .width = .{ .px = o.size }, .height = .{ .px = o.size }, .radius = if (o.size >= 48) 16 else if (o.size <= 32) 10 else 13, .background = bg, .align_items = .center, .justify = .center, .pressed_background = c.active }, .{ .on_press = msg, .label = o.label orelse labelOf(ic) });
     // Arrows point the other way in right-to-left languages.
     ui.icon(if (cx.s.lang == .ar) o.rtl orelse ic else ic, o.icon_size, fg, .{}, 0);
     ui.end();

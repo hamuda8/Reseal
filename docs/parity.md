@@ -16,7 +16,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] M18 Window title '(N) Reseal' and the installed-app badge on the web
 - [x] M23 Web: the 'Turn on notifications to know when messages arrive.' toast (phones register push by themselves)
 - [x] M20 Keyboard (zui keyEvent, zig-core d79cf35): Esc (menus, viewer, info panel, pane, chat, reply/edit), Alt+Up/Down (previous/next chat), Up in an empty composer edits the last message, arrows in the viewer; Ctrl/Cmd+Shift+F if letters arrive
-- [ ] M26 Labels on icon-only buttons (web tooltips, screen readers, long-press label on phones) with zui box labels (zig-core 418c0ee)
+- [x] M26 Labels on icon-only buttons (web tooltips, screen readers, long-press label on phones) with zui box labels (zig-core 418c0ee)
 
 ## Chat list (chatlist.js)
 - [x] Row: avatar + online dot, type icon, title, lock, mute, time, ticks, preview (Locked chat / typing / Draft / You: / sender), mention and unread badges, pin icon

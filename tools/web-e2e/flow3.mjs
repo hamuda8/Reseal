@@ -61,6 +61,8 @@ try {
     await a.clickText('Bob Haddad');
     await b.clickText('Alice Carter');
     await a.waitText('Ping from Bob');
+    // Icon buttons carry labels (tooltips, screen readers).
+    check('icon buttons are labelled', await a.evaluate(`!![...document.querySelectorAll('[aria-label],[title]')].find(e => (e.getAttribute('aria-label') || e.title) === 'Search')`));
     // Typing
     await a.typeIn('Message', 'Hel');
     check('typing indicator shown to Bob', await b.waitText('typing', 6000));
