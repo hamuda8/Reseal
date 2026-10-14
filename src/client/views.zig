@@ -1167,7 +1167,7 @@ fn connectionPill(cx: Cx) void {
     ui.begin(.{ .position = .absolute, .inset = .{ .top = 10, .start = 0, .end = 0 }, .align_items = .center }, .{});
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .xy(14, 7), .radius = 16, .background = cx.c.toast }, .{});
     ui.spinner(14, Color.white, .{}, zui.key("conn-spin"));
-    ui.text(t("Connecting…"), .{ .font_size = 13.5, .weight = 600, .color = Color.white });
+    ui.text(if (app.env.online) t("Connecting…") else t("Waiting for network…"), .{ .font_size = 13.5, .weight = 600, .color = Color.white });
     ui.end();
     ui.end();
 }

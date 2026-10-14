@@ -12,7 +12,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Routes /c/<id>#seq (message links), /join/<code> (invite sheet, request to join), /@username, /dev
 - [x] Boot failure 'Cannot reach Reseal' / 'Try again'; session expiry to sign-in
 - [x] Connection pill 'Connecting…' after the connection dropped
-- [~] 'Waiting for network…': zui reports no browser online state; the pill says 'Connecting…'
+- [x] 'Waiting for network…' when the device is offline (zui env.online)
 - [x] M18 Window title '(N) Reseal' and the installed-app badge on the web
 - [ ] M23 Web: the 'Turn on notifications to know when messages arrive.' toast (phones register push by themselves)
 - [x] M20 Keyboard (zui keyEvent, zig-core d79cf35): Esc (menus, viewer, info panel, pane, chat, reply/edit), Alt+Up/Down (previous/next chat), Up in an empty composer edits the last message, arrows in the viewer; Ctrl/Cmd+Shift+F if letters arrive
