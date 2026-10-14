@@ -349,6 +349,7 @@ pub const Msg = union(enum) {
     keys: keyboard.Act,
     /// A sound's player events (nothing to do).
     sound: zui.PlayEvent,
+    reload_page,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -865,6 +866,7 @@ fn handle(s: *State, msg: Msg) void {
         .chat_index => |a| chatindex.act(s, a),
         .keys => |a| keyboard.act(s, a),
         .sound => {},
+        .reload_page => post("{\"t\":\"reload\"}"),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),

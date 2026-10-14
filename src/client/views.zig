@@ -228,8 +228,14 @@ pub fn onUi(s: *State, msg: Msg) void {
             app.savePrefs(s);
         },
         .set_lang => |l| {
+            const changed = s.lang != l;
             app.setLang(s, l);
             zui.storage.set("lang", @tagName(l), .{});
+            // As Reseal-js: the web says so and reloads in the new language; the phones switch at once.
+            if (changed and zui.platform == .web and s.mode == .app) {
+                app.toast(s, t("Language changed. Reloading…"));
+                app.fx.after(600, .reload_page);
+            }
         },
         .toggle_pref => |p| {
             switch (p) {

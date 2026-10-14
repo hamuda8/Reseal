@@ -128,7 +128,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Encryption (automatic / advanced protection, passcode change, new recovery key, fingerprint), Security (chat lock, devices, log out)
 - [x] Appearance: theme, accent colour, text size, message corners, send with Enter
 - [x] 'Animations' switch: turns transitions off and on everywhere (zui fx.reduceMotion, zig-core a95cee7); chat rows and poll bars animate
-- [~] Language: switches live, no 'Language changed. Reloading…'
+- [x] Language: 'Language changed. Reloading…' and the web reloads in the new language (settings.js); the phones switch at once
 - [x] Chat folders pane, suggested folders, folder editor
 - [x] Contacts pane, calls history with Call back
 - [x] Sign-in gate, unlock gate, recovery key sheet

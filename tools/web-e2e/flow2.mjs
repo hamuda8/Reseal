@@ -153,6 +153,12 @@ try {
     await p.go(APP);
     await p.waitText('المحادثات');
     await p.shot('42-ar-phone-list');
+    // Back to English from Settings: the web says so and reloads (settings.js).
+    await p.clickText('الإعدادات');
+    await p.clickText('اللغة');
+    await p.clickText('English');
+    check('language: changed, reloading', await p.waitText('Language changed. Reloading…', 3000));
+    check('language: reloaded in English', await p.waitText('Chats', 8000));
     t.close();
     p.close();
   }

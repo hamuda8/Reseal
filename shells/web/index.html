@@ -133,6 +133,7 @@
         case 'save': return save(msg.name, msg.url);
         case 'push': return pushSetup(msg.key);
         case 'origins': allowed = Array.isArray(msg.origins) ? msg.origins : []; return;
+        case 'reload': location.reload(); return;
         case 'push-allow': if (pushAllow) pushAllow(); return;
         case 'badge': {
           const n = Number(msg.count) || 0;
