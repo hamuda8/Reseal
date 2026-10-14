@@ -428,7 +428,18 @@ fn savedEdit(cx: Cx, id: Id) void {
     vlist.paneHeader(cx, if (c != null) t("Edit saved chat") else t("New saved chat"), true, false);
     vlist.endHeader(cx);
     padded(cx, "savededit");
-    if (!primary) kit.field(cx, .saved_title, .{ .label = t("Name"), .placeholder = t("For example: Work, Recipes, Ideas") });
+    if (!primary) {
+        kit.field(cx, .saved_title, .{ .label = t("Name"), .placeholder = t("For example: Work, Recipes, Ideas") });
+    } else {
+        // The default saved chat keeps its name (shown, not editable).
+        ui.begin(.{ .gap = 6, .padding = .{ .bottom = 12 } }, .{});
+        ui.text(t("Name"), .{ .font_size = 13.5, .weight = 650, .color = cx.c.text_2 });
+        ui.begin(.{ .padding = .xy(14, 11), .radius = 14, .background = cx.c.surface_2, .opacity = 0.7 }, .{});
+        ui.text(s.store.title(c.?), .{ .font_size = 15, .color = cx.c.text });
+        ui.end();
+        ui.text(t("Your default saved chat keeps its name."), .{ .font_size = 12.5, .color = cx.c.text_3 });
+        ui.end();
+    }
     kit.field(cx, .saved_about, .{ .multiline = true, .label = t("Purpose"), .placeholder = t("What will you keep here?"), .hint = t("Shown under the name, so you remember what goes here.") });
     kit.button(cx, if (c != null) t("Save") else t("Create"), .save_saved, .{ .block = true });
     ui.end();

@@ -806,3 +806,13 @@ test "search everything: an encrypted chat's older history indexed here and sear
     try testing.expect(D.findText("Meet at the harbour") != 0);
     try testing.expect(state().chat_index.complete);
 }
+
+test "saved editor: the default saved chat keeps its name" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"s1\",\"type\":\"saved\",\"primary\":true,\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    D.R.dispatch(.{ .chat_action = .{ .what = .saved_edit, .chat = app.Id.of("s1") } });
+    try testing.expect(D.findText("Your default saved chat keeps its name.") != 0);
+}

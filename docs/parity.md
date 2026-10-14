@@ -27,7 +27,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] Delete chat / group / saved chat, Clear saved, Leave dialogs with Reseal-js wording
 - [x] Search: Recent, Chats, Global search, On Wufour, Messages
 - [x] Saved pane: search, new saved chat, hint with fewer than 2 saved chats
-- [ ] M17 Saved editor: the primary chat's name is fixed ('Your default saved chat keeps its name.')
+- [x] M17 Saved editor: the primary chat's name is fixed ('Your default saved chat keeps its name.')
 
 ## Chat view (chatview.js)
 - [x] Header: avatar, title, lock/sparkles, status line by chat type, Call / Video call / group call, Search in chat, More
