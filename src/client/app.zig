@@ -1275,6 +1275,10 @@ fn onHost(s: *State, json: []const u8) void {
             send.onPickedFile(s, v);
             return;
         }
+        if (std.mem.eql(u8, typ, "push-ask")) {
+            if (s.prefs.notifications) listextras.toastPush(s);
+            return;
+        }
         if (std.mem.eql(u8, typ, "rtc")) {
             calls.onRtc(s, v);
             return;

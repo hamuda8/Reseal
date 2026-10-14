@@ -26,6 +26,8 @@ pub const ListExtras = struct {
     /// The chat the toast's Open opens (a reminder).
     open_chat: Id = .{},
     open_toast: u32 = 0,
+    /// The toast that offers notifications (web).
+    push_toast: u32 = 0,
 };
 
 pub const Act = union(enum) {
@@ -33,6 +35,7 @@ pub const Act = union(enum) {
     mark_all_read,
     undo_archive,
     open_toast_chat,
+    push_allow,
 };
 
 pub fn chipMsg(f: app.Filter) Msg {
@@ -48,6 +51,11 @@ pub fn act(s: *State, a: Act) void {
         .mark_all_read => {
             s.modal = null;
             markAllRead(s, s.listx.chip);
+        },
+        .push_allow => {
+            s.listx.push_toast = 0;
+            s.toast.text.clear();
+            app.post("{\"t\":\"push-allow\"}");
         },
         .open_toast_chat => {
             const chat = s.listx.open_chat;
@@ -78,10 +86,17 @@ pub fn toastOpen(s: *State, text: []const u8, chat: Id) void {
     s.listx.open_toast = s.toast.id;
 }
 
+/// The web asks once whether to turn notifications on (main.js push prompt).
+pub fn toastPush(s: *State) void {
+    app.toast(s, t("Turn on notifications to know when messages arrive."));
+    s.listx.push_toast = s.toast.id;
+}
+
 /// The toast's action, when it has one.
 pub fn toastAction(s: *const State) ?struct { label: []const u8, msg: Msg } {
     if (s.listx.undo_archive.isSet() and s.listx.undo_toast == s.toast.id) return .{ .label = t("Undo"), .msg = .{ .list_extras = .undo_archive } };
     if (s.listx.open_chat.isSet() and s.listx.open_toast == s.toast.id) return .{ .label = t("Open"), .msg = .{ .list_extras = .open_toast_chat } };
+    if (s.listx.push_toast != 0 and s.listx.push_toast == s.toast.id) return .{ .label = t("Turn on"), .msg = .{ .list_extras = .push_allow } };
     return null;
 }
 

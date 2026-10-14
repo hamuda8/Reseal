@@ -840,3 +840,15 @@ test "keyboard: Esc closes what is on top, Alt+Down opens the next chat, Up edit
     try testing.expect(D.key(.{ .key = .escape }));
     try testing.expect(!state().open_chat.isSet());
 }
+
+test "web push prompt: the shell asks, the toast's Turn on tells it to" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[]}"));
+    D.R.hostMessage("{\"t\":\"push-ask\"}");
+    try testing.expectEqualStrings("Turn on notifications to know when messages arrive.", state().toast.text.get());
+    try D.press("Turn on");
+    try testing.expect(std.mem.indexOf(u8, host.posted.items, "push-allow") != null);
+}

@@ -103,6 +103,7 @@
     }
 
     // ---- Web Push: subscribe this browser once notifications are allowed ----
+    let pushAllow = null;
     async function pushSetup(key) {
       if (!('serviceWorker' in navigator) || !('PushManager' in window) || !key) return;
       const subscribe = async () => {
@@ -117,8 +118,9 @@
       };
       if (Notification.permission === 'granted') return subscribe().catch(() => {});
       if (Notification.permission === 'default') {
-        // Browsers want a tap before asking.
-        addEventListener('pointerdown', () => Notification.requestPermission().then(subscribe).catch(() => {}), { once: true });
+        // After a while the app offers 'Turn on' (main.js); its tap is the one browsers want before asking.
+        pushAllow = () => Notification.requestPermission().then(subscribe).catch(() => {});
+        setTimeout(() => send({ t: 'push-ask' }), 8000);
       }
     }
 
@@ -131,6 +133,7 @@
         case 'save': return save(msg.name, msg.url);
         case 'push': return pushSetup(msg.key);
         case 'origins': allowed = Array.isArray(msg.origins) ? msg.origins : []; return;
+        case 'push-allow': if (pushAllow) pushAllow(); return;
         case 'badge': {
           const n = Number(msg.count) || 0;
           document.title = n > 0 ? `(${n > 99 ? '99+' : n}) Reseal` : 'Reseal';
