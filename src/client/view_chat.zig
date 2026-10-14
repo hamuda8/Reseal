@@ -825,6 +825,7 @@ pub fn menu(cx: Cx, kind: app.MenuKind, target: Id, item: Id) void {
         .slow_mode => vgroup.slowModeMenu(cx),
         .reactions_setting => vgroup.reactionsMenu(cx),
         .folder_pick => @import("folders.zig").pickSheet(cx, target),
+        .ttl => @import("chatmore.zig").ttlSheet(cx, target),
         .embed, .call_devices => {},
     }
 }
@@ -868,6 +869,7 @@ fn chatMenu(cx: Cx, target: Id) void {
     }
     views.menuItem(cx, if (unread) icons.checks else icons.chat, if (unread) t("Mark as read") else t("Mark as unread"), act(if (unread) .mark_read else .mark_unread, id), false);
     if (s.mode == .app) views.menuItem(cx, icons.folder, t("Add to folder"), act(.add_to_folder, id), false);
+    @import("chatmore.zig").menuItems(cx, c);
     if (s.mode == .app and !c.o.b("protectedContent")) views.menuItem(cx, icons.download, t("Export chat"), act(.export_chat, id), false);
     if (s.mode == .app) views.menuItem(cx, if (c.meBool("locked")) icons.unlock else icons.lock, if (c.meBool("locked")) t("Remove lock") else t("Lock chat"), act(if (c.meBool("locked")) .unlock else .lock, id), false);
     if (c.is("saved")) views.menuItem(cx, icons.edit, t("Edit"), act(.saved_edit, id), false);
@@ -875,7 +877,7 @@ fn chatMenu(cx: Cx, target: Id) void {
         if (s.store.peer(c)) |p| {
             if (!p.b("isContact")) views.menuItem(cx, icons.userPlus, t("Add to contacts"), act(.add_contact, id), false);
             if (c.encrypted() and p.get("keys") != null) views.menuItem(cx, icons.shieldCheck, t("Verify safety number"), act(.show_safety, id), false);
-            views.menuItem(cx, icons.alertCircle, if (p.b("blocked")) t("Unblock") else t("Block user"), act(if (p.b("blocked")) .unblock else .block, id), p.b("blocked") == false);
+            views.menuItem(cx, icons.alertCircle, if (p.b("blocked")) t("Unblock user") else t("Block user"), act(if (p.b("blocked")) .unblock else .block, id), p.b("blocked") == false);
         }
     }
     if (!c.is("saved") and !c.is("channel")) views.menuItem(cx, icons.trash, t("Clear history"), act(.clear, id), true);

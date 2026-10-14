@@ -167,6 +167,18 @@ test "new group: pick people, name it, create" {
     try testing.expect(std.mem.indexOf(u8, body, "\"title\":\"Launch crew\"") != null);
 }
 
+/// Answers the oldest pending `method` request whose URL ends with `suffix`.
+fn respondMethod(method: []const u8, suffix: []const u8, status: u16, body: []const u8) bool {
+    for (host.fetches.items, 0..) |f, i| {
+        if (!std.mem.endsWith(u8, f.url, suffix) or !std.mem.eql(u8, f.method, method)) continue;
+        const id = f.id;
+        _ = host.fetches.orderedRemove(i);
+        D.R.fetchDone(id, status, body);
+        return true;
+    }
+    return false;
+}
+
 fn lastPost(suffix: []const u8) []const u8 {
     var body: []const u8 = "";
     for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, suffix) and std.mem.eql(u8, f.method, "POST")) {
@@ -448,4 +460,29 @@ test "drafts: kept when leaving a chat, synced, shown in the list, restored" {
     try testing.expectEqualStrings("", state().fields.get(.composer).get());
     try D.press("Launch crew");
     try testing.expectEqualStrings("half a thought", state().fields.get(.composer).get());
+}
+
+test "chat menu: auto-delete, scheduled messages, select messages" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    try testing.expect(D.respond("/chats/g1/messages", 200, "{\"messages\":[],\"floor\":0}"));
+    D.R.dispatch(.{ .menu = .{ .menu = .{ .kind = .chat_header, .target = app.Id.of("g1") } } });
+    try testing.expect(D.findText("Scheduled messages") != 0);
+    try testing.expect(D.findText("Select messages") != 0);
+    try D.press("Auto-delete messages");
+    try D.press("1 day");
+    var body: []const u8 = "";
+    for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, "/chats/g1") and std.mem.eql(u8, f.method, "PATCH")) {
+        body = f.body;
+    };
+    try testing.expectEqualStrings("{\"ttl\":86400}", body);
+    try testing.expect(respondMethod("PATCH", "/chats/g1", 200, "{\"chat\":{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"ttl\":86400,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}}"));
+    D.R.dispatch(.{ .menu = .{ .menu = .{ .kind = .chat_header, .target = app.Id.of("g1") } } });
+    try testing.expect(D.findText("Auto-delete: 1 day") != 0);
+    try D.press("Select messages");
+    try testing.expect(state().selecting);
 }

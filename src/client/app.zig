@@ -33,6 +33,7 @@ pub const voice = @import("voice.zig");
 pub const profile = @import("profile.zig");
 pub const drafts = @import("drafts.zig");
 pub const extras = @import("msgextras.zig");
+pub const chatmore = @import("chatmore.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -202,7 +203,7 @@ pub const Pane = union(enum) {
 
 pub const Picker = enum { new_message, new_group, add_contact, add_members, block };
 
-pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices, member, slow_mode, reactions_setting, folder_pick };
+pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices, member, slow_mode, reactions_setting, folder_pick, ttl };
 
 pub const ConfirmKind = enum { logout, delete_chat, leave_chat, clear_history, delete_messages, start_fresh, block, unblock, delete_saved, remove_contact, ban_member, transfer_owner, dev_roll, delete_story };
 
@@ -318,6 +319,7 @@ pub const Msg = union(enum) {
     profile_photo: zui.File,
     draft_due: struct { chat: Id, seq: u32 },
     extras: extras.Act,
+    chat_more: chatmore.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -674,6 +676,7 @@ pub const Op = union(enum) {
     draft_saved: Id,
     seen_by,
     jump_lookup,
+    handoff,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -782,6 +785,7 @@ fn handle(s: *State, msg: Msg) void {
         .profile_photo => |f| profile.onPicked(s, f),
         .draft_due => |x| drafts.due(s, x.chat, x.seq),
         .extras => |a| extras.act(s, a),
+        .chat_more => |a| chatmore.act(s, a),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),
@@ -1056,6 +1060,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (profile.onAnswer(s, op, r)) return;
             if (drafts.onAnswer(s, op, r)) return;
             if (extras.onAnswer(s, op, r)) return;
+            if (chatmore.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }
