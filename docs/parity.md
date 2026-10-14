@@ -15,7 +15,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [~] 'Waiting for network…': zui reports no browser online state; the pill says 'Connecting…'
 - [x] M18 Window title '(N) Reseal' and the installed-app badge on the web
 - [ ] M23 Web: the 'Turn on notifications to know when messages arrive.' toast (phones register push by themselves)
-- [ ] M20 Keyboard (zui keyEvent, zig-core d79cf35): Esc (menus, viewer, info panel, pane, chat, reply/edit), Alt+Up/Down (previous/next chat), Up in an empty composer edits the last message, arrows in the viewer; Ctrl/Cmd+Shift+F if letters arrive
+- [x] M20 Keyboard (zui keyEvent, zig-core d79cf35): Esc (menus, viewer, info panel, pane, chat, reply/edit), Alt+Up/Down (previous/next chat), Up in an empty composer edits the last message, arrows in the viewer; Ctrl/Cmd+Shift+F if letters arrive
 - [ ] M26 Labels on icon-only buttons (web tooltips, screen readers, long-press label on phones) with zui box labels (zig-core 418c0ee)
 
 ## Chat list (chatlist.js)

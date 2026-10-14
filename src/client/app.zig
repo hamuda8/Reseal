@@ -44,6 +44,7 @@ pub const attachx = @import("attachx.zig");
 pub const infopanes = @import("infopanes.zig");
 pub const aimd = @import("aimd.zig");
 pub const chatindex = @import("chatindex.zig");
+pub const keyboard = @import("keyboard.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -345,6 +346,7 @@ pub const Msg = union(enum) {
     attach_x: attachx.Act,
     ai: aimd.Act,
     chat_index: chatindex.Act,
+    keys: keyboard.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -428,6 +430,9 @@ pub fn callEvent(e: zui.CallEvent) ?Msg {
 /// Push (push.zig): a call rings the phone at once, also when the app was not running.
 pub const pushToken = push_mod.pushToken;
 pub const pushMessage = push_mod.pushMessage;
+
+/// Esc, Enter, the arrows and Tab from a keyboard (keyboard.zig).
+pub const keyEvent = keyboard.keyEvent;
 
 /// The device came online or went offline, or the app was shown or hidden.
 pub fn deviceEvent(e: zui.DeviceEvent) ?Msg {
@@ -787,6 +792,7 @@ pub fn update(s: *State, msg: Msg, e: zui.Env, f: zui.Fx(Msg)) void {
         fx.after(1000, .frame);
     }
     updateWidget(s);
+    keyboard.remember(s);
     // The page around the widget shows the unread count on its button (embed.js).
     if (s.mode == .embed and s.phase == .ready) {
         const n = s.store.totals().unread;
@@ -846,6 +852,7 @@ fn handle(s: *State, msg: Msg) void {
         .attach_x => |a| attachx.act(s, a),
         .ai => |a| aimd.act(s, a),
         .chat_index => |a| chatindex.act(s, a),
+        .keys => |a| keyboard.act(s, a),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),

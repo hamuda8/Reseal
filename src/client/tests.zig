@@ -816,3 +816,27 @@ test "saved editor: the default saved chat keeps its name" {
     D.R.dispatch(.{ .chat_action = .{ .what = .saved_edit, .chat = app.Id.of("s1") } });
     try testing.expect(D.findText("Your default saved chat keeps its name.") != 0);
 }
+
+test "keyboard: Esc closes what is on top, Alt+Down opens the next chat, Up edits my last message" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try bootAsBob(a);
+    defer D.reset();
+    const me = j.str(vec(a), "bobId").?;
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"lastMessageAt\":\"2026-10-12T14:59:00Z\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}},{\"id\":\"g2\",\"type\":\"group\",\"title\":\"Book club\",\"lastMessageAt\":\"2026-10-12T14:00:00Z\",\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    try D.press("Launch crew");
+    const page = try std.fmt.allocPrint(a, "{{\"messages\":[{{\"id\":\"m1\",\"chatId\":\"g1\",\"seq\":1,\"senderId\":\"{s}\",\"authorId\":\"{s}\",\"kind\":\"message\",\"text\":\"my words\",\"createdAt\":\"2026-10-12T14:59:00Z\"}}],\"floor\":0}}", .{ me, me });
+    try testing.expect(D.respond("/chats/g1/messages", 200, page));
+    try testing.expect(D.key(.{ .key = .up, .in_input = true }));
+    try testing.expect(state().editing.eql("m1"));
+    try testing.expect(D.key(.{ .key = .escape, .in_input = true }));
+    try testing.expect(!state().editing.isSet());
+    D.R.dispatch(.{ .chat_action = .{ .what = .search, .chat = app.Id.of("g1") } });
+    try testing.expect(D.key(.{ .key = .escape }));
+    try testing.expect(state().modal == null);
+    try testing.expect(D.key(.{ .key = .down, .alt = true }));
+    try testing.expect(!state().open_chat.eql("g1"));
+    try testing.expect(D.key(.{ .key = .escape }));
+    try testing.expect(!state().open_chat.isSet());
+}
