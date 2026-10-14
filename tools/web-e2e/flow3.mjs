@@ -53,6 +53,10 @@ const tapMessage = async (t, text) => {
   await t.click(p[0], p[1]);
   // The menu opens once a double tap (a heart) is ruled out.
   await sleep(900);
+  if (!(await t.waitText('Details', 2000))) {
+    console.log('DEBUG tap missed', JSON.stringify(p), JSON.stringify((await t.texts())?.slice(-40)));
+    throw new Error('menu did not open for ' + text);
+  }
 };
 
 try {
