@@ -517,7 +517,7 @@ fn messageAction(s: *State, what: app.MessageAction, msg_id: []const u8) void {
         .forward => @import("fwdpick.zig").open(s, Id.of(msg_id), false),
         .close_poll => app.api(s, .POST, path("/chats/{s}/messages/{s}/close-poll", .{ chat, msg_id }), "{}", .{ .vote = .{ .chat = s.open_chat, .msg = Id.of(msg_id) } }),
         .open_map => if (j.obj(m.content, "location")) |loc| {
-            const base = if (s.store.config) |cfg| cfg.s("mapsUrl") orelse "http://localhost:5005" else "http://localhost:5005";
+            const base = if (s.store.config) |cfg| cfg.s("mapsUrl") orelse "https://maps.wreseal.com" else "https://maps.wreseal.com";
             const a = app.tmp();
             const title = j.str(loc, "title") orelse t("Location");
             app.fx.openUrl(std.fmt.allocPrint(a, "{s}/?q={s}&lat={d}&lng={d}", .{ std.mem.trimEnd(u8, base, "/"), j.urlEncode(a, title) catch "", j.floatOr(loc, "lat", 0), j.floatOr(loc, "lng", 0) }) catch return, true);
