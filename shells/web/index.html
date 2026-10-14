@@ -46,31 +46,45 @@
     const env = (t) => ({ t, seed: b64(crypto.getRandomValues(new Uint8Array(32))), now: Date.now(), tz: -new Date().getTimezoneOffset(), visible: document.visibilityState === 'visible' });
 
     // ---- Files: Attach and Download ----
+    // A file for the app's attach sheet: bytes, and for pictures their size and a tiny preview
+    // (as Reseal-js preparePhoto does).
+    async function sendFile(file) {
+      const data = b64(new Uint8Array(await file.arrayBuffer()));
+      const msg = { t: 'file', name: file.name || 'file', type: file.type || 'application/octet-stream', size: file.size, data };
+      if (/^image\//.test(file.type)) {
+        try {
+          const bmp = await createImageBitmap(file);
+          msg.w = bmp.width; msg.h = bmp.height;
+          const scale = 40 / Math.max(bmp.width, bmp.height);
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
+          c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+          msg.thumb = c.toDataURL('image/jpeg', 0.6);
+        } catch {}
+      }
+      send(msg);
+    }
     async function pick() {
       const input = document.createElement('input');
       input.type = 'file';
       input.multiple = true;
-      input.onchange = async () => {
-        for (const file of input.files) {
-          const data = b64(new Uint8Array(await file.arrayBuffer()));
-          const msg = { t: 'file', name: file.name, type: file.type || 'application/octet-stream', size: file.size, data };
-          // Pictures: size and a tiny preview (as Reseal-js preparePhoto does).
-          if (/^image\//.test(file.type)) {
-            try {
-              const bmp = await createImageBitmap(file);
-              msg.w = bmp.width; msg.h = bmp.height;
-              const scale = 40 / Math.max(bmp.width, bmp.height);
-              const c = document.createElement('canvas');
-              c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
-              c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-              msg.thumb = c.toDataURL('image/jpeg', 0.6);
-            } catch {}
-          }
-          send(msg);
-        }
-      };
+      input.onchange = async () => { for (const file of input.files) await sendFile(file); };
       input.click();
     }
+    // Files dropped on the window or pasted go to the attach sheet too (chatview.js, composer.js).
+    addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
+    addEventListener('drop', async (e) => {
+      const files = [...(e.dataTransfer?.files || [])];
+      if (!files.length) return;
+      e.preventDefault();
+      for (const f of files.slice(0, 10)) await sendFile(f);
+    });
+    addEventListener('paste', async (e) => {
+      const files = [...(e.clipboardData?.files || [])];
+      if (!files.length) return;
+      e.preventDefault();
+      for (const f of files.slice(0, 10)) await sendFile(f);
+    });
     function save(name, url) {
       const a = document.createElement('a');
       // Big data: addresses (decrypted files, chat exports) download as blobs.

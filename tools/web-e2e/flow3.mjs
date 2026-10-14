@@ -184,6 +184,10 @@ try {
     for (let i = 0; i < 40 && !shown; i++) { shown = await b.evaluate(`[...document.querySelectorAll('img')].some(i => (i.src.startsWith('data:image/png') || i.src.startsWith('blob:')) && i.naturalWidth === 64)`); if (!shown) await sleep(250); }
     check('Bob\'s client decrypts and shows the picture', shown);
     await b.shot('110-picture');
+    // A file pasted into the page waits in the attach sheet (the web shell reads it).
+    await a.evaluate(`(() => { const dt = new DataTransfer(); dt.items.add(new File(['notes for the trip'], 'notes.txt', { type: 'text/plain' })); window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true })); })()`);
+    check('a pasted file opens the attach sheet', await a.waitText('Send file', 5000));
+    await a.clickText('Cancel');
   }
 
   if (want('group')) {

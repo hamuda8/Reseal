@@ -55,7 +55,7 @@ Missing items carry an id (M1…) and are worked through in that order.
 - [x] M11 Inline bot buttons (URL buttons open, callback buttons call the server and toast)
 - [x] M12 AI replies: Markdown rendering (headings, lists, tables, code blocks with Copy → 'Code copied') and Stop / Copy / Regenerate
 - [x] Call service messages start a call again
-- [ ] M19 Web: paste and drag-and-drop files into the chat
+- [x] M19 Web: paste and drag-and-drop files into the chat
 - [~] Double-click a message for ❤️: zui has no double-tap gesture (only press, long press, context, hover)
 
 ## Composer (composer.js)
