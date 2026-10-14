@@ -237,10 +237,13 @@ try {
     check('select: two selected', await a.waitText('2 selected', 3000));
     await a.shot('95-selected');
     // The trash button of the selection bar.
-    const btns = await a.evaluate(`[...document.querySelectorAll('[role=button]')].map(b => b.getBoundingClientRect()).filter(r => r.y < 70 && r.x > 900).map(r => [r.x + r.width / 2, r.y + r.height / 2])`);
+    const btns = await a.evaluate(`[...document.querySelectorAll('[role=button]')].map(b => b.getBoundingClientRect()).filter(r => r.y < 70 && r.x > 900).map(r => [r.x + r.width / 2, r.y + r.height / 2]).sort((p, q) => p[0] - q[0])`);
+    console.log('  selection bar buttons', JSON.stringify(btns));
     await a.click(btns.at(-1)[0], btns.at(-1)[1]);
     await sleep(500);
     await a.shot('95c-confirm');
+    // The confirmation (retried once: the first tap can land while the list still scrolls).
+    if (!(await a.waitText('Delete 2 messages?', 3000))) { await a.click(btns.at(-1)[0], btns.at(-1)[1]); await a.waitText('Delete 2 messages?', 3000); }
     await a.clickText('Delete');
     await sleep(1500);
     await a.shot('95d-deleted');
@@ -259,7 +262,7 @@ try {
     await a.waitText('Group info');
     await a.waitText('Carol Nasser');
     await a.shot('96-group-info');
-    const manage = await a.evaluate(`(() => { [...document.querySelectorAll('div')].find(d => d.textContent === 'Carol Nasser' && ![...d.children].some(k => k.tagName === 'DIV')).scrollIntoView({ block: 'center' }); const row = [...document.querySelectorAll('div')].find(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Carol Nasser'); const y = row.getBoundingClientRect().y; const b = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Manage').map(d => d.getBoundingClientRect()).filter(p => p.y > y).sort((p, q) => p.y - q.y)[0]; return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
+    const manage = await a.evaluate(`(() => { const inInfo = (d) => d.getBoundingClientRect().x > 900; const row = [...document.querySelectorAll('div')].find(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Carol Nasser' && inInfo(d)); row.scrollIntoView({ block: 'center' }); const rr = row.getBoundingClientRect(); const y = rr.y + rr.height / 2; const b = [...document.querySelectorAll('div')].filter(d => ![...d.children].some(k => k.tagName === 'DIV') && d.textContent === 'Manage').map(d => d.getBoundingClientRect()).filter(p => p.y + p.height / 2 > y).sort((p, q) => p.y - q.y)[0]; return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
     await a.click(manage[0], manage[1]);
     await sleep(500);
     await a.clickText('Make admin');
@@ -324,7 +327,7 @@ try {
     check('lock: wrong code refused', await a.waitText('That code is not right.', 3000));
     await a.typeIn('Chat lock code', '4321');
     await a.clickText('Unlock');
-    check('lock: right code opens it', await a.waitText('End-to-end encrypted', 5000) && !(await a.hasText('Unlock chat')));
+    check('lock: right code opens it', await a.waitText('Encrypted chat', 5000) && !(await a.hasText('Unlock chat')));
     await a.shot('100-unlocked');
   }
 
@@ -340,8 +343,9 @@ try {
     await a.shot('101-export');
     await a.clickText('Export');
     let file = null;
-    for (let i = 0; i < 40 && !file; i++) { await sleep(250); file = fs.readdirSync(dl).find(f => f.endsWith('.txt')); }
-    const body = file ? fs.readFileSync(path.join(dl, file), 'utf8') : '';
+    for (let i = 0; i < 40 && !file; i++) { await sleep(250); file = fs.readdirSync(dl).find(f => f.endsWith('.txt') || f.endsWith('.zip')); }
+    // With files to include it is a .zip (the text inside, stored), else the .txt itself.
+    const body = file ? fs.readFileSync(path.join(dl, file)).toString('latin1') : '';
     check('export: a text file with the chat', Boolean(file) && body.includes('Plain crew') && (only.size || body.includes('Capital of Jordan?')), file || 'no file');
   }
 
@@ -355,6 +359,7 @@ try {
   }
 } catch (e) {
   check('flow', false, String(e.stack || e));
+  console.log(a.logs.slice(-25).join('\n'));
 }
 console.log(a.logs.filter(l => /EXCEPTION|NET 5/.test(l)).join('\n'));
 fs.writeFileSync(`${out}/results.txt`, results.join('\n') + '\n');
