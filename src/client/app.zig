@@ -35,6 +35,7 @@ pub const drafts = @import("drafts.zig");
 pub const extras = @import("msgextras.zig");
 pub const chatmore = @import("chatmore.zig");
 pub const fwdpick = @import("fwdpick.zig");
+pub const listextras = @import("listextras.zig");
 const push_mod = @import("push.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
@@ -205,7 +206,7 @@ pub const Pane = union(enum) {
 
 pub const Picker = enum { new_message, new_group, add_contact, add_members, block };
 
-pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices, member, slow_mode, reactions_setting, folder_pick, ttl };
+pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices, member, slow_mode, reactions_setting, folder_pick, ttl, chip };
 
 pub const ConfirmKind = enum { logout, delete_chat, leave_chat, clear_history, delete_messages, start_fresh, block, unblock, delete_saved, remove_contact, ban_member, transfer_owner, dev_roll, delete_story };
 
@@ -323,6 +324,7 @@ pub const Msg = union(enum) {
     extras: extras.Act,
     chat_more: chatmore.Act,
     fwd_pick: fwdpick.Act,
+    list_extras: listextras.Act,
     scroll_end: bool,
     record_event: zui.RecordEvent,
     play_event: zui.PlayEvent,
@@ -524,6 +526,7 @@ pub const State = struct {
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
     fwd: fwdpick.Pick = .{},
+    listx: listextras.ListExtras = .{},
     /// Messages whose spoilers were shown.
     revealed: std.ArrayList(Id) = .empty,
     /// Opened at /c/<id> or /@name: the chat to show once the list is in.
@@ -791,6 +794,7 @@ fn handle(s: *State, msg: Msg) void {
         .extras => |a| extras.act(s, a),
         .chat_more => |a| chatmore.act(s, a),
         .fwd_pick => |a| fwdpick.act(s, a),
+        .list_extras => |a| listextras.act(s, a),
         .scroll_end => |at| extras.onScroll(s, at),
         .record_event => |e| voice.onRecordEvent(s, e),
         .play_event => |e| voice.onPlayEvent(s, e),

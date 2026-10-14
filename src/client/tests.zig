@@ -508,3 +508,23 @@ test "forward: one message to two chats, from the chat picker" {
     try testing.expect(std.mem.indexOf(u8, lastPost("/chats/g3/messages"), "\"messageId\":\"m1\"") != null);
     try testing.expectEqualStrings("Forwarded to 2 chats", state().toast.text.get());
 }
+
+test "chat list: mark all as read from a chip, undo archiving" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    try bootAsBob(arena.allocator());
+    defer D.reset();
+    try testing.expect(D.respond("/api/chats", 200, "{\"chats\":[{\"id\":\"g1\",\"type\":\"group\",\"title\":\"Launch crew\",\"seq\":4,\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":3}},{\"id\":\"g2\",\"type\":\"group\",\"title\":\"Book club\",\"seq\":2,\"encrypted\":false,\"me\":{\"role\":\"owner\",\"status\":\"active\",\"unread\":0}}]}"));
+    D.R.dispatch(.{ .list_extras = .{ .chip_menu = .all } });
+    try D.press("Mark all as read");
+    try testing.expectEqualStrings("{\"chatIds\":[\"g1\"]}", lastPost("/chats/read-all"));
+    try testing.expectEqual(@as(i64, 0), state().store.chat("g1").?.unread());
+    D.R.dispatch(.{ .chat_action = .{ .what = .archive, .chat = app.Id.of("g2") } });
+    try testing.expect(D.findText("Undo") != 0);
+    try D.press("Undo");
+    var unarchived = false;
+    for (host.fetches.items) |f| if (std.mem.endsWith(u8, f.url, "/chats/g2/state") and std.mem.indexOf(u8, f.body, "\"archived\":false") != null) {
+        unarchived = true;
+    };
+    try testing.expect(unarchived);
+}

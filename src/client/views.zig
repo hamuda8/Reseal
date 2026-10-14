@@ -362,7 +362,7 @@ fn chatAction(s: *State, what: app.ChatAction, chat: []const u8) void {
         .unpin => setChatState(s, chat, "{\"pinned\":false}"),
         .archive => {
             setChatState(s, chat, "{\"archived\":true}");
-            app.toast(s, t("Chat archived"));
+            @import("listextras.zig").archived(s, Id.of(chat));
         },
         .unarchive => setChatState(s, chat, "{\"archived\":false}"),
         .mute => s.modal = .{ .menu = .{ .kind = .mute, .target = Id.of(chat) } },
@@ -1149,6 +1149,11 @@ fn toastView(cx: Cx) void {
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .padding = .xy(18, 12), .min_height = 50, .radius = 16, .background = cx.c.toast, .max_width = 560 }, .{ .on_press = .{ .toast_hide = cx.s.toast.id } });
     ui.icon(if (cx.s.toast.err) icons.alertCircle else icons.info, 20, if (cx.s.toast.err) Color.hex("#ff8a9b") else Color.hex("#a9a0ff"), .{}, 0);
     ui.text(cx.s.toast.text.get(), .{ .font_size = 14.5, .weight = 500, .color = Color.white });
+    if (@import("listextras.zig").toastAction(cx.s)) |x| {
+        ui.begin(.{ .padding = .xy(10, 6), .radius = 10, .pressed_opacity = 0.7 }, .{ .on_press = x.msg, .key = zui.key("toast-action") });
+        ui.text(x.label, .{ .font_size = 14.5, .weight = 750, .color = Color.hex("#a9a0ff") });
+        ui.end();
+    }
     ui.end();
     ui.end();
 }

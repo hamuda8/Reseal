@@ -346,7 +346,7 @@ pub fn chatItem(cx: Cx, c: *const data.Chat, msg: Msg) void {
 // ---------------------------------------------------------------------------------------------
 // Chats pane
 
-fn matchesFilter(s: *const app.State, c: *const data.Chat, f: app.Filter) bool {
+pub fn matchesFilter(s: *const app.State, c: *const data.Chat, f: app.Filter) bool {
     return switch (f) {
         .all => true,
         .unread => c.unread() > 0 or c.meBool("markedUnread"),
@@ -419,7 +419,9 @@ pub fn visibleChats(cx: Cx, archived: bool) []*data.Chat {
 fn chip(cx: Cx, label: []const u8, n: i64, active: bool, msg: Msg) void {
     const ui = cx.ui;
     const c = cx.c;
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .height = .{ .px = 32 }, .padding = .xy(13, 0), .radius = 11, .background = if (active) c.text else c.surface_2 }, .{ .on_press = msg, .key = key(.{ "chip", label }) });
+    // Long press or right click: "Mark all as read" for the chats it shows.
+    const menu: ?Msg = if (msg == .filter) @import("listextras.zig").chipMsg(msg.filter) else null;
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .height = .{ .px = 32 }, .padding = .xy(13, 0), .radius = 11, .background = if (active) c.text else c.surface_2 }, .{ .on_press = msg, .on_long_press = menu, .on_context = menu, .key = key(.{ "chip", label }) });
     ui.text(label, .{ .font_size = 13.5, .weight = 650, .color = if (active) c.surface else c.text_2, .max_lines = 1 });
     if (n > 0) {
         ui.begin(.{ .min_width = 18, .height = .{ .px = 18 }, .padding = .xy(5, 0), .radius = 6, .background = if (active) c.surface else c.accent, .align_items = .center, .justify = .center }, .{});
