@@ -37,6 +37,8 @@ pub const Peer = struct {
     remote: u32 = 0,
     remote_video: bool = false,
     connected: bool = false,
+    /// Was connected, then the connection dropped ("Reconnecting…").
+    lost: bool = false,
     verified: ?bool = null,
     media: PeerMedia = .{},
     hand: bool = false,
@@ -374,6 +376,7 @@ pub fn onPeerEvent(s: *State, e: zui.PeerEvent) void {
         .state => {
             if (std.mem.eql(u8, e.data, "connected")) {
                 p.connected = true;
+                p.lost = false;
                 if (c.status != .active) {
                     app.fx.callConnected(c.id.str());
                     c.status = .active;
@@ -382,6 +385,7 @@ pub fn onPeerEvent(s: *State, e: zui.PeerEvent) void {
                     if (c.started_at == 0 and zui.platform != .web) c.started_at = sys.now();
                 }
             } else if (std.mem.eql(u8, e.data, "failed") or std.mem.eql(u8, e.data, "disconnected")) {
+                if (p.connected) p.lost = true;
                 p.connected = false;
             }
         },
@@ -525,7 +529,7 @@ pub fn statusText(s: *const State) []const u8 {
         .ringing => if (c.outgoing) t("Ringing…") else t("Connecting…"),
         .connecting => t("Connecting…"),
         .ended, .unavailable => c.reason.get(),
-        .active => if (!c.group and c.peers.items.len > 0 and !c.peers.items[0].connected) t("Reconnecting…") else activeText(c),
+        .active => if (!c.group and c.peers.items.len > 0 and c.peers.items[0].lost) t("Reconnecting…") else activeText(c),
         .idle => "",
     };
 }
