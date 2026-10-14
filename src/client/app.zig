@@ -28,6 +28,7 @@ pub const chatlock = @import("chatlock.zig");
 pub const exporter = @import("export.zig");
 pub const bots = @import("bots.zig");
 pub const dev = @import("dev.zig");
+pub const stories = @import("stories.zig");
 /// The calls engine on Android and iOS (the web uses the browser's WebRTC).
 pub const rtc = @import("reseal_rtc").zui_engine;
 
@@ -155,6 +156,9 @@ pub const Field = enum {
     dev_agent_id,
     dev_agent_name,
     dev_delete_confirm,
+    story_text,
+    story_caption,
+    story_reply,
 };
 
 pub fn onField(comptime f: Field) *const fn ([]const u8) Msg {
@@ -194,7 +198,7 @@ pub const Picker = enum { new_message, new_group, add_contact, add_members, bloc
 
 pub const MenuKind = enum { compose, chat_header, chat_row, mute, message, embed, call_devices, member, slow_mode, reactions_setting, folder_pick };
 
-pub const ConfirmKind = enum { logout, delete_chat, leave_chat, clear_history, delete_messages, start_fresh, block, unblock, delete_saved, remove_contact, ban_member, transfer_owner, dev_roll };
+pub const ConfirmKind = enum { logout, delete_chat, leave_chat, clear_history, delete_messages, start_fresh, block, unblock, delete_saved, remove_contact, ban_member, transfer_owner, dev_roll, delete_story };
 
 pub const Modal = union(enum) {
     menu: struct { kind: MenuKind, target: Id = .{}, item: Id = .{} },
@@ -224,6 +228,12 @@ pub const Modal = union(enum) {
     dev_agent,
     dev_payload,
     dev_delete,
+    story_views,
+    story_menu,
+    story_kind,
+    story_compose,
+    story_people,
+    story_list,
 };
 
 pub const Msg = union(enum) {
@@ -288,6 +298,9 @@ pub const Msg = union(enum) {
     export_chat: exporter.Act,
     bots: bots.Act,
     dev: dev.Act,
+    stories: stories.Act,
+    story_photo: zui.File,
+    story_play: zui.PlayEvent,
     located: zui.Location,
     cancel_reply,
     message_tap: Id,
@@ -470,6 +483,7 @@ pub const State = struct {
     exporter: exporter.Export = .{},
     bots: bots.Bots = .{},
     dev: dev.Dev = .{},
+    stories: stories.Stories = .{},
     /// Selection mode in the open chat (forward or delete several).
     selecting: bool = false,
     selected: std.ArrayList(Id) = .empty,
@@ -609,6 +623,17 @@ pub const Op = union(enum) {
     dev_webhook_tested,
     dev_signing_secret,
     dev_deleted,
+    stories_feed,
+    stories_list,
+    stories_audience,
+    stories_views,
+    stories_upload_create,
+    stories_upload_chunk: u32,
+    stories_upload_complete,
+    stories_posted,
+    stories_pinned: bool,
+    stories_deleted,
+    stories_reply_chat,
     scheduled_list,
     scheduled_changed,
     ignore,
@@ -708,7 +733,9 @@ fn handle(s: *State, msg: Msg) void {
         .typing_check => sync.expireTyping(s),
         .read_flush => |chat| sync.flushRead(s, chat),
         .fulfill_due => keys.fulfillDue(s),
-        .key => |r| keys.onKey(s, r),
+        .key => |r| if (!stories.onKey(s, r)) keys.onKey(s, r),
+        .story_photo => |f| stories.onPicked(s, f),
+        .story_play => |e| stories.onPlayEvent(s, e),
         .toast_hide => |id| if (id == s.toast.id) s.toast.text.clear(),
         .embed_init_timeout => embedInitDone(s, null),
         .send_typing_done => {},
@@ -913,6 +940,7 @@ pub fn keysReady(s: *State) void {
     s.phase = .ready;
     api(s, .GET, "/chats", null, .chats);
     api(s, .GET, "/folders", null, .folders);
+    stories.load(s);
     connect(s);
     // Web Push (the shell subscribes this browser once notifications are allowed).
     if (zui.platform == .web and s.mode == .app) if (s.store.config) |cfg| if (cfg.s("push.vapidPublicKey")) |k|
@@ -972,6 +1000,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             if (exporter.onAnswer(s, op, r)) return;
             if (bots.onAnswer(s, op, r)) return;
             if (dev.onAnswer(s, op, r)) return;
+            if (stories.onAnswer(s, op, r)) return;
             views.onAnswer(s, op, r);
         },
     }

@@ -141,6 +141,7 @@ pub fn onUi(s: *State, msg: Msg) void {
         .export_chat => |a| @import("export.zig").act(s, a),
         .bots => |a| @import("bots.zig").act(s, a),
         .dev => |a| @import("dev.zig").act(s, a),
+        .stories => |a| @import("stories.zig").act(s, a),
         .located => |l| compose.onLocation(s, l),
         .cancel_reply => {
             if (s.editing.isSet()) s.fields.getPtr(.composer).clear();
@@ -443,6 +444,7 @@ fn confirm(s: *State) void {
         .remove_contact => app.api(s, .DELETE, path("/contacts/{s}", .{chat}), null, .contact_remove),
         .ban_member, .transfer_owner => group.confirmed(s, x.kind, x.target, x.item),
         .dev_roll => @import("dev.zig").confirmed(s),
+        .delete_story => @import("stories.zig").confirmed(s),
     }
 }
 
@@ -913,6 +915,7 @@ pub fn colorsFor(s: *const State, env_dark: bool) theme.Colors {
 fn backMsg(s: *const State, phone: bool) ?Msg {
     if (s.phase != .ready) return null;
     if (s.modal != null) return .close_modal;
+    if (s.stories.viewer != null) return .{ .stories = .close };
     if (s.viewer != null) return .close_viewer;
     if (s.selecting) return .select_cancel;
     if (s.info.isSet() or s.user_info.isSet()) {
@@ -945,6 +948,7 @@ pub fn root(s: *const State, ui: *ui_kit.Ui) void {
     if (s.phase == .ready) {
         vcall.overlay(cx);
         if (s.viewer != null) vchat.viewer(cx);
+        if (s.stories.viewer != null) @import("stories.zig").viewer(cx);
     }
     if (s.modal != null) modal(cx);
     if (s.toast.text.get().len > 0) toastView(cx);
@@ -1186,6 +1190,12 @@ fn modal(cx: Cx) void {
         .dev_agent => @import("dev.zig").agentSheet(cx),
         .dev_payload => @import("dev.zig").payloadSheet(cx),
         .dev_delete => @import("dev.zig").deleteSheet(cx),
+        .story_views => @import("stories.zig").viewsSheet(cx),
+        .story_menu => @import("stories.zig").menuSheet(cx),
+        .story_kind => @import("stories.zig").kindSheet(cx),
+        .story_compose => @import("stories.zig").composer(cx),
+        .story_people => @import("stories.zig").peopleSheet(cx),
+        .story_list => @import("stories.zig").listSheet(cx),
     }
 }
 
@@ -1253,6 +1263,9 @@ fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id, target_item: Id) void 
             title = fmt.tf("Ban {name}?", .{ .name = who });
             text = t("They will be removed and cannot rejoin.");
             action = t("Ban");
+        },
+        .delete_story => {
+            title = t("Delete this glimpse?");
         },
         .dev_roll => {
             title = t("Roll the secret key?");

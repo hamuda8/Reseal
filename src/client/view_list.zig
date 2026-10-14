@@ -536,6 +536,7 @@ fn chatsPane(cx: Cx) void {
     if (s.searching) {
         searchResults(cx);
     } else {
+        @import("stories.zig").strip(cx);
         if (s.mode != .embed) filterChips(cx);
         chatList(cx);
     }

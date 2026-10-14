@@ -1,4 +1,6 @@
 {
+  "{n} h ago": "قبل {n} س",
+  "{n} min ago": "قبل {n} د",
   "{n} selected|few": "{n} رسائل محددة",
   "{n} selected|many": "{n} رسالة محددة",
   "{n} selected|one": "رسالة واحدة محددة",
@@ -47,6 +49,7 @@
   "Find people": "ابحث عن أشخاص",
   "Flip": "تبديل",
   "Forwarded": "تمت إعادة التوجيه",
+  "Glimpses of {name}": "لمحات {name}",
   "h": "س",
   "Hide spoiler": "إخفاء النص المخفي",
   "In 3 hours": "بعد 3 ساعات",

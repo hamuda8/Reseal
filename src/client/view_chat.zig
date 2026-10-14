@@ -1076,6 +1076,8 @@ fn userCard(cx: Cx, u: *const data.Obj, c: ?*const data.Chat) void {
         ui.end();
     };
     if (u.s("username")) |un| kit.row(cx, std.fmt.allocPrint(cx.a(), "@{s}", .{un}) catch "", .{ .icon = icons.at, .subtitle = t("Username") });
+    // Glimpses kept on the profile (mine: also the archive).
+    if (s.mode == .app) kit.row(cx, t("Glimpses"), .{ .icon = icons.image, .chevron = true, .on = if (s.store.isMe(u.s("id") orelse "")) .{ .stories = .archive } else .{ .stories = .{ .pinned_of = Id.of(u.s("id") orelse "") } } });
     if (c) |ch| {
         if (ch.encrypted() and u.get("keys") != null) kit.row(cx, t("Verify safety number"), .{ .icon = icons.shieldCheck, .on = .{ .menu = .{ .safety = Id.of(u.s("id") orelse "") } } });
     } else if (!s.store.isMe(u.s("id") orelse "")) {

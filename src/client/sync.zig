@@ -350,6 +350,7 @@ pub fn onEvent(s: *State, typ: []const u8, d: j.Value) void {
         if (s.store.user(j.strOr(d, "userId", ""))) |u| u.set("blocked", data.boolean(j.truthy(d, "blocked"))) catch {};
         return;
     }
+    if (std.mem.startsWith(u8, typ, "story.")) return @import("stories.zig").onSocket(s, typ, d);
     if (eq(typ, "folders.update")) {
         app.api(s, .GET, "/folders", null, .folders);
         return;
