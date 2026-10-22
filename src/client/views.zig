@@ -1024,6 +1024,8 @@ pub fn root(s: *const State, ui: *ui_kit.Ui) void {
         if (s.stories.viewer != null) @import("stories.zig").viewer(cx);
     }
     if (s.modal != null) modal(cx);
+    // The Wufour account menu, above everything (the app only, not embeds).
+    if (s.phase == .ready and s.mode == .app) zui.account.panel(app.Msg, ui, &s.account, vlist.accountOptions(cx));
     if (s.toast.text.get().len > 0) toastView(cx);
     // The connection dropped after it had worked (shell.js connection pill).
     if (s.phase == .ready and s.ws.ever and !s.ws.online and !s.ws.stopped) connectionPill(cx);

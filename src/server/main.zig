@@ -193,7 +193,9 @@ fn cspFor(q: *Req, frame_ancestors: []const u8, html: []const u8) ![]const u8 {
     }
     const base = try std.mem.replaceOwned(u8, q.r.a, CSP_BASE, "script-src 'self'", try q.r.fmt("script-src {s}", .{scripts.items}));
     const with_ws = try std.mem.replaceOwned(u8, q.r.a, base, "{s}", ws_origin);
-    return q.r.fmt("{s}; frame-ancestors {s}", .{ with_ws, frame_ancestors });
+    // Wufour: the app logos in the account menu (zui.account).
+    const with_wufour = try std.mem.replaceOwned(u8, q.r.a, with_ws, "img-src 'self'", try q.r.fmt("img-src 'self' {s}", .{std.mem.trimEnd(u8, A.app.config.auth_host, "/")}));
+    return q.r.fmt("{s}; frame-ancestors {s}", .{ with_wufour, frame_ancestors });
 }
 
 fn handle(ctx: *http.Context) anyerror!void {

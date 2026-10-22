@@ -40,6 +40,7 @@ pub fn rateLimit(q: *Req, name: []const u8, max: f64, window_ms: f64) !void {
 
 pub fn handle(q: *Req) !bool {
     if (q.is(.GET, "/api/me")) return done(getMe(q));
+    if (q.is(.GET, "/api/account-menu")) return done(accountMenu(q));
     if (q.is(.PATCH, "/api/me")) return done(patchMe(q));
     if (q.is(.GET, "/api/username/:name")) return done(username(q));
     if (q.is(.DELETE, "/api/me")) return done(deleteMe(q));
@@ -85,6 +86,14 @@ fn done(res: anyerror!void) anyerror!bool {
 
 fn getMe(q: *Req) !void {
     return q.json(.{ .user = try ser.me(q.r.a, q.user()) });
+}
+
+/// The Wufour account menu behind the profile picture (zui.account in zig-core): Wufour's answer
+/// for this session's Wufour token, passed on unchanged. It holds the name and email: never stored.
+fn accountMenu(q: *Req) !void {
+    const body = A.app.wufour.accountMenu(q.r.a, auth.tokenFromRequest(q).token) orelse return q.r.fail(503, "Wufour is not answering right now", "wufour_unavailable");
+    try q.addHeader("cache-control", "no-store");
+    return q.send(200, "application/json", body);
 }
 
 const PRIVACY_RULES = [_][]const u8{ "everyone", "contacts", "nobody" };

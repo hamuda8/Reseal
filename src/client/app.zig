@@ -295,6 +295,8 @@ pub const Msg = union(enum) {
     sign_in_wufour,
     /// The phones' in-app Wufour sign-in ended (fx.webAuth).
     web_auth: zui.WebAuthResult,
+    /// The Wufour account menu behind the profile picture (zui.account): a press in it.
+    account: zui.account.Action,
     unlock,
     toggle_recovery,
     start_fresh,
@@ -488,6 +490,9 @@ pub const State = struct {
     store: data.Store = .{},
     phase: Phase = .loading,
     mode: enum { app, embed } = .app,
+    /// The Wufour account menu behind the profile picture (zui.account). The app only: an embed's
+    /// page has its own.
+    account: zui.account.Menu = .{},
     boot_error: Text = .{},
     unlock_error: Text = .{},
     unlock_recovery: bool = false,
@@ -744,6 +749,8 @@ pub const Op = union(enum) {
     media_counts,
     scheduled_list,
     scheduled_changed,
+    /// The Wufour account menu's data (GET /api/account-menu).
+    account_menu,
     ignore,
 };
 
@@ -896,6 +903,7 @@ fn handle(s: *State, msg: Msg) void {
         .submit => |field| onSubmit(s, field),
         .sign_in_wufour => signInWufour(s),
         .web_auth => |r| webAuthDone(s, r),
+        .account => |act| accountAction(s, act),
         .unlock => keys.unlockSubmit(s),
         .toggle_recovery => {
             s.unlock_recovery = !s.unlock_recovery;
@@ -1092,6 +1100,8 @@ pub fn logout(s: *State) void {
     s.open_chat = .{};
     s.panes.clearRetainingCapacity();
     s.modal = null;
+    s.account.deinit();
+    s.account = .{};
     if (native_auth) {
         // The session ends at Wufour too (wufour-auth's logout); the answer is not awaited.
         if (s.bearer.get().len > 0) if (zui.wufour.logoutRequest(tmp(), auth_host, s.bearer.get())) |req| {
@@ -1107,6 +1117,18 @@ pub fn logout(s: *State) void {
     } else fx.openUrl("/logout", false);
 }
 
+/// The Wufour account menu (zui.account): its own actions, then Reseal's: sign in, sign out (asked
+/// first, as in Settings), and its items (view_list.accountOptions): My profile, Settings.
+fn accountAction(s: *State, act: zui.account.Action) void {
+    const left = s.account.update(Msg, act, fx) orelse return;
+    switch (left) {
+        .sign_out => handle(s, .{ .menu = .{ .confirm = .{ .kind = .logout } } }),
+        .sign_in => signInWufour(s),
+        .item => |i| handle(s, if (i == 0) .{ .push_pane = .profile } else .{ .nav = .settings }),
+        else => {},
+    }
+}
+
 fn onMe(s: *State, r: zui.Response) void {
     if (r.status == 401) return signedOut(s);
     if (!r.ok()) {
@@ -1118,6 +1140,7 @@ fn onMe(s: *State, r: zui.Response) void {
     const me = j.obj(v, "user") orelse return;
     setMe(s, me);
     keys.ensureKeys(s);
+    if (s.mode == .app) api(s, .GET, "/account-menu", null, .account_menu);
 }
 
 pub fn setMe(s: *State, me: j.Value) void {
@@ -1164,6 +1187,7 @@ fn onAnswer(s: *State, r: zui.Response) void {
             } else api(s, .GET, "/me", null, .me);
         },
         .me => onMe(s, r),
+        .account_menu => if (r.ok()) s.account.load(r.body),
         .chats => sync.onChats(s, r),
         .folders => if (r.ok()) {
             if (j.parse(tmp(), r.body)) |v| {

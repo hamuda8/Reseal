@@ -16,6 +16,7 @@ const kit = @import("ui.zig");
 const views = @import("views.zig");
 const vchat = @import("view_chat.zig");
 const vset = @import("view_settings.zig");
+const media = @import("media.zig");
 
 const Cx = kit.Cx;
 const Msg = app.Msg;
@@ -125,12 +126,54 @@ fn rail(cx: Cx) void {
         }
         ui.end();
     }
-    if (s.store.me) |me| {
-        ui.begin(.{ .padding = .{ .top = 6 } }, .{ .on_press = .{ .push_pane = .profile } });
-        kit.avatar(cx, .{ .name = me.s("displayName") orelse "", .color = me.i("color") orelse 0, .image = me.s("avatar"), .size = 42 }, key(.{"me-av"}));
+    if (s.store.me != null) {
+        ui.begin(.{ .padding = .{ .top = 6 } }, .{});
+        accountPicture(cx, 42);
         ui.end();
     }
     ui.end();
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Wufour account menu (zui.account): the profile picture opens it, the same menu as in every
+// Wufour app. Reseal's own items: My profile, Settings (app.accountAction maps them by index).
+
+fn onAccount(a: zui.account.Action) Msg {
+    return .{ .account = a };
+}
+
+/// The person's photo in Reseal, for the menu's picture.
+fn myPhoto(cx: Cx) []const u8 {
+    const me = cx.s.store.me orelse return "";
+    if (me.s("avatar")) |id| if (id.len > 0) return media.mediaUrl(cx.a(), id);
+    return "";
+}
+
+pub fn accountOptions(cx: Cx) zui.account.Options(Msg) {
+    var items: []const zui.account.Item = &.{};
+    if (cx.a().alloc(zui.account.Item, 2)) |list| {
+        list[0] = .{ .label = t("My profile"), .icon = zui.account.icons.user };
+        list[1] = .{ .label = t("Settings"), .icon = zui.account.icons.settings, .current = cx.s.section == .settings };
+        items = list;
+    } else |_| {}
+    return .{
+        .msg = onAccount,
+        .ar = cx.s.lang == .ar,
+        .app = "reseal",
+        .photo = myPhoto(cx),
+        .items = items,
+        // Desktop: beside the rail, upwards from its picture; phones: under the header.
+        .anchor = if (cx.phone) .{ .top = cx.ui.env.safe.top + 64, .end = 12 } else .{ .bottom = 12, .start = theme.rail_w + 8 },
+    };
+}
+
+/// Reseal's own picture of the person (their photo or initials), opening the account menu.
+fn accountPicture(cx: Cx, size: f32) void {
+    const me = cx.s.store.me orelse return;
+    const open = cx.s.account.open;
+    cx.ui.begin(.{ .padding = .all(2), .radius = size * 0.34 + 4, .border_width = 2, .border_color = if (open) cx.c.accent else Color.transparent, .pressed_opacity = 0.85, .transition = .{ .duration_ms = 200 } }, .{ .on_press = .{ .account = .toggle }, .label = t("Wufour account"), .key = key(.{"me-av-btn"}) });
+    kit.avatar(cx, .{ .name = me.s("displayName") orelse "", .color = me.i("color") orelse 0, .image = me.s("avatar"), .size = size }, key(.{"me-av"}));
+    cx.ui.end();
 }
 
 fn tabbar(cx: Cx) void {
@@ -531,6 +574,8 @@ fn chatsPane(cx: Cx) void {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .padding = .{ .top = 20, .bottom = 10, .start = 20, .end = 14 } }, .{});
         ui.text(t("Chats"), .{ .font_size = 27, .weight = 800, .color = cx.c.text, .grow = 1, .width = .fill });
         kit.iconButton(cx, icons.compose, .{ .menu = .{ .menu = .{ .kind = .compose } } }, .{ .soft = true });
+        // Phones have no rail: the picture (the account menu) ends the header.
+        if (cx.phone) accountPicture(cx, 38);
         ui.end();
     }
     // Keyed, so the input (and its focus) survives the header going away when searching starts.
