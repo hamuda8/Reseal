@@ -5,8 +5,9 @@
 // - Push: the server's payload names the chat and the sender. Message text in end-to-end
 //   encrypted chats stays encrypted here (this worker cannot reach the keys, which the app keeps
 //   in its own storage), so those say "New message", as Reseal-js does when it cannot decrypt.
-const CACHE = 'reseal-zig-v1';
-const SHELL = ['/', '/offline.html', '/manifest.json', '/zui.js', '/app.wasm', '/icon.svg', '/img/icons/icon-192.png'];
+const CACHE = 'reseal-zig-v2';
+const SHELL = ['/', '/offline.html', '/manifest.json', '/zui.js', '/app.wasm', '/icon.svg', '/img/icons/icon-192.png',
+  '/fonts/WufourSansGolden-Regular.woff2', '/fonts/WufourSansGolden-Medium.woff2', '/fonts/WufourSansGolden-Bold.woff2', '/fonts/WufourArabicGolden-Regular.woff2', '/fonts/WufourArabicGolden-Medium.woff2', '/fonts/WufourArabicGolden-Bold.woff2'];
 const NEVER = /^\/(api|m|ws|embed|push|login|logout|auth|sdk)(\/|$)/;
 
 self.addEventListener('install', (event) => {

@@ -54,7 +54,7 @@ pub fn text(cx: Cx, txt: []const u8, entities: []const Entity, o: Opts) void {
             const s = markdown.byteAt(shown, b.o);
             const e = markdown.byteAt(shown, b.o + b.l);
             cx.ui.begin(.{ .padding = .xy(10, 8), .radius = 10, .background = o.fg.withAlpha(0.08), .width = .fill }, .{});
-            if (b.lang) |lang| if (lang.len > 0) cx.ui.text(lang, .{ .font_size = 11.5, .weight = 700, .color = o.fg, .opacity = 0.65 });
+            if (b.lang) |lang| if (lang.len > 0) cx.ui.text(lang, .{ .font_size = 12, .weight = 700, .color = o.fg, .opacity = 0.65 });
             cx.ui.textWith(std.mem.trim(u8, shown[s..e], "\n"), .{ .font_size = o.font_size - 1.5, .mono = true, .color = o.fg, .line_height = 1.45 }, .{ .selectable = true });
             cx.ui.end();
         } else {

@@ -1,12 +1,85 @@
-//! Reseal's look ("Aurora"), from Reseal-js public/css/base.css and app.css: the colour tokens for
-//! light and dark, the accent colours, avatar colours and the type scale. CSS gradients (the
-//! brand gradient on buttons and outgoing bubbles, the aurora canvas) are drawn as their mid
-//! colour, since zui boxes have solid backgrounds.
+//! Reseal's colours: the TwOP scheme of Wufour/private/site/apps.js (Reseal), its dark theme
+//! derived with the OKLCH transforms of Wufour's public/styles/style.css, and the semantic
+//! tokens the views use, computed in Zig so they are the same on every platform.
+//!
+//! Every token is one of the ten roles, or a role with alpha: zui draws with alpha, so a tint
+//! comes out as `color-mix(in oklab, X N%, transparent)` does in the browser. Nothing is a blend
+//! of two roles and nothing is hand-picked for dark mode.
 
+const std = @import("std");
 const zui = @import("zui");
 const Color = zui.Color;
 
+// The ten roles (apps.js `colors` for Reseal; the signals Reseal does not define are the shared
+// ones of the scheme).
+pub const base = Color.hex("#ffffff");
+pub const core = Color.hex("#12141c");
+pub const accent = Color.hex("#6c5cff");
+pub const variant = Color.hex("#4f8cff");
+pub const surface = Color.hex("#e9ebf3");
+pub const depth = Color.hex("#c9c2ff");
+pub const optimal = Color.hex("#1fb37a");
+pub const risky = Color.hex("#F0F054");
+pub const fatal = Color.hex("#F05454");
+/// apps.js defines no prime for Reseal: the accent stands in until the owner adds one.
+pub const prime = accent;
+
+/// `oklch(from C clamp(lo, 1 - l*l, hi) c*k h)`, with k = max(floor, 1 - l*slope): the
+/// dark-mode transforms at the top of style.css.
+fn darkOf(c: Color, lo: f32, hi: f32, floor: f32, slope: f32) Color {
+    var o = c.toOklch();
+    const k = @max(floor, 1 - o.l * slope);
+    o.l = std.math.clamp(1 - o.l * o.l, lo, hi);
+    o.c *= k;
+    return o.toColor();
+}
+
+pub fn darkCanvas(x: Color) Color {
+    return darkOf(x, 0.10, 0.25, 0.5, 0);
+}
+pub fn darkText(x: Color) Color {
+    return darkOf(x, 0.85, 0.95, 0.6, 0);
+}
+pub fn darkBorder(x: Color) Color {
+    return darkOf(x, 0.25, 0.40, 0.4, 0);
+}
+pub fn darkBrand(x: Color) Color {
+    return darkOf(x, 0.25, 0.55, 0.60, 0.40);
+}
+pub fn darkAction(x: Color) Color {
+    return darkOf(x, 0.45, 0.75, 0.70, 0.30);
+}
+pub fn darkSignal(x: Color) Color {
+    return darkOf(x, 0.45, 0.80, 0.75, 0.25);
+}
+
+/// Of two roles, the one further in lightness from `bg` (text and icons on a coloured box).
+pub fn furtherFrom(bg: Color, x: Color, y: Color) Color {
+    const l = bg.toOklch().l;
+    return if (@abs(x.toOklch().l - l) >= @abs(y.toOklch().l - l)) x else y;
+}
+
+fn darkerOf(x: Color, y: Color) Color {
+    return if (x.toOklch().l <= y.toOklch().l) x else y;
+}
+
+fn lighterOf(x: Color, y: Color) Color {
+    return if (x.toOklch().l > y.toOklch().l) x else y;
+}
+
 pub const Colors = struct {
+    // The roles after the light/dark transform.
+    b: Color,
+    c: Color,
+    a: Color,
+    v: Color,
+    s: Color,
+    d: Color,
+    o: Color,
+    r: Color,
+    f: Color,
+    p: Color,
+
     canvas: Color,
     surface: Color,
     surface_2: Color,
@@ -25,7 +98,7 @@ pub const Colors = struct {
     online: Color,
     accent: Color,
     accent_2: Color,
-    /// var(--brand): the accent gradient, drawn as its middle.
+    /// The brand colour on buttons and outgoing bubbles: the accent, flat.
     brand: Color,
     accent_soft: Color,
     accent_softer: Color,
@@ -38,123 +111,119 @@ pub const Colors = struct {
     bubble_meta_out: Color,
     dots: Color,
     glass: Color,
+    /// The scrim under dialogs and sheets.
     overlay: Color,
     toast: Color,
+    toast_text: Color,
+    toast_accent: Color,
+    /// The darker of base and core: the call stage, the story viewer, scrims on photos and
+    /// video (with alpha).
+    shade: Color,
+    /// The lighter of base and core: text and icons on `shade`.
+    on_shade: Color,
     dark: bool,
+
+    /// Base or core, whichever reads better on `bg`.
+    pub fn onOf(k: *const Colors, bg: Color) Color {
+        return furtherFrom(bg, k.b, k.c);
+    }
 };
 
-/// The accents users can pick, with their gradient partners (theme.js).
-pub const accents = [_][2]Color{
-    .{ Color.hex("#6c5cff"), Color.hex("#4f8cff") },
-    .{ Color.hex("#3d7bff"), Color.hex("#22c3ee") },
-    .{ Color.hex("#0ea5a8"), Color.hex("#3bd18f") },
-    .{ Color.hex("#1fb37a"), Color.hex("#9bd44a") },
-    .{ Color.hex("#f08c2b"), Color.hex("#f5c543") },
-    .{ Color.hex("#ef4561"), Color.hex("#f78a4d") },
-    .{ Color.hex("#d946ef"), Color.hex("#8b5cf6") },
-    .{ Color.hex("#475569"), Color.hex("#7c8aa3") },
-};
-
-pub fn colors(dark: bool, accent: Color, accent_2: Color) Colors {
-    const brand = accent.mix(0.5, accent_2);
-    const soft_share: f32 = if (dark) 0.22 else 0.11;
-    const softer_share: f32 = if (dark) 0.12 else 0.06;
-    if (dark) return .{
-        .canvas = Color.hex("#07080d"),
-        .surface = Color.hex("#11131b"),
-        .surface_2 = Color.hex("#181b26"),
-        .surface_3 = Color.hex("#1f2330"),
-        .hover = Color.hex("#ffffff0b"),
-        .active = Color.hex("#ffffff14"),
-        .text = Color.hex("#eceef5"),
-        .text_2 = Color.hex("#9097a8"),
-        .text_3 = Color.hex("#636a7c"),
-        .border = Color.hex("#ffffff0f"),
-        .border_strong = Color.hex("#ffffff1f"),
-        .danger = Color.hex("#ef4561"),
-        .danger_soft = Color.hex("#ef456129"),
-        .success = Color.hex("#1fb37a"),
-        .warning = Color.hex("#f2a33a"),
-        .online = Color.hex("#22c58b"),
-        .accent = accent,
-        .accent_2 = accent_2,
-        .brand = brand,
-        .accent_soft = accent.mix(soft_share, Color.transparent),
-        .accent_softer = accent.mix(softer_share, Color.transparent),
-        .on_accent = Color.white,
-        .bubble_in = Color.hex("#1c202c"),
-        .bubble_in_text = Color.hex("#eceef5"),
-        .bubble_out = brand,
-        .bubble_out_text = Color.white,
-        .bubble_meta_in = Color.hex("#7a8193"),
-        .bubble_meta_out = Color.hex("#ffffffc7"),
-        .dots = Color.hex("#ffffff0d"),
-        .glass = Color.hex("#11131bb8"),
-        .overlay = Color.hex("#0a0c1861"),
-        .toast = Color.hex("#12141eeb"),
-        .dark = true,
-    };
+/// `override` is the accent a white-label app gives the embedded widget (`theme.primary`);
+/// Reseal itself always uses its own accent.
+pub fn colors(dark: bool, override: ?Color) Colors {
+    const acc = override orelse accent;
+    const b = if (dark) darkCanvas(base) else base;
+    const c = if (dark) darkText(core) else core;
+    const a = if (dark) darkAction(acc) else acc;
+    const v = if (dark) darkAction(variant) else variant;
+    const s = if (dark) darkCanvas(surface) else surface;
+    const d = if (dark) darkBorder(depth) else depth;
+    const o = if (dark) darkSignal(optimal) else optimal;
+    const r = if (dark) darkSignal(risky) else risky;
+    const f = if (dark) darkSignal(fatal) else fatal;
+    const p = if (dark) darkBrand(prime) else prime;
+    // Light: a tinted canvas with cards on the base. Dark: the base is the canvas and the
+    // (slightly lighter) surface lifts the cards.
+    const canvas = if (dark) b else s;
+    const card = if (dark) s else b;
+    const on_accent = furtherFrom(a, b, c);
+    const shade = darkerOf(b, c);
+    const on_shade = lighterOf(b, c);
     return .{
-        .canvas = Color.hex("#e9ebf3"),
-        .surface = Color.hex("#ffffff"),
-        .surface_2 = Color.hex("#f4f5f9"),
-        .surface_3 = Color.hex("#eceef4"),
-        .hover = Color.hex("#161a2e0b"),
-        .active = Color.hex("#161a2e14"),
-        .text = Color.hex("#12141c"),
-        .text_2 = Color.hex("#5f6678"),
-        .text_3 = Color.hex("#9aa0b0"),
-        .border = Color.hex("#12142012"),
-        .border_strong = Color.hex("#12142021"),
-        .danger = Color.hex("#ef4561"),
-        .danger_soft = Color.hex("#ef45611a"),
-        .success = Color.hex("#1fb37a"),
-        .warning = Color.hex("#f2a33a"),
-        .online = Color.hex("#22c58b"),
-        .accent = accent,
-        .accent_2 = accent_2,
-        .brand = brand,
-        .accent_soft = accent.mix(soft_share, Color.transparent),
-        .accent_softer = accent.mix(softer_share, Color.transparent),
-        .on_accent = Color.white,
-        .bubble_in = Color.hex("#f1f2f8"),
-        .bubble_in_text = Color.hex("#12141c"),
-        .bubble_out = brand,
-        .bubble_out_text = Color.white,
-        .bubble_meta_in = Color.hex("#8d93a5"),
-        .bubble_meta_out = Color.hex("#ffffffc7"),
-        .dots = Color.hex("#1e223c12"),
-        .glass = Color.hex("#ffffffb8"),
-        .overlay = Color.hex("#0a0c1861"),
-        .toast = Color.hex("#12141eeb"),
-        .dark = false,
+        .b = b,
+        .c = c,
+        .a = a,
+        .v = v,
+        .s = s,
+        .d = d,
+        .o = o,
+        .r = r,
+        .f = f,
+        .p = p,
+        .canvas = canvas,
+        .surface = card,
+        .surface_2 = d.withAlpha(0.10),
+        .surface_3 = d.withAlpha(0.18),
+        .hover = c.withAlpha(0.05),
+        .active = c.withAlpha(0.09),
+        .text = c,
+        .text_2 = c.withAlpha(0.64),
+        .text_3 = c.withAlpha(0.44),
+        .border = d.withAlpha(0.22),
+        .border_strong = d.withAlpha(0.40),
+        .danger = f,
+        .danger_soft = f.withAlpha(0.14),
+        .success = o,
+        .warning = r,
+        .online = o,
+        .accent = a,
+        .accent_2 = v,
+        .brand = a,
+        .accent_soft = a.withAlpha(if (dark) 0.22 else 0.12),
+        .accent_softer = a.withAlpha(if (dark) 0.12 else 0.06),
+        .on_accent = on_accent,
+        .bubble_in = s,
+        .bubble_in_text = c,
+        .bubble_out = a,
+        .bubble_out_text = on_accent,
+        .bubble_meta_in = c.withAlpha(0.56),
+        .bubble_meta_out = on_accent.withAlpha(0.78),
+        .dots = c.withAlpha(0.07),
+        .glass = card.withAlpha(0.72),
+        .overlay = shade.withAlpha(0.5),
+        .toast = if (dark) s else c,
+        .toast_text = if (dark) c else b,
+        .toast_accent = a,
+        .shade = shade,
+        .on_shade = on_shade,
+        .dark = dark,
     };
 }
 
-/// Avatar colours .c0-.c7: linear-gradient(150deg, c1, c2), drawn as their mid colour.
-pub const avatar_pairs = [_][2]Color{
-    .{ Color.hex("#ff9a7a"), Color.hex("#f0566c") },
-    .{ Color.hex("#ffd27a"), Color.hex("#f59a3d") },
-    .{ Color.hex("#a69cff"), Color.hex("#6c5cff") },
-    .{ Color.hex("#8ee6a8"), Color.hex("#24b47e") },
-    .{ Color.hex("#7ee8dc"), Color.hex("#1aa6b8") },
-    .{ Color.hex("#8cc8ff"), Color.hex("#3d7bff") },
-    .{ Color.hex("#f0a8ff"), Color.hex("#b55cf0") },
-    .{ Color.hex("#ffa3c4"), Color.hex("#e44a85") },
-};
-
+/// Avatar colours .c0-.c7: tints of the accent, variant, prime and optimal, each as its
+/// light-mode role and as the same role through its dark-mode transform.
 pub fn avatarColor(index: i64) Color {
-    const p = avatar_pairs[@intCast(@mod(index, 8))];
-    return p[0].mix(0.45, p[1]);
+    return switch (@as(usize, @intCast(@mod(index, 8)))) {
+        0 => accent,
+        1 => variant,
+        2 => prime,
+        3 => optimal,
+        4 => darkAction(accent),
+        5 => darkAction(variant),
+        6 => darkBrand(prime),
+        else => darkSignal(optimal),
+    };
 }
 
-/// Sender name colours in groups (.name-c0-.name-c7).
-const names_light = [_]Color{ Color.hex("#e24a5f"), Color.hex("#d9822b"), Color.hex("#6a5af5"), Color.hex("#1b9d6c"), Color.hex("#148fa0"), Color.hex("#2f6fe8"), Color.hex("#a64ad9"), Color.hex("#d43f7a") };
-const names_dark = [_]Color{ Color.hex("#ff8a98"), Color.hex("#ffbf6b"), Color.hex("#ada4ff"), Color.hex("#6ee3a6"), Color.hex("#6fe0e8"), Color.hex("#86b8ff"), Color.hex("#e19bff"), Color.hex("#ff8fbb") };
-
-pub fn nameColor(index: i64, dark: bool) Color {
-    const i: usize = @intCast(@mod(index, 8));
-    return if (dark) names_dark[i] else names_light[i];
+/// Sender name colours in groups: the accent, variant, prime and optimal of the current mode.
+pub fn nameColor(k: *const Colors, index: i64) Color {
+    return switch (@as(usize, @intCast(@mod(index, 4)))) {
+        0 => k.a,
+        1 => k.v,
+        2 => k.p,
+        else => k.o,
+    };
 }
 
 // Sizes (app.css)
@@ -164,8 +233,22 @@ pub const sidebar_w_narrow: f32 = 330;
 pub const info_w: f32 = 360;
 pub const header_h: f32 = 68;
 pub const gap: f32 = 10;
-pub const radius: f32 = 14;
+pub const radius: f32 = 12;
 pub const r_panel: f32 = 24;
-pub const bubble_radius: f32 = 20;
+pub const bubble_radius: f32 = 18;
 /// Phones: under this width the app shows one pane at a time with a tab bar.
 pub const phone_max: f32 = 760;
+
+test "light mode is the palette, dark mode is derived" {
+    const k = colors(false, null);
+    try std.testing.expect(k.surface.eql(base));
+    try std.testing.expect(k.canvas.eql(surface));
+    try std.testing.expect(k.accent.eql(accent));
+    try std.testing.expect(k.on_accent.eql(base));
+    try std.testing.expect(k.shade.eql(core));
+    const dk = colors(true, null);
+    try std.testing.expect(dk.canvas.toOklch().l <= 0.26);
+    try std.testing.expect(dk.text.toOklch().l >= 0.84);
+    try std.testing.expect(dk.surface.toOklch().l >= dk.canvas.toOklch().l);
+    try std.testing.expect(dk.shade.eql(dk.b));
+}

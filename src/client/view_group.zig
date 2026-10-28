@@ -69,7 +69,7 @@ fn main(cx: Cx, c: *const data.Chat) void {
     const channel = c.is("channel");
     ui.begin(.{ .align_items = .center, .gap = 6, .padding = .{ .top = 12, .bottom = 12 } }, .{});
     vlist.chatAvatar(cx, c, 96);
-    ui.text(s.store.title(c), .{ .font_size = 22, .weight = 800, .color = col.text, .text_align = .center });
+    ui.text(s.store.title(c), .{ .font_size = 22, .weight = 700, .color = col.text, .text_align = .center });
     const count = c.o.i("memberCount") orelse 0;
     ui.text(if (channel) fmt.tn(a, count, "{n} subscriber", "{n} subscribers") else fmt.tn(a, count, "{n} member", "{n} members"), .{ .font_size = 14, .color = col.text_2, .text_align = .center });
     ui.end();
@@ -121,9 +121,9 @@ fn main(cx: Cx, c: *const data.Chat) void {
 
 fn quick(cx: Cx, ic: zui.Icon, label: []const u8, msg: Msg) void {
     const ui = cx.ui;
-    ui.begin(.{ .align_items = .center, .gap = 4, .min_width = 76, .padding = .xy(10, 8), .radius = 14, .background = cx.c.surface_2, .pressed_background = cx.c.active }, .{ .on_press = msg });
+    ui.begin(.{ .align_items = .center, .gap = 4, .min_width = 76, .padding = .xy(10, 8), .radius = 12, .background = cx.c.surface_2, .pressed_background = cx.c.active }, .{ .on_press = msg });
     ui.icon(ic, 21, cx.c.accent, .{}, 0);
-    ui.text(label, .{ .font_size = 12.5, .weight = 600, .color = cx.c.text, .max_lines = 1 });
+    ui.text(label, .{ .font_size = 12, .weight = 500, .color = cx.c.text, .max_lines = 1 });
     ui.end();
 }
 
@@ -143,10 +143,10 @@ fn memberRow(cx: Cx, c: *const data.Chat, m: j.Value) void {
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52, .padding = .xy(12, 6), .radius = theme.radius, .pressed_background = col.active }, .{ .on_press = if (me) null else Msg{ .open_user = Id.of(uid) }, .key = key(.{ "mem", uid }) });
     kit.avatar(cx, .{ .name = if (obj) |o| s.store.userName(o) else j.strOr(u, "displayName", ""), .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 42, .online = eq(j.strOr(u, "presence.status", ""), "online") }, 0);
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
-    ui.text(name, .{ .font_size = 15, .weight = 550, .color = col.text, .max_lines = 1 });
+    ui.text(name, .{ .font_size = 16, .weight = 500, .color = col.text, .max_lines = 1 });
     ui.text(if (j.truthy(u, "isBot")) t("bot") else text.presenceText(if (obj) |o| o.get("presence") else j.field(u, "presence")), .{ .font_size = 13, .color = col.text_2, .max_lines = 1 });
     ui.end();
-    if (eq(role, "owner")) ui.text(t("owner"), .{ .font_size = 12.5, .color = col.text_3 }) else if (eq(role, "admin")) ui.text(if (j.str(m, "title")) |tt| (if (tt.len > 0) tt else t("admin")) else t("admin"), .{ .font_size = 12.5, .color = col.text_3, .max_lines = 1 });
+    if (eq(role, "owner")) ui.text(t("owner"), .{ .font_size = 12, .color = col.text_3 }) else if (eq(role, "admin")) ui.text(if (j.str(m, "title")) |tt| (if (tt.len > 0) tt else t("admin")) else t("admin"), .{ .font_size = 12, .color = col.text_3, .max_lines = 1 });
     ui.end();
     // A separate button: nested pressable views would take each other's taps.
     if (!me and !eq(role, "owner") and (can(c, "banUsers") or can(c, "addAdmins"))) {
@@ -201,7 +201,7 @@ fn personWithButtons(cx: Cx, m: j.Value, buttons: []const RowButton) void {
     const name = if (cx.s.store.user(uid)) |o| cx.s.store.userName(o) else j.strOr(u, "displayName", "");
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 56, .padding = .xy(12, 6) }, .{ .key = key(.{ "person", uid }) });
     kit.avatar(cx, .{ .name = name, .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 42 }, 0);
-    ui.text(name, .{ .font_size = 15, .weight = 550, .color = cx.c.text, .max_lines = 1, .grow = 1, .width = .fill });
+    ui.text(name, .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1, .grow = 1, .width = .fill });
     for (buttons) |b| kit.button(cx, b.label, b.msg, .{ .small = true, .kind = b.kind });
     ui.end();
 }
@@ -364,7 +364,7 @@ fn radio(cx: Cx, label: []const u8, on: bool, msg: Msg, k: u64) void {
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 44, .padding = .xy(12, 4), .radius = theme.radius, .pressed_background = cx.c.active }, .{ .on_press = msg, .key = k });
     ui.begin(.{ .width = .{ .px = 20 }, .height = .{ .px = 20 }, .radius = 10, .border_width = if (on) 6 else 1.5, .border_color = if (on) cx.c.brand else cx.c.border_strong }, .{});
     ui.end();
-    ui.text(label, .{ .font_size = 15, .color = cx.c.text });
+    ui.text(label, .{ .font_size = 16, .color = cx.c.text });
     ui.end();
 }
 

@@ -16,7 +16,6 @@ const Color = zui.Color;
 const t = zui.i18n.t;
 const key = kit.key;
 
-const stage_bg = Color.hex("#0a0b14");
 
 pub fn overlay(cx: Cx) void {
     const s = cx.s;
@@ -27,16 +26,16 @@ pub fn overlay(cx: Cx) void {
 fn callButton(cx: Cx, ic: zui.Icon, label: []const u8, msg: Msg, kind: enum { normal, on, danger, accept }) void {
     const ui = cx.ui;
     const bg = switch (kind) {
-        .normal => Color.hex("#ffffff1f"),
-        .on => Color.white,
+        .normal => cx.c.on_shade.withAlpha(0.12),
+        .on => cx.c.on_shade,
         .danger => cx.c.danger,
         .accept => cx.c.success,
     };
     ui.begin(.{ .width = .{ .px = if (cx.phone) 60 else 70 }, .align_items = .center, .gap = 8 }, .{ .on_press = msg, .key = key(.{ "cb", label }) });
     ui.begin(.{ .width = .{ .px = 60 }, .height = .{ .px = 60 }, .radius = 21, .background = bg, .align_items = .center, .justify = .center }, .{});
-    ui.icon(ic, 24, if (kind == .on) Color.hex("#12141c") else Color.white, .{}, 0);
+    ui.icon(ic, 24, if (kind == .on) cx.c.shade else cx.c.on_shade, .{}, 0);
     ui.end();
-    ui.text(label, .{ .font_size = 12.5, .weight = 600, .color = Color.hex("#ffffffd9"), .text_align = .center, .max_lines = 1 });
+    ui.text(label, .{ .font_size = 12, .weight = 500, .color = cx.c.on_shade.withAlpha(0.85), .text_align = .center, .max_lines = 1 });
     ui.end();
 }
 
@@ -46,16 +45,16 @@ fn callScreen(cx: Cx) void {
     const c = &s.call;
     const ch = s.store.chat(c.chat.str());
     if (c.minimized) {
-        ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 20, .end = 20 }, .width = .{ .px = 260 }, .direction = .row, .align_items = .center, .gap = 10, .padding = .all(12), .radius = 20, .background = stage_bg }, .{ .on_press = .{ .call = .minimize } });
+        ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 20, .end = 20 }, .width = .{ .px = 260 }, .direction = .row, .align_items = .center, .gap = 10, .padding = .all(12), .radius = 20, .background = cx.c.shade }, .{ .on_press = .{ .call = .minimize } });
         ui.icon(icons.phone, 20, cx.c.success, .{}, 0);
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(calls.title(s), .{ .font_size = 14, .weight = 650, .color = Color.white, .max_lines = 1 });
-        ui.text(calls.statusText(s), .{ .font_size = 12, .color = Color.hex("#ffffffcc") });
+        ui.text(calls.title(s), .{ .font_size = 14, .weight = 500, .color = cx.c.on_shade, .max_lines = 1 });
+        ui.text(calls.statusText(s), .{ .font_size = 12, .color = cx.c.on_shade.withAlpha(0.8) });
         ui.end();
         ui.end();
         return;
     }
-    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .background = stage_bg }, .{});
+    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .background = cx.c.shade }, .{});
     // Stage: the other person's video, or their picture and the status.
     var remote_shown = false;
     if (!c.group) if (c.peers.items.len > 0) {
@@ -66,17 +65,17 @@ fn callScreen(cx: Cx) void {
         }
     };
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .xy(18, 16) }, .{});
-    kit.iconButton(cx, icons.minimize, .{ .call = .minimize }, .{ .color = Color.hex("#ffffffd9"), .background = Color.hex("#ffffff14") });
+    kit.iconButton(cx, icons.minimize, .{ .call = .minimize }, .{ .color = cx.c.on_shade.withAlpha(0.85), .background = cx.c.on_shade.withAlpha(0.08) });
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
     ui.end();
     if (c.emoji.get().len > 0) {
-        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .padding = .xy(12, 6), .radius = 12, .background = Color.hex("#ffffff1a") }, .{});
-        ui.icon(if (c.unverified) icons.alert else icons.lock, 14, Color.white, .{}, 0);
-        ui.text(c.emoji.get(), .{ .font_size = 15, .line_height = 1.2 });
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .padding = .xy(12, 6), .radius = 12, .background = cx.c.on_shade.withAlpha(0.10) }, .{});
+        ui.icon(if (c.unverified) icons.alert else icons.lock, 14, cx.c.on_shade, .{}, 0);
+        ui.text(c.emoji.get(), .{ .font_size = 16, .line_height = 1.2 });
         ui.end();
     }
-    if (c.local != 0) kit.iconButton(cx, icons.settings, .{ .call_devices = .open }, .{ .label = t("Devices"), .color = Color.hex("#ffffffd9"), .background = Color.hex("#ffffff14") });
-    if (ch != null and !c.group) kit.iconButton(cx, icons.chat, .{ .call = .open_chat }, .{ .color = Color.hex("#ffffffd9"), .background = Color.hex("#ffffff14") });
+    if (c.local != 0) kit.iconButton(cx, icons.settings, .{ .call_devices = .open }, .{ .label = t("Devices"), .color = cx.c.on_shade.withAlpha(0.85), .background = cx.c.on_shade.withAlpha(0.08) });
+    if (ch != null and !c.group) kit.iconButton(cx, icons.chat, .{ .call = .open_chat }, .{ .color = cx.c.on_shade.withAlpha(0.85), .background = cx.c.on_shade.withAlpha(0.08) });
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill, .height = .fill, .align_items = .center, .justify = .center }, .{});
     if (c.group) {
@@ -87,12 +86,12 @@ fn callScreen(cx: Cx) void {
             const vlist = @import("view_list.zig");
             vlist.chatAvatar(cx, cc, 136);
         }
-        ui.text(calls.title(s), .{ .font_size = 28, .weight = 800, .color = Color.white, .text_align = .center });
-        ui.text(calls.statusText(s), .{ .font_size = 15, .color = Color.hex("#ffffffbf"), .text_align = .center, .max_width = 320 });
+        ui.text(calls.title(s), .{ .font_size = 28, .weight = 700, .color = cx.c.on_shade, .text_align = .center });
+        ui.text(calls.statusText(s), .{ .font_size = 16, .color = cx.c.on_shade.withAlpha(0.75), .text_align = .center, .max_width = 320, .line_height = 1.5 });
         if (c.peers.items.len > 0 and !c.peers.items[0].media.audio) {
             ui.begin(.{ .direction = .row, .gap = 6, .align_items = .center, .opacity = 0.8 }, .{});
-            ui.icon(icons.micOff, 18, Color.white, .{}, 0);
-            ui.text(t("Microphone off"), .{ .font_size = 14, .color = Color.white });
+            ui.icon(icons.micOff, 18, cx.c.on_shade, .{}, 0);
+            ui.text(t("Microphone off"), .{ .font_size = 14, .color = cx.c.on_shade });
             ui.end();
         }
         ui.end();
@@ -100,7 +99,7 @@ fn callScreen(cx: Cx) void {
     ui.end();
     // My camera, small in the corner.
     if (c.local != 0 and (c.camera_on or c.screen_on) and !c.group) {
-        ui.begin(.{ .position = .absolute, .inset = .{ .bottom = if (cx.phone) 140 else 120, .end = 22 }, .width = .{ .px = if (cx.phone) 120 else 210 }, .height = .{ .px = if (cx.phone) 90 else 158 }, .radius = 20, .clip = true, .background = Color.hex("#111111") }, .{});
+        ui.begin(.{ .position = .absolute, .inset = .{ .bottom = if (cx.phone) 140 else 120, .end = 22 }, .width = .{ .px = if (cx.phone) 120 else 210 }, .height = .{ .px = if (cx.phone) 90 else 158 }, .radius = 18, .clip = true, .background = cx.c.shade }, .{});
         ui.video(if (c.screen_on) c.screen else c.local, .{ .mirror = !c.screen_on, .cover = true }, .{ .width = .fill, .height = .fill }, key(.{"lv"}));
         ui.end();
     }
@@ -155,24 +154,24 @@ fn groupGrid(cx: Cx) void {
     ui.end();
     if (c.status == .active and c.peers.items.len == 0) {
         ui.begin(.{ .padding = .{ .top = 20 } }, .{});
-        ui.text(t("Waiting for others to join…"), .{ .font_size = 15, .color = Color.hex("#ffffffbf") });
+        ui.text(t("Waiting for others to join…"), .{ .font_size = 16, .color = cx.c.on_shade.withAlpha(0.75), .line_height = 1.5 });
         ui.end();
     }
 }
 
 fn tile(cx: Cx, name: []const u8, color: i64, stream: u32, audio: bool, self: bool, hand: bool, w: f32, h: f32, k: []const u8) void {
     const ui = cx.ui;
-    ui.begin(.{ .width = .{ .px = w }, .height = .{ .px = h }, .radius = 22, .clip = true, .background = Color.hex("#ffffff0f"), .align_items = .center, .justify = .center }, .{ .key = key(.{ "tile", k }) });
+    ui.begin(.{ .width = .{ .px = w }, .height = .{ .px = h }, .radius = 18, .clip = true, .background = cx.c.on_shade.withAlpha(0.06), .align_items = .center, .justify = .center }, .{ .key = key(.{ "tile", k }) });
     if (stream != 0) {
         ui.video(stream, .{ .mirror = self, .cover = true }, .{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 } }, key(.{ "tv", k }));
     } else kit.avatar(cx, .{ .name = name, .color = color, .size = 84 }, 0);
-    ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 10, .start = 12 }, .direction = .row, .align_items = .center, .gap = 6, .padding = .xy(11, 4), .radius = 11, .background = Color.hex("#00000073") }, .{});
-    if (!audio) ui.icon(icons.micOff, 15, Color.white, .{}, 0);
-    ui.text(if (self) t("You") else name, .{ .font_size = 13, .weight = 650, .color = Color.white, .max_lines = 1 });
+    ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 10, .start = 12 }, .direction = .row, .align_items = .center, .gap = 6, .padding = .xy(11, 4), .radius = 11, .background = cx.c.shade.withAlpha(0.45) }, .{});
+    if (!audio) ui.icon(icons.micOff, 15, cx.c.on_shade, .{}, 0);
+    ui.text(if (self) t("You") else name, .{ .font_size = 13, .weight = 500, .color = cx.c.on_shade, .max_lines = 1 });
     ui.end();
     if (hand) {
         ui.begin(.{ .position = .absolute, .inset = .{ .top = 10, .end = 12 } }, .{});
-        ui.text("✋", .{ .font_size = 22 });
+        ui.icon(icons.hand, 22, cx.c.on_shade, .{}, 0);
         ui.end();
     }
     ui.end();
@@ -183,11 +182,11 @@ fn incoming(cx: Cx) void {
     const ui = cx.ui;
     const inc = cx.s.call.incoming.?;
     ui.begin(.{ .position = .absolute, .inset = .{ .top = 18, .start = 0, .end = 0 }, .align_items = .center, .padding = .xy(12, 0) }, .{});
-    ui.begin(.{ .width = .fill, .max_width = 380, .direction = .row, .align_items = .center, .gap = 12, .padding = .{ .top = 12, .bottom = 12, .start = 14, .end = 12 }, .radius = 24, .background = Color.hex("#10121cf0") }, .{});
+    ui.begin(.{ .width = .fill, .max_width = 380, .direction = .row, .align_items = .center, .gap = 12, .padding = .{ .top = 12, .bottom = 12, .start = 14, .end = 12 }, .radius = 24, .background = cx.c.shade.withAlpha(0.94) }, .{});
     kit.avatar(cx, .{ .name = inc.name.get(), .image = if (inc.avatar.isSet()) inc.avatar.str() else null, .size = 48, .color = if (cx.s.store.user(inc.from.str())) |u| u.i("color") orelse 0 else 0 }, 0);
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
-    ui.text(inc.name.get(), .{ .font_size = 15, .weight = 750, .color = Color.white, .max_lines = 1 });
-    ui.text(if (inc.video) t("Incoming video call") else t("Incoming voice call"), .{ .font_size = 13, .color = Color.hex("#ffffffbf") });
+    ui.text(inc.name.get(), .{ .font_size = 16, .weight = 700, .color = cx.c.on_shade, .max_lines = 1 });
+    ui.text(if (inc.video) t("Incoming video call") else t("Incoming voice call"), .{ .font_size = 13, .color = cx.c.on_shade.withAlpha(0.75) });
     ui.end();
     round(cx, icons.phoneOff, cx.c.danger, .{ .call = .decline });
     if (inc.video) round(cx, icons.video, cx.c.success, .{ .call = .{ .accept = true } });
@@ -197,7 +196,7 @@ fn incoming(cx: Cx) void {
 }
 
 fn round(cx: Cx, ic: zui.Icon, bg: Color, msg: Msg) void {
-    cx.ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 16, .background = bg, .align_items = .center, .justify = .center }, .{ .on_press = msg });
-    cx.ui.icon(ic, 22, Color.white, .{}, 0);
+    cx.ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 12, .background = bg, .align_items = .center, .justify = .center }, .{ .on_press = msg });
+    cx.ui.icon(ic, 22, cx.c.onOf(bg), .{}, 0);
     cx.ui.end();
 }

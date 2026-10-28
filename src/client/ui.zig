@@ -71,11 +71,11 @@ pub fn avatar(cx: Cx, o: AvatarOpts, k: u64) void {
     ui.begin(.{ .width = .{ .px = o.size }, .height = .{ .px = o.size }, .align_items = .center, .justify = .center }, .{ .key = k });
     ui.begin(.{ .width = .{ .px = o.size }, .height = .{ .px = o.size }, .background = bg, .radius = radius, .align_items = .center, .justify = .center, .clip = true }, .{});
     if (o.saved) {
-        ui.icon(icons.bookmark, o.size * 0.48, Color.white, .{}, 0);
+        ui.icon(icons.bookmark, o.size * 0.48, cx.c.onOf(bg), .{}, 0);
     } else if (o.icon) |ic| {
-        ui.icon(ic, o.size * 0.48, Color.white, .{}, 0);
+        ui.icon(ic, o.size * 0.48, cx.c.onOf(bg), .{}, 0);
     } else {
-        ui.text(fmt.initials(cx.a(), o.name), .{ .font_size = @round(o.size * 0.36), .weight = 650, .color = Color.white, .line_height = 1.1 });
+        ui.text(fmt.initials(cx.a(), o.name), .{ .font_size = @round(o.size * 0.36), .weight = 700, .color = cx.c.onOf(bg), .line_height = 1.1 });
     }
     const url = o.image_url orelse if (o.image) |id| (if (id.len > 0) media.mediaUrl(cx.a(), id) else null) else null;
     if (url) |u| ui.image(u, .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = o.size }, .height = .{ .px = o.size } }, key(.{ "av", u }));
@@ -111,7 +111,7 @@ pub fn button(cx: Cx, label: []const u8, msg: Msg, o: ButtonOpts) void {
         .secondary => .{ c.accent_soft, c.accent },
         .ghost => .{ null, c.accent },
         .plain => .{ c.surface_2, c.text },
-        .danger => .{ c.danger, Color.white },
+        .danger => .{ c.danger, c.onOf(c.danger) },
         .danger_ghost => .{ null, c.danger },
     };
     const h: f32 = if (o.large) 52 else if (o.small) 34 else 44;
@@ -122,7 +122,7 @@ pub fn button(cx: Cx, label: []const u8, msg: Msg, o: ButtonOpts) void {
         .gap = 8,
         .height = .{ .px = h },
         .padding = .xy(if (o.small) 14 else 20, 0),
-        .radius = if (o.large) 16 else if (o.small) 11 else theme.radius,
+        .radius = theme.radius,
         .background = bg,
         .width = if (o.block) .fill else .auto,
         .align_self = if (o.block) .stretch else null,
@@ -130,7 +130,7 @@ pub fn button(cx: Cx, label: []const u8, msg: Msg, o: ButtonOpts) void {
         .pressed_opacity = 0.85,
     }, .{ .on_press = if (o.disabled or o.busy) null else msg });
     if (o.icon) |ic| ui.icon(ic, 20, fg, .{}, 0);
-    ui.text(if (o.busy) "…" else label, .{ .font_size = if (o.large) 16 else if (o.small) 14 else 15, .weight = 650, .color = fg, .max_lines = 1 });
+    ui.text(if (o.busy) "…" else label, .{ .font_size = if (o.large) 16 else if (o.small) 14 else 15, .weight = 700, .color = fg, .max_lines = 1 });
     ui.end();
 }
 
@@ -161,7 +161,7 @@ pub fn iconButton(cx: Cx, ic: Icon, msg: ?Msg, o: IconButtonOpts) void {
     const c = cx.c;
     const bg = o.background orelse if (o.active) c.accent_soft else if (o.soft) c.surface_2 else null;
     const fg = o.color orelse if (o.active) c.accent else if (o.soft) c.text else c.text_2;
-    ui.begin(.{ .width = .{ .px = o.size }, .height = .{ .px = o.size }, .radius = if (o.size >= 48) 16 else if (o.size <= 32) 10 else 13, .background = bg, .align_items = .center, .justify = .center, .pressed_background = c.active }, .{ .on_press = msg, .label = o.label orelse labelOf(ic) });
+    ui.begin(.{ .width = .{ .px = o.size }, .height = .{ .px = o.size }, .radius = theme.radius, .background = bg, .align_items = .center, .justify = .center, .pressed_background = c.active }, .{ .on_press = msg, .label = o.label orelse labelOf(ic) });
     // Arrows point the other way in right-to-left languages.
     ui.icon(if (cx.s.lang == .ar) o.rtl orelse ic else ic, o.icon_size, fg, .{}, 0);
     ui.end();
@@ -178,6 +178,8 @@ pub const RowOpts = struct {
     chevron: bool = false,
     on: ?Msg = null,
     switch_on: ?bool = null,
+    /// The row is the chosen one of a list: a check mark in the accent.
+    checked: bool = false,
     k: u64 = 0,
 };
 
@@ -195,14 +197,15 @@ pub fn row(cx: Cx, title: []const u8, o: RowOpts) void {
         ui.icon(ic, 22, if (o.danger) c.danger else c.text_2, .{}, 0);
         ui.end();
     }
-    ui.text(title, .{ .font_size = 15, .weight = 550, .color = fg, .max_lines = 1, .grow = 1, .width = .fill });
+    ui.text(title, .{ .font_size = 16, .weight = 500, .color = fg, .max_lines = 1, .grow = 1, .width = .fill });
     if (o.value) |v| ui.text(v, .{ .font_size = 14, .color = c.text_2, .max_lines = 1 });
     if (o.switch_on) |on| switchView(cx, on);
+    if (o.checked) ui.icon(icons.check, 20, c.accent, .{}, 0);
     if (o.chevron) ui.icon(if (cx.s.lang == .ar) icons.chevronRight_rtl else icons.chevronRight, 18, c.text_3, .{}, 0);
     ui.end();
     if (o.subtitle) |sub| {
         ui.begin(.{ .padding = .{ .start = if (o.icon != null) 42 else 0, .end = if (o.switch_on != null) 58 else 0 } }, .{});
-        ui.text(sub, .{ .font_size = 13.5, .color = c.text_2, .line_height = 1.45 });
+        ui.text(sub, .{ .font_size = 14, .color = c.text_2, .line_height = 1.45 });
         ui.end();
     }
     ui.end();
@@ -212,14 +215,14 @@ pub fn switchView(cx: Cx, on: bool) void {
     const ui = cx.ui;
     const c = cx.c;
     ui.begin(.{ .width = .{ .px = 44 }, .height = .{ .px = 26 }, .radius = 13, .background = if (on) c.brand else c.surface_3, .border_width = if (on) 0 else 1, .border_color = c.border, .direction = .row, .align_items = .center, .padding = .xy(3, 0), .justify = if (on) .end else .start }, .{});
-    ui.begin(.{ .width = .{ .px = 20 }, .height = .{ .px = 20 }, .radius = 10, .background = Color.white }, .{});
+    ui.begin(.{ .width = .{ .px = 20 }, .height = .{ .px = 20 }, .radius = 10, .background = if (on) c.on_accent else c.text_2 }, .{});
     ui.end();
     ui.end();
 }
 
 pub fn sectionTitle(cx: Cx, title: []const u8) void {
     cx.ui.begin(.{ .padding = .{ .top = 12, .bottom = 6, .start = 12, .end = 12 } }, .{});
-    cx.ui.text(upper(cx.a(), title), .{ .font_size = 12, .weight = 700, .color = cx.c.text_3 });
+    cx.ui.text(upper(cx.a(), title), .{ .font_size = 12, .weight = 500, .color = cx.c.text_3, .letter_spacing = 0.72 });
     cx.ui.end();
 }
 
@@ -242,8 +245,8 @@ pub fn divider(cx: Cx) void {
 
 pub fn badge(cx: Cx, text: []const u8, muted: bool) void {
     const ui = cx.ui;
-    ui.begin(.{ .min_width = 20, .height = .{ .px = 20 }, .padding = .xy(6, 0), .radius = 7, .background = if (muted) cx.c.surface_3 else cx.c.brand, .align_items = .center, .justify = .center }, .{});
-    ui.text(text, .{ .font_size = 11.5, .weight = 700, .color = if (muted) cx.c.text_2 else cx.c.on_accent, .line_height = 1.2 });
+    ui.begin(.{ .min_width = 20, .height = .{ .px = 20 }, .padding = .xy(6, 0), .radius = 10, .background = if (muted) cx.c.surface_3 else cx.c.brand, .align_items = .center, .justify = .center }, .{});
+    ui.text(text, .{ .font_size = 12, .weight = 700, .color = if (muted) cx.c.text_2 else cx.c.on_accent, .line_height = 1.2 });
     ui.end();
 }
 
@@ -255,7 +258,7 @@ pub fn emptyState(cx: Cx, ic: Icon, title: []const u8, text: ?[]const u8) void {
     ui.icon(ic, 38, c.accent, .{}, 0);
     ui.end();
     ui.text(title, .{ .font_size = 18, .weight = 700, .color = c.text, .text_align = .center });
-    if (text) |tx| ui.text(tx, .{ .font_size = 14.5, .color = c.text_2, .text_align = .center, .max_width = 300, .line_height = 1.55 });
+    if (text) |tx| ui.text(tx, .{ .font_size = 14, .color = c.text_2, .text_align = .center, .max_width = 300, .line_height = 1.55 });
     ui.end();
 }
 
@@ -299,8 +302,8 @@ pub fn field(cx: Cx, comptime f: app.Field, o: FieldOpts) void {
     const ui = cx.ui;
     const c = cx.c;
     ui.begin(.{ .gap = 7, .padding = .{ .bottom = 16 }, .width = .fill }, .{});
-    if (o.label) |l| ui.text(l, .{ .font_size = 13, .weight = 600, .color = c.text_2 });
-    ui.begin(.{ .height = if (o.multiline) .auto else .{ .px = 46 }, .min_height = 46, .padding = if (o.multiline) .xy(14, 11) else .xy(14, 0), .radius = theme.radius, .border_width = 1, .border_color = if (o.err != null) c.danger else c.border_strong, .background = c.surface_2, .justify = .center, .width = .fill }, .{});
+    if (o.label) |l| ui.text(l, .{ .font_size = 13, .weight = 500, .color = c.text_2 });
+    ui.begin(.{ .height = if (o.multiline) .auto else .{ .px = 48 }, .min_height = 48, .padding = if (o.multiline) .xy(14, 11) else .xy(14, 0), .radius = theme.radius, .border_width = 1, .border_color = if (o.err != null) c.danger else c.border_strong, .background = c.surface_2, .justify = .center, .width = .fill }, .{});
     ui.input(.{
         .key = if (o.k != 0) o.k else zui.key(@tagName(f)),
         .value = cx.s.fields.get(f).get(),
@@ -310,11 +313,11 @@ pub fn field(cx: Cx, comptime f: app.Field, o: FieldOpts) void {
         .secure = comptime isSecret(f),
         .keyboard = .text,
         .multiline = o.multiline,
-        .style = .{ .width = .fill, .font_size = 15, .color = c.text, .mono = o.mono, .max_height = if (o.multiline) 160 else std.math.inf(f32) },
+        .style = .{ .width = .fill, .font_size = 16, .color = c.text, .mono = o.mono, .max_height = if (o.multiline) 160 else std.math.inf(f32) },
     });
     ui.end();
-    if (o.err) |e| ui.text(e, .{ .font_size = 12.5, .color = c.danger });
-    if (o.hint) |h| ui.text(h, .{ .font_size = 12.5, .color = c.text_3, .line_height = 1.45 });
+    if (o.err) |e| ui.text(e, .{ .font_size = 12, .color = c.danger });
+    if (o.hint) |h| ui.text(h, .{ .font_size = 12, .color = c.text_3, .line_height = 1.45 });
     ui.end();
 }
 
@@ -322,8 +325,8 @@ pub fn field(cx: Cx, comptime f: app.Field, o: FieldOpts) void {
 pub fn searchBox(cx: Cx, comptime f: app.Field, placeholder: []const u8) void {
     const ui = cx.ui;
     const c = cx.c;
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 9, .height = .{ .px = 42 }, .padding = .xy(14, 0), .radius = 14, .background = c.surface_2, .grow = 1, .width = .fill }, .{ .key = zui.key("box-" ++ @tagName(f)) });
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 9, .height = .{ .px = 42 }, .padding = .xy(14, 0), .radius = theme.radius, .background = c.surface_2, .grow = 1, .width = .fill }, .{ .key = zui.key("box-" ++ @tagName(f)) });
     ui.icon(icons.search, 18, c.text_3, .{}, 0);
-    ui.input(.{ .key = zui.key(@tagName(f)), .value = cx.s.fields.get(f).get(), .placeholder = placeholder, .on_change = app.onField(f), .on_focus = if (f == .search) .{ .toggle_search = true } else null, .style = .{ .grow = 1, .width = .fill, .font_size = 15, .color = c.text } });
+    ui.input(.{ .key = zui.key(@tagName(f)), .value = cx.s.fields.get(f).get(), .placeholder = placeholder, .on_change = app.onField(f), .on_focus = if (f == .search) .{ .toggle_search = true } else null, .style = .{ .grow = 1, .width = .fill, .font_size = 16, .color = c.text } });
     ui.end();
 }

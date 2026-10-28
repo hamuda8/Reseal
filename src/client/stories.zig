@@ -37,15 +37,28 @@ const key = kit.key;
 const photo_ms = 6000;
 const max_video_ms = 60_000;
 
-/// Backgrounds of text glimpses (Reseal-js BACKGROUNDS), as two-stop gradients.
-pub const backgrounds = [_][2]Color{
-    .{ Color.hex("#6c5cff"), Color.hex("#4f8cff") }, .{ Color.hex("#ff6b8b"), Color.hex("#ff9a5a") }, .{ Color.hex("#12b886"), Color.hex("#1aa6b8") },
-    .{ Color.hex("#845ef7"), Color.hex("#e64980") }, .{ Color.hex("#343a40"), Color.hex("#495057") }, .{ Color.hex("#f59f00"), Color.hex("#f76707") },
-};
+/// Backgrounds of text glimpses (Reseal-js BACKGROUNDS; the index is stored in the message, so
+/// there are still six): the first is the one gradient a screen may carry, accent to variant;
+/// the rest are flat roles. Fixed light-mode roles, so a glimpse looks the same for everyone.
+pub const backgrounds_len: usize = 6;
 
-fn gradient(bg: usize) zui.Gradient {
-    const b = backgrounds[@min(bg, backgrounds.len - 1)];
-    return zui.Gradient.linear(135, &.{ .{ .color = b[0], .at = 0 }, .{ .color = b[1], .at = 1 } });
+fn bgFill(bg: usize) Color {
+    return switch (@min(bg, backgrounds_len - 1)) {
+        0, 1 => theme.accent,
+        2 => theme.variant,
+        3 => theme.core,
+        4 => theme.surface,
+        else => theme.depth,
+    };
+}
+
+fn bgGradient(bg: usize) ?zui.Gradient {
+    return if (bg == 0) zui.Gradient.two(135, theme.accent, theme.variant) else null;
+}
+
+/// Text on a background: base or core, whichever reads better.
+fn bgText(bg: usize) Color {
+    return theme.furtherFrom(bgFill(bg), theme.base, theme.core);
 }
 
 pub const Audience = enum { contacts, chats, selected };
@@ -317,7 +330,7 @@ pub fn act(s: *State, a: Act) void {
             st.draft.kind = .text;
             openComposer(s);
         },
-        .bg => |i| st.draft.bg = @min(i, backgrounds.len - 1),
+        .bg => |i| st.draft.bg = @min(i, backgrounds_len - 1),
         .audience => |au| {
             st.draft.audience = au;
             if (au == .selected) s.modal = .story_people;
@@ -838,7 +851,7 @@ pub fn strip(cx: Cx) void {
 
 fn circle(cx: Cx, name: []const u8, color: i64, image: ?[]const u8, label: []const u8, unseen: bool, plus: bool, m: Msg, k: u64) void {
     const ui = cx.ui;
-    ui.begin(.{ .width = .{ .px = 70 }, .align_items = .center, .gap = 4, .padding = .xy(0, 4), .radius = 14, .pressed_background = cx.c.hover }, .{ .on_press = m, .on_long_press = if (plus) msg(.archive) else null, .on_context = if (plus) msg(.archive) else null, .key = k });
+    ui.begin(.{ .width = .{ .px = 70 }, .align_items = .center, .gap = 4, .padding = .xy(0, 4), .radius = 12, .pressed_background = cx.c.hover }, .{ .on_press = m, .on_long_press = if (plus) msg(.archive) else null, .on_context = if (plus) msg(.archive) else null, .key = k });
     ui.begin(.{ .width = .{ .px = 60 }, .height = .{ .px = 60 }, .radius = 20, .border_width = 2.5, .border_color = if (unseen) cx.c.brand else cx.c.border_strong, .align_items = .center, .justify = .center }, .{});
     kit.avatar(cx, .{ .name = name, .color = color, .image = image, .size = 52 }, 0);
     if (plus) {
@@ -870,21 +883,22 @@ pub fn viewer(cx: Cx) void {
     const id = j.strOr(story, "id", "");
     const uid = j.strOr(story, "userId", "");
     const mine = s.store.isMe(uid);
-    const white = Color.white;
-    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .background = Color.hex("#07080d"), .align_items = .center, .justify = .center }, .{ .key = key(.{"story-viewer"}) });
-    ui.begin(.{ .width = .fill, .max_width = 480, .height = .fill, .max_height = 860, .radius = if (cx.phone) 0 else 18, .clip = true, .background = Color.hex("#11131b") }, .{});
+    const fg = cx.c.on_shade;
+    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .background = cx.c.shade, .align_items = .center, .justify = .center }, .{ .key = key(.{"story-viewer"}) });
+    ui.begin(.{ .width = .fill, .max_width = 480, .height = .fill, .max_height = 860, .radius = if (cx.phone) 0 else 18, .clip = true, .background = cx.c.on_shade.withAlpha(0.04) }, .{});
     // What it shows, behind everything.
     const p = s.stories.opened.get(id);
     ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .align_items = .center, .justify = .center }, .{});
     if (s.stories.failed.contains(id)) {
-        ui.icon(icons.lock, 40, white, .{}, 0);
-        ui.text(t("This glimpse could not be opened"), .{ .font_size = 16, .weight = 700, .color = white, .text_align = .center });
-        ui.text(t("It may have been shared before you set up this device."), .{ .font_size = 13.5, .color = white, .opacity = 0.7, .text_align = .center, .max_width = 300 });
+        ui.icon(icons.lock, 40, fg, .{}, 0);
+        ui.text(t("This glimpse could not be opened"), .{ .font_size = 16, .weight = 700, .color = fg, .text_align = .center });
+        ui.text(t("It may have been shared before you set up this device."), .{ .font_size = 13, .color = fg, .opacity = 0.7, .text_align = .center, .max_width = 300 });
     } else if (p) |pl| {
         const kind = j.strOr(pl.v, "kind", "");
         if (std.mem.eql(u8, kind, "text")) {
-            ui.begin(.{ .width = .fill, .height = .fill, .gradient = gradient(@intCast(@max(0, j.intOr(pl.v, "bg", 0)))), .align_items = .center, .justify = .center, .padding = .all(28) }, .{});
-            ui.text(j.strOr(pl.v, "text", ""), .{ .font_size = 26, .weight = 700, .color = white, .text_align = .center, .line_height = 1.35 });
+            const bg: usize = @intCast(@max(0, j.intOr(pl.v, "bg", 0)));
+            ui.begin(.{ .width = .fill, .height = .fill, .background = bgFill(bg), .gradient = bgGradient(bg), .align_items = .center, .justify = .center, .padding = .all(28) }, .{});
+            ui.text(j.strOr(pl.v, "text", ""), .{ .font_size = 26, .weight = 700, .color = bgText(bg), .text_align = .center, .line_height = 1.35 });
             ui.end();
         } else if (j.obj(pl.v, "media")) |item| {
             if (media.shown(s, item)) |f| {
@@ -892,10 +906,10 @@ pub fn viewer(cx: Cx) void {
                     ui.video(v.player, .{ .cover = false }, .{ .width = .fill, .height = .fill }, key(.{ "sv", id }));
                 } else if (f.state == .ready and !std.mem.eql(u8, kind, "video")) {
                     media.draw(ui, f, j.strOr(item, "id", ""), .{ .width = .fill, .height = .fill, .fit = .contain }, key(.{ "sp", id }));
-                } else ui.spinner(32, white, .{}, 0);
-            } else ui.spinner(32, white, .{}, 0);
+                } else ui.spinner(32, fg, .{}, 0);
+            } else ui.spinner(32, fg, .{}, 0);
         }
-    } else ui.spinner(32, white, .{}, 0);
+    } else ui.spinner(32, fg, .{}, 0);
     ui.end();
     // Tap the start to go back, the rest to go on; press-and-hold pauses.
     ui.begin(.{ .position = .absolute, .inset = .{ .top = 80, .bottom = 90, .start = 0 }, .width = .{ .px = 130 } }, .{ .on_press = msg(.prev), .on_long_press = msg(.pause) });
@@ -911,9 +925,9 @@ pub fn viewer(cx: Cx) void {
     const frac: f32 = if (v.duration > 0) @as(f32, @floatFromInt(@max(0, @min(v.duration, if (v.paused) v.duration else sys.now() - v.started)))) / @as(f32, @floatFromInt(v.duration)) else 0;
     for (0..@min(count, 30)) |n| {
         const fill: f32 = if (n < v.index) 1 else if (n == v.index) frac else 0;
-        ui.begin(.{ .grow = 1, .direction = .row, .height = .{ .px = 3 }, .radius = 2, .background = white.withAlpha(0.3), .clip = true }, .{ .key = key(.{ "bar", n }) });
+        ui.begin(.{ .grow = 1, .direction = .row, .height = .{ .px = 3 }, .radius = 2, .background = fg.withAlpha(0.3), .clip = true }, .{ .key = key(.{ "bar", n }) });
         if (fill > 0) {
-            ui.begin(.{ .grow = fill * 100, .height = .{ .px = 3 }, .background = white }, .{});
+            ui.begin(.{ .grow = fill * 100, .height = .{ .px = 3 }, .background = fg }, .{});
             ui.end();
         }
         if (fill < 1) {
@@ -928,33 +942,33 @@ pub fn viewer(cx: Cx) void {
     const u = s.store.user(uid);
     kit.avatar(cx, .{ .name = if (u) |x| s.store.userName(x) else "?", .color = if (u) |x| x.i("color") orelse 0 else 0, .image = if (u) |x| x.s("avatar") else null, .size = 36 }, 0);
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
-    ui.text(userName(s, uid), .{ .font_size = 14.5, .weight = 700, .color = white, .max_lines = 1 });
+    ui.text(userName(s, uid), .{ .font_size = 14, .weight = 700, .color = fg, .max_lines = 1 });
     var when: std.ArrayList(u8) = .empty;
     when.appendSlice(a, ago(a, j.strOr(story, "createdAt", ""))) catch {};
     if (j.truthy(story, "pinned")) when.print(a, " · {s}", .{t("On the profile")}) catch {};
     if (mine and expired(story)) when.print(a, " · {s}", .{t("Archived")}) catch {};
-    ui.text(when.items, .{ .font_size = 12.5, .color = white, .opacity = 0.75, .max_lines = 1 });
+    ui.text(when.items, .{ .font_size = 12, .color = fg, .opacity = 0.75, .max_lines = 1 });
     ui.end();
-    if (mine) kit.iconButton(cx, icons.moreH, msg(.more), .{ .color = white });
-    kit.iconButton(cx, icons.close, msg(.close), .{ .color = white });
+    if (mine) kit.iconButton(cx, icons.moreH, msg(.more), .{ .color = fg });
+    kit.iconButton(cx, icons.close, msg(.close), .{ .color = fg });
     ui.end();
     // Caption and the foot.
     ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 12, .start = 12, .end = 12 }, .gap = 10 }, .{});
     if (p) |pl| if (j.str(pl.v, "caption")) |cap| if (cap.len > 0) {
-        ui.begin(.{ .padding = .xy(12, 8), .radius = 12, .background = Color.hex("#00000080") }, .{});
-        ui.text(cap, .{ .font_size = 14.5, .color = white, .line_height = 1.45 });
+        ui.begin(.{ .padding = .xy(12, 8), .radius = 12, .background = cx.c.shade.withAlpha(0.5) }, .{});
+        ui.text(cap, .{ .font_size = 14, .color = fg, .line_height = 1.45 });
         ui.end();
     };
     if (mine) {
         const n = j.intOr(story, "viewCount", 0);
-        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .align_self = .start, .padding = .xy(12, 8), .radius = 12, .background = Color.hex("#ffffff22"), .pressed_opacity = 0.8 }, .{ .on_press = msg(.viewers) });
-        ui.icon(icons.eye, 18, white, .{}, 0);
-        ui.text(if (n > 0) fmt.tn(a, n, "{n} view", "{n} views") else t("No views yet"), .{ .font_size = 14, .weight = 600, .color = white });
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .align_self = .start, .padding = .xy(12, 8), .radius = 12, .background = fg.withAlpha(0.13), .pressed_opacity = 0.8 }, .{ .on_press = msg(.viewers) });
+        ui.icon(icons.eye, 18, fg, .{}, 0);
+        ui.text(if (n > 0) fmt.tn(a, n, "{n} view", "{n} views") else t("No views yet"), .{ .font_size = 14, .weight = 500, .color = fg });
         ui.end();
     } else {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
-        ui.begin(.{ .grow = 1, .width = .fill, .height = .{ .px = 44 }, .padding = .xy(14, 0), .radius = 22, .border_width = 1, .border_color = white.withAlpha(0.4), .justify = .center }, .{});
-        ui.input(.{ .key = zui.key("story_reply"), .value = s.fields.get(.story_reply).get(), .placeholder = t("Reply…"), .on_change = app.onField(.story_reply), .on_focus = msg(.pause), .on_submit = msg(.reply), .return_key = .send, .style = .{ .width = .fill, .font_size = 15, .color = white } });
+        ui.begin(.{ .grow = 1, .width = .fill, .height = .{ .px = 44 }, .padding = .xy(14, 0), .radius = 22, .border_width = 1, .border_color = fg.withAlpha(0.4), .justify = .center }, .{});
+        ui.input(.{ .key = zui.key("story_reply"), .value = s.fields.get(.story_reply).get(), .placeholder = t("Reply…"), .on_change = app.onField(.story_reply), .on_focus = msg(.pause), .on_submit = msg(.reply), .return_key = .send, .style = .{ .width = .fill, .font_size = 16, .color = fg } });
         ui.end();
         ui.begin(.{ .width = .{ .px = 44 }, .height = .{ .px = 44 }, .radius = 22, .align_items = .center, .justify = .center, .pressed_opacity = 0.7 }, .{ .on_press = msg(.like) });
         // The reaction itself (content the person sends), not chrome.
@@ -996,7 +1010,7 @@ pub fn viewsSheet(cx: Cx) void {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52, .padding = .xy(12, 6) }, .{ .key = key(.{ "viewer", id }) });
         kit.avatar(cx, .{ .name = j.strOr(u, "displayName", "?"), .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 42 }, 0);
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(j.strOr(u, "displayName", ""), .{ .font_size = 15, .weight = 600, .color = cx.c.text, .max_lines = 1 });
+        ui.text(j.strOr(u, "displayName", ""), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
         ui.text(ago(cx.a(), j.strOr(vw, "at", "")), .{ .font_size = 13, .color = cx.c.text_2 });
         ui.end();
         ui.end();
@@ -1024,12 +1038,12 @@ pub fn composer(cx: Cx) void {
     views.sheet(cx, t("New glimpse"));
     ui.begin(.{ .padding = .xy(12, 4), .gap = 10 }, .{});
     if (d.kind == .text) {
-        ui.begin(.{ .width = .fill, .min_height = 220, .radius = 18, .gradient = gradient(d.bg), .padding = .all(18), .justify = .center }, .{});
-        ui.input(.{ .key = zui.key("story_text"), .value = s.fields.get(.story_text).get(), .placeholder = t("Type something"), .on_change = app.onField(.story_text), .multiline = true, .style = .{ .width = .fill, .font_size = 22, .weight = 700, .color = Color.white, .text_align = .center, .max_height = 300 } });
+        ui.begin(.{ .width = .fill, .min_height = 220, .radius = 18, .background = bgFill(d.bg), .gradient = bgGradient(d.bg), .padding = .all(18), .justify = .center }, .{});
+        ui.input(.{ .key = zui.key("story_text"), .value = s.fields.get(.story_text).get(), .placeholder = t("Type something"), .on_change = app.onField(.story_text), .multiline = true, .style = .{ .width = .fill, .font_size = 22, .weight = 700, .color = bgText(d.bg), .text_align = .center, .max_height = 300 } });
         ui.end();
         ui.begin(.{ .direction = .row, .gap = 8 }, .{});
-        for (0..backgrounds.len) |i| {
-            ui.begin(.{ .width = .{ .px = 34 }, .height = .{ .px = 34 }, .radius = 17, .gradient = gradient(i), .border_width = if (d.bg == i) 3 else 0, .border_color = cx.c.text }, .{ .on_press = msg(.{ .bg = @intCast(i) }), .key = key(.{ "bg", i }) });
+        for (0..backgrounds_len) |i| {
+            ui.begin(.{ .width = .{ .px = 34 }, .height = .{ .px = 34 }, .radius = 17, .background = bgFill(i), .gradient = bgGradient(i), .border_width = if (d.bg == i) 3 else 0, .border_color = cx.c.text }, .{ .on_press = msg(.{ .bg = @intCast(i) }), .key = key(.{ "bg", i }) });
             ui.end();
         }
         ui.end();
@@ -1054,7 +1068,7 @@ pub fn composer(cx: Cx) void {
     kit.row(cx, t("Keep on my profile"), .{ .icon = icons.pin, .switch_on = d.keep, .subtitle = t("Stays watchable after 24 hours"), .on = msg(.keep) });
     ui.begin(.{ .direction = .row, .gap = 6, .align_items = .center }, .{});
     ui.icon(icons.lockSmall, 14, cx.c.text_3, .{}, 0);
-    ui.text(t("End-to-end encrypted. Leaves the feed after 24 hours; you keep it in your archive."), .{ .font_size = 12.5, .color = cx.c.text_3, .grow = 1, .width = .fill });
+    ui.text(t("End-to-end encrypted. Leaves the feed after 24 hours; you keep it in your archive."), .{ .font_size = 12, .color = cx.c.text_3, .grow = 1, .width = .fill });
     ui.end();
     ui.begin(.{ .direction = .row, .justify = .end, .gap = 8, .padding = .{ .bottom = 8 } }, .{});
     kit.button(cx, t("Cancel"), .close_modal, .{ .kind = .ghost });
@@ -1071,7 +1085,7 @@ fn audienceRow(cx: Cx, au: Audience, label: []const u8, sub: []const u8) void {
     ui.begin(.{ .width = .{ .px = 20 }, .height = .{ .px = 20 }, .radius = 10, .border_width = if (on) 6 else 1.5, .border_color = if (on) cx.c.brand else cx.c.border_strong }, .{});
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
-    ui.text(label, .{ .font_size = 15, .color = cx.c.text });
+    ui.text(label, .{ .font_size = 16, .color = cx.c.text });
     ui.text(sub, .{ .font_size = 13, .color = cx.c.text_2 });
     ui.end();
     ui.end();
@@ -1094,7 +1108,7 @@ pub fn peopleSheet(cx: Cx) void {
         ui.end();
         kit.avatar(cx, .{ .name = j.strOr(u, "displayName", "?"), .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 40 }, 0);
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(j.strOr(u, "displayName", ""), .{ .font_size = 15, .color = cx.c.text, .max_lines = 1 });
+        ui.text(j.strOr(u, "displayName", ""), .{ .font_size = 16, .color = cx.c.text, .max_lines = 1 });
         ui.text(if (j.truthy(u, "contact")) t("Contact") else t("You chat"), .{ .font_size = 13, .color = cx.c.text_2 });
         ui.end();
         ui.end();
@@ -1121,11 +1135,11 @@ pub fn listSheet(cx: Cx) void {
         const id = j.strOr(st, "id", "");
         const at = sys.parseIso(j.strOr(st, "createdAt", "")) orelse 0;
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52, .padding = .xy(12, 6), .radius = 12, .pressed_background = cx.c.active }, .{ .on_press = msg(.{ .open_list = @intCast(i) }), .key = key(.{ "sl", id }) });
-        ui.begin(.{ .width = .{ .px = 42 }, .height = .{ .px = 42 }, .radius = 12, .gradient = gradient(i % backgrounds.len), .align_items = .center, .justify = .center }, .{});
-        ui.icon(icons.image, 20, Color.white, .{}, 0);
+        ui.begin(.{ .width = .{ .px = 42 }, .height = .{ .px = 42 }, .radius = 12, .background = bgFill(i % backgrounds_len), .align_items = .center, .justify = .center }, .{});
+        ui.icon(icons.image, 20, bgText(i % backgrounds_len), .{}, 0);
         ui.end();
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(fmt.fullDate(cx.a(), at), .{ .font_size = 15, .color = cx.c.text, .max_lines = 1 });
+        ui.text(fmt.fullDate(cx.a(), at), .{ .font_size = 16, .color = cx.c.text, .max_lines = 1 });
         var sub: std.ArrayList(u8) = .empty;
         if (j.truthy(st, "pinned")) sub.appendSlice(cx.a(), t("On the profile")) catch {};
         if (!expired(st)) sub.print(cx.a(), "{s}{s}", .{ if (sub.items.len > 0) " · " else "", t("In the feed now") }) catch {};

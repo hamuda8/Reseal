@@ -975,13 +975,14 @@ pub fn colorsFor(s: *const State, env_dark: bool) theme.Colors {
         .light => false,
         .dark => true,
     };
-    var accent = theme.accents[@min(s.prefs.accent, theme.accents.len - 1)];
+    // Reseal's own accent, unless a white-label app gave the embedded widget its primary colour.
+    var override: ?Color = null;
     if (s.mode == .embed) if (s.embed.app) |a| {
         if (a.s("theme.primary")) |p| if (Color.parseHex(p)) |col| {
-            accent = .{ col, col.mix(0.7, Color.white) };
+            override = col;
         } else |_| {};
     };
-    return theme.colors(dark, accent[0], accent[1]);
+    return theme.colors(dark, override);
 }
 
 /// What Back (Android's button, the iOS edge swipe, the browser's) closes first; null lets the
@@ -1047,8 +1048,8 @@ fn notice(cx: Cx, ic: zui.Icon, title: []const u8, text: []const u8, retry: bool
     ui.begin(.{ .width = .fill, .height = .fill, .align_items = .center, .justify = .center, .padding = .xy(24, 28), .background = cx.c.canvas }, .{});
     ui.begin(.{ .max_width = 360, .align_items = .center, .gap = 12 }, .{});
     lockArt(cx, ic);
-    ui.text(title, .{ .font_size = 26, .weight = 800, .color = cx.c.text, .text_align = .center });
-    ui.text(text, .{ .font_size = 15, .color = cx.c.text_2, .text_align = .center, .line_height = 1.6 });
+    ui.text(title, .{ .font_size = 26, .weight = 700, .color = cx.c.text, .text_align = .center });
+    ui.text(text, .{ .font_size = 16, .color = cx.c.text_2, .text_align = .center, .line_height = 1.5 });
     if (retry) ui_kit.button(cx, t("Try again"), .boot, .{ .large = true, .block = true });
     ui.end();
     ui.end();
@@ -1056,7 +1057,7 @@ fn notice(cx: Cx, ic: zui.Icon, title: []const u8, text: []const u8, retry: bool
 
 fn lockArt(cx: Cx, ic: zui.Icon) void {
     cx.ui.begin(.{ .width = .{ .px = 76 }, .height = .{ .px = 76 }, .radius = 26, .background = cx.c.brand, .align_items = .center, .justify = .center, .align_self = .center }, .{});
-    cx.ui.icon(ic, 36, Color.white, .{}, 0);
+    cx.ui.icon(ic, 36, cx.c.on_accent, .{}, 0);
     cx.ui.end();
 }
 
@@ -1067,7 +1068,7 @@ fn point(cx: Cx, ic: zui.Icon, title: []const u8, text: []const u8) void {
     ui.icon(ic, 19, cx.c.accent, .{}, 0);
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 2 }, .{});
-    ui.text(title, .{ .font_size = 14, .weight = 650, .color = cx.c.text });
+    ui.text(title, .{ .font_size = 14, .weight = 500, .color = cx.c.text });
     ui.text(text, .{ .font_size = 14, .color = cx.c.text_2, .line_height = 1.5 });
     ui.end();
     ui.end();
@@ -1076,30 +1077,33 @@ fn point(cx: Cx, ic: zui.Icon, title: []const u8, text: []const u8) void {
 /// The art half of the sign-in screen (wide screens): floating bubbles on the brand colours.
 fn gateArt(cx: Cx) void {
     const ui = cx.ui;
-    ui.begin(.{ .grow = 1.1, .width = .fill, .height = .fill, .background = Color.hex("#1a1640"), .align_items = .center, .justify = .center, .padding = .all(40), .clip = true }, .{});
-    ui.begin(.{ .position = .absolute, .inset = .{ .top = -120, .start = -120 }, .width = .{ .px = 520 }, .height = .{ .px = 520 }, .radius = 260, .background = Color.hex("#6c5cff99") }, .{});
+    const c = cx.c;
+    ui.begin(.{ .grow = 1.1, .width = .fill, .height = .fill, .background = c.c, .align_items = .center, .justify = .center, .padding = .all(40), .clip = true }, .{});
+    ui.begin(.{ .position = .absolute, .inset = .{ .top = -120, .start = -120 }, .width = .{ .px = 520 }, .height = .{ .px = 520 }, .radius = 260, .background = c.a.withAlpha(0.6) }, .{});
     ui.end();
-    ui.begin(.{ .position = .absolute, .inset = .{ .bottom = -160, .end = -120 }, .width = .{ .px = 480 }, .height = .{ .px = 480 }, .radius = 240, .background = Color.hex("#4f8cff80") }, .{});
+    ui.begin(.{ .position = .absolute, .inset = .{ .bottom = -160, .end = -120 }, .width = .{ .px = 480 }, .height = .{ .px = 480 }, .radius = 240, .background = c.v.withAlpha(0.5) }, .{});
     ui.end();
     ui.begin(.{ .width = .fill, .max_width = 420, .gap = 14 }, .{});
     const bubble = struct {
         fn f(c2: Cx, text: []const u8, small: []const u8, ic: zui.Icon, out: bool) void {
-            c2.ui.begin(.{ .align_self = if (out) .end else .start, .max_width = 330, .padding = .xy(16, 12), .radius = 20, .background = if (out) Color.hex("#ffffffeb") else Color.hex("#ffffff29"), .gap = 4 }, .{});
-            c2.ui.text(text, .{ .font_size = 15, .color = if (out) Color.hex("#2b2470") else Color.white });
+            const k = c2.c;
+            const fg = if (out) k.c else k.b;
+            c2.ui.begin(.{ .align_self = if (out) .end else .start, .max_width = 330, .padding = .xy(16, 12), .radius = 18, .background = if (out) k.b.withAlpha(0.92) else k.b.withAlpha(0.16), .gap = 4 }, .{});
+            c2.ui.text(text, .{ .font_size = 16, .color = fg, .line_height = 1.5 });
             c2.ui.begin(.{ .direction = .row, .gap = 5, .align_items = .center, .opacity = 0.7 }, .{});
-            c2.ui.icon(ic, 13, if (out) Color.hex("#2b2470") else Color.white, .{}, 0);
-            c2.ui.text(small, .{ .font_size = 11.5, .color = if (out) Color.hex("#2b2470") else Color.white });
+            c2.ui.icon(ic, 13, fg, .{}, 0);
+            c2.ui.text(small, .{ .font_size = 12, .color = fg });
             c2.ui.end();
             c2.ui.end();
         }
     }.f;
-    bubble(cx, t("Are we still on for tonight? 🌙"), t("end-to-end encrypted"), icons.lock, false);
-    bubble(cx, t("Yes! I booked the table 🎉"), "9:41", icons.checks, true);
-    bubble(cx, t("✨ Ask our AI assistant anything"), t("AI built in"), icons.sparkles, false);
+    bubble(cx, t("Are we still on for tonight?"), t("end-to-end encrypted"), icons.lock, false);
+    bubble(cx, t("Yes! I booked the table"), "9:41", icons.checks, true);
+    bubble(cx, t("Ask our AI assistant anything"), t("AI built in"), icons.sparkles, false);
     ui.end();
     ui.begin(.{ .position = .absolute, .inset = .{ .start = 40, .end = 40, .bottom = 36 }, .gap = 8 }, .{});
-    ui.text(t("Talk freely."), .{ .font_size = 34, .weight = 800, .color = Color.white });
-    ui.text(t("Messages, calls and AI in one calm, private place."), .{ .font_size = 15, .color = Color.hex("#ffffffcc"), .max_width = 420 });
+    ui.text(t("Talk freely."), .{ .font_size = 34, .weight = 700, .color = c.b });
+    ui.text(t("Messages, calls and AI in one calm, private place."), .{ .font_size = 16, .color = c.b.withAlpha(0.8), .max_width = 420, .line_height = 1.5 });
     ui.end();
     ui.end();
 }
@@ -1125,9 +1129,9 @@ fn signInGate(cx: Cx) void {
             ui.begin(.{ .padding = .{ .bottom = 22 } }, .{});
             logo(c2, 64);
             ui.end();
-            ui.text(t("Welcome to Reseal"), .{ .font_size = 32, .weight = 800, .color = c2.c.text });
+            ui.text(t("Welcome to Reseal"), .{ .font_size = 32, .weight = 700, .color = c2.c.text });
             ui.begin(.{ .padding = .{ .top = 10, .bottom = 26 } }, .{});
-            ui.text(t("Sign in with your Wufour account and you're in. Your chats are encrypted on your devices automatically."), .{ .font_size = 15, .color = c2.c.text_2, .line_height = 1.6 });
+            ui.text(t("Sign in with your Wufour account and you're in. Your chats are encrypted on your devices automatically."), .{ .font_size = 16, .color = c2.c.text_2, .line_height = 1.5 });
             ui.end();
             ui.begin(.{ .gap = 14, .padding = .{ .bottom = 28 } }, .{});
             point(c2, icons.lock, t("Private by default"), t("Messages are encrypted on your devices before they leave."));
@@ -1137,7 +1141,7 @@ fn signInGate(cx: Cx) void {
             // Phones: Wufour's sign-in opens inside the app (fx.webAuth); the web goes to /login.
             ui_kit.button(c2, if (app.native_auth) t("Sign in with Wufour") else t("Continue with Wufour"), .sign_in_wufour, .{ .large = true, .block = true });
             ui.begin(.{ .padding = .{ .top = 18 } }, .{});
-            ui.text(t("Reseal never sees your password. Signing in happens on Wufour."), .{ .font_size = 12.5, .color = c2.c.text_3, .line_height = 1.5 });
+            ui.text(t("Reseal never sees your password. Signing in happens on Wufour."), .{ .font_size = 12, .color = c2.c.text_3, .line_height = 1.5 });
             ui.end();
         }
     }.f);
@@ -1152,10 +1156,10 @@ fn unlockGate(cx: Cx) void {
     ui.begin(.{ .width = .fill, .max_width = 420, .padding = .xy(32, 36), .radius = 28, .background = c.surface, .align_items = .center, .gap = 0 }, .{});
     lockArt(cx, icons.shieldCheck);
     ui.begin(.{ .padding = .{ .top = 20, .bottom = 10 } }, .{});
-    ui.text(t("Unlock your chats"), .{ .font_size = 32, .weight = 800, .color = c.text, .text_align = .center });
+    ui.text(t("Unlock your chats"), .{ .font_size = 32, .weight = 700, .color = c.text, .text_align = .center });
     ui.end();
     ui.begin(.{ .padding = .{ .bottom = 26 } }, .{});
-    ui.text(t("You turned on advanced protection, so only your passcode can unlock your messages on a new device."), .{ .font_size = 15, .color = c.text_2, .text_align = .center, .line_height = 1.6 });
+    ui.text(t("You turned on advanced protection, so only your passcode can unlock your messages on a new device."), .{ .font_size = 16, .color = c.text_2, .text_align = .center, .line_height = 1.5 });
     ui.end();
     ui_kit.field(cx, .passcode, .{
         .label = if (s.unlock_recovery) t("Recovery key") else t("Passcode"),
@@ -1165,7 +1169,7 @@ fn unlockGate(cx: Cx) void {
     });
     ui_kit.button(cx, t("Unlock"), .unlock, .{ .large = true, .block = true, .icon = icons.unlock, .busy = s.busy });
     ui.begin(.{ .padding = .{ .top = 14 } }, .{ .on_press = .toggle_recovery });
-    ui.text(if (s.unlock_recovery) t("Use my passcode instead") else t("Use my recovery key instead"), .{ .font_size = 14, .weight = 650, .color = c.accent });
+    ui.text(if (s.unlock_recovery) t("Use my passcode instead") else t("Use my recovery key instead"), .{ .font_size = 14, .weight = 500, .color = c.accent });
     ui.end();
     ui.begin(.{ .padding = .{ .top = 14 } }, .{ .on_press = .start_fresh });
     ui.text(t("Forgot both? Start fresh"), .{ .font_size = 14, .weight = 500, .color = c.text_3 });
@@ -1177,9 +1181,9 @@ fn unlockGate(cx: Cx) void {
 fn connectionPill(cx: Cx) void {
     const ui = cx.ui;
     ui.begin(.{ .position = .absolute, .inset = .{ .top = 10, .start = 0, .end = 0 }, .align_items = .center }, .{});
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .xy(14, 7), .radius = 16, .background = cx.c.toast }, .{});
-    ui.spinner(14, Color.white, .{}, zui.key("conn-spin"));
-    ui.text(if (app.env.online) t("Connecting…") else t("Waiting for network…"), .{ .font_size = 13.5, .weight = 600, .color = Color.white });
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .xy(14, 7), .radius = 18, .background = cx.c.toast }, .{});
+    ui.spinner(14, cx.c.toast_text, .{}, zui.key("conn-spin"));
+    ui.text(if (app.env.online) t("Connecting…") else t("Waiting for network…"), .{ .font_size = 13, .weight = 500, .color = cx.c.toast_text });
     ui.end();
     ui.end();
 }
@@ -1187,12 +1191,12 @@ fn connectionPill(cx: Cx) void {
 fn toastView(cx: Cx) void {
     const ui = cx.ui;
     ui.begin(.{ .position = .absolute, .inset = .{ .start = 16, .end = 16, .bottom = if (cx.phone) 96 else 112 }, .align_items = .center }, .{});
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .padding = .xy(18, 12), .min_height = 50, .radius = 16, .background = cx.c.toast, .max_width = 560 }, .{ .on_press = .{ .toast_hide = cx.s.toast.id } });
-    ui.icon(if (cx.s.toast.err) icons.alertCircle else icons.info, 20, if (cx.s.toast.err) Color.hex("#ff8a9b") else Color.hex("#a9a0ff"), .{}, 0);
-    ui.text(cx.s.toast.text.get(), .{ .font_size = 14.5, .weight = 500, .color = Color.white });
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .padding = .xy(18, 12), .min_height = 50, .radius = 18, .background = cx.c.toast, .max_width = 560 }, .{ .on_press = .{ .toast_hide = cx.s.toast.id } });
+    ui.icon(if (cx.s.toast.err) icons.alertCircle else icons.info, 20, if (cx.s.toast.err) cx.c.danger else cx.c.toast_accent, .{}, 0);
+    ui.text(cx.s.toast.text.get(), .{ .font_size = 14, .weight = 500, .color = cx.c.toast_text });
     if (@import("listextras.zig").toastAction(cx.s)) |x| {
         ui.begin(.{ .padding = .xy(10, 6), .radius = 10, .pressed_opacity = 0.7 }, .{ .on_press = x.msg, .key = zui.key("toast-action") });
-        ui.text(x.label, .{ .font_size = 14.5, .weight = 750, .color = Color.hex("#a9a0ff") });
+        ui.text(x.label, .{ .font_size = 14, .weight = 700, .color = cx.c.toast_accent });
         ui.end();
     }
     ui.end();
@@ -1211,7 +1215,7 @@ pub fn sheet(cx: Cx, title: ?[]const u8) void {
     ui.begin(.{ .width = .fill, .max_width = 440, .max_height = cx.h * 0.88, .background = cx.c.surface, .radius = 24, .padding = .{ .bottom = if (cx.phone) 18 else 8 } }, .{});
     if (title) |tt| {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .{ .top = 18, .bottom = 6, .start = 24, .end = 14 }, .min_height = 62 }, .{});
-        ui.text(tt, .{ .font_size = 20, .weight = 750, .color = cx.c.text, .grow = 1, .width = .fill });
+        ui.text(tt, .{ .font_size = 20, .weight = 700, .color = cx.c.text, .grow = 1, .width = .fill });
         ui_kit.iconButton(cx, icons.close, .close_modal, .{});
         ui.end();
     }
@@ -1229,7 +1233,7 @@ pub fn menuItem(cx: Cx, ic: zui.Icon, label: []const u8, msg: Msg, danger: bool)
     const c = cx.c;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 44, .padding = .xy(12, 6), .radius = 12, .pressed_background = c.hover }, .{ .on_press = msg });
     ui.icon(ic, 19, if (danger) c.danger else c.text_2, .{}, 0);
-    ui.text(label, .{ .font_size = 14.5, .weight = 550, .color = if (danger) c.danger else c.text, .grow = 1, .width = .fill });
+    ui.text(label, .{ .font_size = 14, .weight = 500, .color = if (danger) c.danger else c.text, .grow = 1, .width = .fill });
     ui.end();
 }
 
@@ -1391,13 +1395,13 @@ fn confirmView(cx: Cx, kind: app.ConfirmKind, target: Id, target_item: Id) void 
     const ui = cx.ui;
     sheet(cx, title);
     ui.begin(.{ .padding = .xy(12, 6), .gap = 12 }, .{});
-    if (text.len > 0) ui.text(text, .{ .font_size = 15, .color = cx.c.text_2, .line_height = 1.6 });
+    if (text.len > 0) ui.text(text, .{ .font_size = 16, .color = cx.c.text_2, .line_height = 1.5 });
     if (check) |label| {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 44 }, .{ .on_press = .confirm_check });
         ui.begin(.{ .width = .{ .px = 22 }, .height = .{ .px = 22 }, .radius = 8, .border_width = if (s.confirm_check) 0 else 1.5, .border_color = cx.c.border_strong, .background = if (s.confirm_check) cx.c.brand else null, .align_items = .center, .justify = .center }, .{});
-        if (s.confirm_check) ui.icon(icons.check, 14, Color.white, .{}, 0);
+        if (s.confirm_check) ui.icon(icons.check, 14, cx.c.on_accent, .{}, 0);
         ui.end();
-        ui.text(label, .{ .font_size = 15, .color = cx.c.text });
+        ui.text(label, .{ .font_size = 16, .color = cx.c.text });
         ui.end();
     }
     ui.begin(.{ .direction = .row, .justify = .end, .gap = 8, .padding = .{ .top = 8, .bottom = 8 } }, .{});

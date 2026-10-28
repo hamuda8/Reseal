@@ -108,9 +108,9 @@ pub fn verifyRow(cx: Cx, u: *const data.Obj) void {
 
 fn quick(cx: Cx, ic: zui.Icon, label: []const u8, msg: Msg) void {
     const ui = cx.ui;
-    ui.begin(.{ .align_items = .center, .gap = 4, .min_width = 72, .padding = .xy(10, 8), .radius = 14, .background = cx.c.surface_2, .pressed_background = cx.c.active }, .{ .on_press = msg, .key = key(.{ "uq", label }) });
+    ui.begin(.{ .align_items = .center, .gap = 4, .min_width = 72, .padding = .xy(10, 8), .radius = 12, .background = cx.c.surface_2, .pressed_background = cx.c.active }, .{ .on_press = msg, .key = key(.{ "uq", label }) });
     ui.icon(ic, 21, cx.c.accent, .{}, 0);
-    ui.text(label, .{ .font_size = 12.5, .weight = 600, .color = cx.c.text, .max_lines = 1 });
+    ui.text(label, .{ .font_size = 12, .weight = 500, .color = cx.c.text, .max_lines = 1 });
     ui.end();
 }
 
@@ -124,7 +124,7 @@ pub fn card(cx: Cx, u: *const data.Obj, c: ?*const data.Chat) void {
     const bot = u.b("isBot") or (c != null and c.?.is("bot"));
     ui.begin(.{ .align_items = .center, .gap = 6, .padding = .{ .top = 12, .bottom = 14 } }, .{});
     kit.avatar(cx, .{ .name = s.store.userName(u), .color = u.i("color") orelse 0, .image = u.s("avatar"), .image_url = u.s("avatarUrl"), .size = 96 }, key(.{ "uc", uid }));
-    ui.text(s.store.userName(u), .{ .font_size = 22, .weight = 800, .color = col.text, .text_align = .center });
+    ui.text(s.store.userName(u), .{ .font_size = 22, .weight = 700, .color = col.text, .text_align = .center });
     const status = if (u.b("deleted")) t("deleted account") else if (bot) (if (u.s("bot.model")) |model| std.fmt.allocPrint(a, "{s} · {s}", .{ t("AI assistant"), model }) catch "" else t("bot")) else text.presenceText(u.get("presence"));
     ui.text(status, .{ .font_size = 14, .color = col.text_2, .text_align = .center });
     ui.end();
@@ -183,7 +183,7 @@ pub fn commonSheet(cx: Cx) void {
             cx.ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 56, .padding = .xy(12, 4), .radius = 12, .pressed_background = cx.c.active }, .{ .on_press = msgOf(.{ .open_chat = Id.of(id) }), .key = key(.{ "cg", id }) });
             kit.avatar(cx, .{ .name = j.strOr(c, "title", ""), .color = j.intOr(c, "color", 0), .image = j.str(c, "avatar"), .size = 42 }, key(.{ "cga", id }));
             cx.ui.begin(.{ .grow = 1, .width = .fill }, .{});
-            cx.ui.text(j.strOr(c, "title", ""), .{ .font_size = 15, .weight = 600, .color = cx.c.text, .max_lines = 1 });
+            cx.ui.text(j.strOr(c, "title", ""), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
             cx.ui.text(fmt.tn(cx.a(), n, "{n} member", "{n} members"), .{ .font_size = 13, .color = cx.c.text_2 });
             cx.ui.end();
             cx.ui.end();

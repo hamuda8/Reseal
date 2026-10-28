@@ -35,7 +35,7 @@ const Opt = struct { v: []const u8, label: []const u8 };
 const ChoiceSpec = struct { path: []const u8, title: []const u8, opts: []const Opt };
 const choices = std.enums.EnumArray(Choice, ChoiceSpec).init(.{
     .mode = .{ .path = "theme.mode", .title = "Theme", .opts = &.{ .{ .v = "auto", .label = "Follow the visitor's system" }, .{ .v = "light", .label = "Light" }, .{ .v = "dark", .label = "Dark" } } },
-    .font = .{ .path = "theme.font", .title = "Font", .opts = &.{ .{ .v = "system", .label = "System" }, .{ .v = "inter", .label = "Inter" }, .{ .v = "roboto", .label = "Roboto" }, .{ .v = "rounded", .label = "Rounded" }, .{ .v = "serif", .label = "Serif" }, .{ .v = "mono", .label = "Monospace" }, .{ .v = "arabic", .label = "Arabic" } } },
+    .font = .{ .path = "theme.font", .title = "Font", .opts = &.{ .{ .v = "system", .label = "System" }, .{ .v = "rounded", .label = "Rounded" }, .{ .v = "serif", .label = "Serif" }, .{ .v = "mono", .label = "Monospace" }, .{ .v = "arabic", .label = "Arabic" } } },
     .bubbles = .{ .path = "theme.bubbleStyle", .title = "Message bubbles", .opts = &.{ .{ .v = "rounded", .label = "Rounded" }, .{ .v = "square", .label = "Square" }, .{ .v = "minimal", .label = "Minimal" } } },
     .wallpaper = .{ .path = "theme.wallpaper", .title = "Background", .opts = &.{ .{ .v = "pattern", .label = "Pattern" }, .{ .v = "gradient", .label = "Gradient" }, .{ .v = "none", .label = "Plain" } } },
     .layout = .{ .path = "widget.mode", .title = "Layout", .opts = &.{ .{ .v = "bubble", .label = "Floating chat bubble" }, .{ .v = "inline", .label = "Inline (inside your page)" }, .{ .v = "fullscreen", .label = "Full screen" } } },
@@ -500,9 +500,9 @@ fn hashColor(id: []const u8) i64 {
 }
 
 fn card(cx: Cx, title: ?[]const u8, sub: ?[]const u8) void {
-    cx.ui.begin(.{ .gap = 8, .padding = .all(16), .radius = 16, .background = cx.c.surface, .border_width = 1, .border_color = cx.c.border }, .{});
+    cx.ui.begin(.{ .gap = 8, .padding = .all(16), .radius = 18, .background = cx.c.surface, .border_width = 1, .border_color = cx.c.border }, .{});
     if (title) |tt| cx.ui.text(tt, .{ .font_size = 16, .weight = 700, .color = cx.c.text });
-    if (sub) |sb| cx.ui.text(sb, .{ .font_size = 13.5, .color = cx.c.text_2, .line_height = 1.5 });
+    if (sub) |sb| cx.ui.text(sb, .{ .font_size = 14, .color = cx.c.text_2, .line_height = 1.5 });
 }
 
 fn endCard(cx: Cx) void {
@@ -513,7 +513,7 @@ fn endCard(cx: Cx) void {
 
 fn code(cx: Cx, text: []const u8) void {
     cx.ui.begin(.{ .padding = .all(12), .radius = 10, .background = cx.c.surface_2 }, .{});
-    cx.ui.textWith(text, .{ .font_size = 12.5, .mono = true, .color = cx.c.text, .line_height = 1.45 }, .{ .selectable = true });
+    cx.ui.textWith(text, .{ .font_size = 12, .mono = true, .color = cx.c.text, .line_height = 1.45 }, .{ .selectable = true });
     cx.ui.end();
 }
 
@@ -537,8 +537,8 @@ pub fn homePane(cx: Cx) void {
                 ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 56, .padding = .xy(8, 6), .radius = 12, .pressed_background = cx.c.active, .hover_background = cx.c.hover }, .{ .on_press = msg(.{ .open_app = Id.of(id) }), .key = key(.{ "app", id }) });
                 kit.avatar(cx, .{ .name = j.strOr(av, "name", "?"), .color = hashColor(id), .size = 40, .square = true }, 0);
                 ui.begin(.{ .grow = 1, .width = .fill }, .{});
-                ui.text(j.strOr(av, "name", ""), .{ .font_size = 15, .weight = 600, .color = cx.c.text, .max_lines = 1 });
-                ui.text(j.strOr(av, "publishableKey", ""), .{ .font_size = 12.5, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
+                ui.text(j.strOr(av, "name", ""), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
+                ui.text(j.strOr(av, "publishableKey", ""), .{ .font_size = 12, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
                 ui.end();
                 ui.icon(icons.chevronRight, 18, cx.c.text_3, .{}, 0);
                 ui.end();
@@ -562,7 +562,7 @@ pub fn appPane(cx: Cx) void {
     for (tab_labels, 0..) |l, i| {
         const on = @intFromEnum(s.dev.tab) == i;
         ui.begin(.{ .direction = .row, .align_items = .center, .height = .{ .px = 32 }, .padding = .xy(13, 0), .radius = 11, .background = if (on) cx.c.text else cx.c.surface_2 }, .{ .on_press = msg(.{ .tab = @enumFromInt(i) }), .key = key(.{ "devtab", i }) });
-        ui.text(t(l), .{ .font_size = 13.5, .weight = 650, .color = if (on) cx.c.surface else cx.c.text_2, .max_lines = 1 });
+        ui.text(t(l), .{ .font_size = 13, .weight = 500, .color = if (on) cx.c.surface else cx.c.text_2, .max_lines = 1 });
         ui.end();
     }
     ui.end();
@@ -581,9 +581,9 @@ pub fn appPane(cx: Cx) void {
 }
 
 fn stat(cx: Cx, n: i64, label: []const u8, danger: bool) void {
-    cx.ui.begin(.{ .grow = 1, .width = .fill, .gap = 2, .padding = .all(14), .radius = 14, .background = cx.c.surface_2 }, .{});
-    cx.ui.text(std.fmt.allocPrint(cx.a(), "{d}", .{n}) catch "", .{ .font_size = 22, .weight = 800, .color = if (danger and n > 0) cx.c.danger else cx.c.text });
-    cx.ui.text(label, .{ .font_size = 12.5, .color = cx.c.text_2, .max_lines = 1 });
+    cx.ui.begin(.{ .grow = 1, .width = .fill, .gap = 2, .padding = .all(14), .radius = 12, .background = cx.c.surface_2 }, .{});
+    cx.ui.text(std.fmt.allocPrint(cx.a(), "{d}", .{n}) catch "", .{ .font_size = 22, .weight = 700, .color = if (danger and n > 0) cx.c.danger else cx.c.text });
+    cx.ui.text(label, .{ .font_size = 12, .color = cx.c.text_2, .max_lines = 1 });
     cx.ui.end();
 }
 
@@ -605,14 +605,14 @@ fn overview(cx: Cx, av: j.Value) void {
     stat(cx, j.intOr(stats, "webhooksFailed", 0), t("Webhooks failed"), true);
     ui.end();
     card(cx, t("Keys"), t("The publishable key is safe in web pages. The secret key is for your server only."));
-    ui.text(t("Publishable key"), .{ .font_size = 13, .weight = 600, .color = cx.c.text_2 });
+    ui.text(t("Publishable key"), .{ .font_size = 13, .weight = 500, .color = cx.c.text_2 });
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
     code(cx, j.strOr(av, "publishableKey", ""));
     ui.end();
     kit.iconButton(cx, icons.copy, msg(.copy_publishable), .{ .size = 36 });
     ui.end();
-    ui.text(t("Secret key"), .{ .font_size = 13, .weight = 600, .color = cx.c.text_2 });
+    ui.text(t("Secret key"), .{ .font_size = 13, .weight = 500, .color = cx.c.text_2 });
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
     code(cx, std.fmt.allocPrint(a, "rsl_sk_••••••••••••••••••••{s}", .{j.strOr(av, "secretKeyHint", "")}) catch "");
@@ -675,9 +675,9 @@ fn customize(cx: Cx) void {
     choiceRow(cx, .mode);
     kit.field(cx, .dev_primary, .{ .label = t("Brand color"), .placeholder = "#6c5cff", .mono = true });
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .xy(12, 4) }, .{});
-    ui.text(t("Corner roundness"), .{ .font_size = 15, .color = cx.c.text, .grow = 1, .width = .fill });
+    ui.text(t("Corner roundness"), .{ .font_size = 16, .color = cx.c.text, .grow = 1, .width = .fill });
     kit.iconButton(cx, icons.minus, msg(.radius_down), .{ .size = 34, .soft = true });
-    ui.text(std.fmt.allocPrint(cx.a(), "{d}", .{draftInt(s, "theme.radius")}) catch "", .{ .font_size = 15, .weight = 650, .color = cx.c.text, .min_width = 30, .text_align = .center });
+    ui.text(std.fmt.allocPrint(cx.a(), "{d}", .{draftInt(s, "theme.radius")}) catch "", .{ .font_size = 16, .weight = 500, .color = cx.c.text, .min_width = 30, .text_align = .center });
     kit.iconButton(cx, icons.plus, msg(.radius_up), .{ .size = 34, .soft = true });
     ui.end();
     choiceRow(cx, .font);
@@ -719,10 +719,10 @@ fn users(cx: Cx, av: j.Value) void {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52 }, .{ .key = key(.{ "team", id }) });
         kit.avatar(cx, .{ .name = j.strOr(tm, "name", "?"), .color = hashColor(id), .image_url = j.str(tm, "avatarUrl"), .size = 40, .square = true }, 0);
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(j.strOr(tm, "name", ""), .{ .font_size = 15, .weight = 600, .color = cx.c.text, .max_lines = 1 });
-        ui.text(j.strOr(tm, "externalId", ""), .{ .font_size = 12.5, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
+        ui.text(j.strOr(tm, "name", ""), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
+        ui.text(j.strOr(tm, "externalId", ""), .{ .font_size = 12, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
         ui.end();
-        ui.text(std.fmt.allocPrint(a, "{s} · {s}", .{ fmt.tn(a, @intCast(j.arr(tm, "members").len), "{n} member", "{n} members"), fmt.tn(a, j.intOr(tm, "chats", 0), "{n} conversation", "{n} conversations") }) catch "", .{ .font_size = 12.5, .color = cx.c.text_3 });
+        ui.text(std.fmt.allocPrint(a, "{s} · {s}", .{ fmt.tn(a, @intCast(j.arr(tm, "members").len), "{n} member", "{n} members"), fmt.tn(a, j.intOr(tm, "chats", 0), "{n} conversation", "{n} conversations") }) catch "", .{ .font_size = 12, .color = cx.c.text_3 });
         ui.end();
     }
     endCard(cx);
@@ -740,8 +740,8 @@ fn users(cx: Cx, av: j.Value) void {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52 }, .{});
         kit.avatar(cx, .{ .name = j.strOr(u, "name", "?"), .color = hashColor(id), .image_url = j.str(u, "avatarUrl"), .size = 40 }, 0);
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(if (agent) std.fmt.allocPrint(a, "{s} · {s}", .{ j.strOr(u, "name", ""), t("agent") }) catch "" else j.strOr(u, "name", ""), .{ .font_size = 15, .weight = 600, .color = cx.c.text, .max_lines = 1 });
-        ui.text(j.strOr(u, "externalId", ""), .{ .font_size = 12.5, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
+        ui.text(if (agent) std.fmt.allocPrint(a, "{s} · {s}", .{ j.strOr(u, "name", ""), t("agent") }) catch "" else j.strOr(u, "name", ""), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
+        ui.text(j.strOr(u, "externalId", ""), .{ .font_size = 12, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
         ui.end();
         if (j.str(u, "lastSeenAt")) |ls| if (sys.parseIso(ls)) |ms| ui.text(fmt.fullDate(a, ms), .{ .font_size = 12, .color = cx.c.text_3 });
         ui.end();
@@ -793,7 +793,7 @@ fn webhooks(cx: Cx) void {
     card(cx, t("Endpoint"), t("Reseal POSTs JSON events here and retries failures for up to a day."));
     kit.field(cx, .dev_webhook_url, .{ .label = t("URL"), .placeholder = "https://example.com/reseal-webhook" });
     kit.row(cx, t("Enabled"), .{ .switch_on = s.dev.webhook_enabled, .on = msg(.webhook_enabled) });
-    ui.text(t("Events"), .{ .font_size = 13, .weight = 600, .color = cx.c.text_2 });
+    ui.text(t("Events"), .{ .font_size = 13, .weight = 500, .color = cx.c.text_2 });
     for (webhook_events, 0..) |ev, i| kit.row(cx, ev, .{ .switch_on = s.dev.events & (@as(u16, 1) << @intCast(i)) != 0, .on = msg(.{ .webhook_event = @intCast(i) }), .k = key(.{ "ev", i }) });
     ui.begin(.{ .direction = .row, .gap = 8 }, .{});
     kit.button(cx, t("Save"), msg(.save_webhook), .{ .small = true });
@@ -810,9 +810,9 @@ fn webhooks(cx: Cx) void {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 44, .padding = .xy(6, 4), .radius = 10, .pressed_background = cx.c.active }, .{ .on_press = msg(.{ .delivery = @intCast(i) }), .key = key(.{ "dl", j.strOr(dl, "id", "") }) });
         ui.begin(.{ .width = .{ .px = 8 }, .height = .{ .px = 8 }, .radius = 4, .background = col }, .{});
         ui.end();
-        ui.text(j.strOr(dl, "event", ""), .{ .font_size = 13.5, .mono = true, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
+        ui.text(j.strOr(dl, "event", ""), .{ .font_size = 14, .mono = true, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
         const status_text = if (j.intOr(dl, "lastStatus", 0) > 0) std.fmt.allocPrint(a, "HTTP {d}", .{j.intOr(dl, "lastStatus", 0)}) catch "" else j.str(dl, "lastError") orelse st;
-        ui.text(status_text, .{ .font_size = 12.5, .color = cx.c.text_3, .max_lines = 1 });
+        ui.text(status_text, .{ .font_size = 12, .color = cx.c.text_3, .max_lines = 1 });
         if (std.mem.eql(u8, st, "failed")) kit.button(cx, t("Retry"), msg(.{ .retry = Id.of(j.strOr(dl, "id", "")) }), .{ .small = true, .kind = .ghost });
         ui.end();
     }
@@ -826,7 +826,7 @@ fn aiTab(cx: Cx, av: j.Value) void {
     if (std.mem.eql(u8, j.strOr(av, "settings.e2ee", ""), "on")) {
         ui.begin(.{ .direction = .row, .gap = 8, .padding = .all(10), .radius = 12, .background = cx.c.surface_2 }, .{});
         ui.icon(icons.alert, 18, cx.c.warning, .{}, 0);
-        ui.text(t("This app is end-to-end encrypted, so the server cannot read messages for an AI. Turn encryption off in Customize to use an assistant."), .{ .font_size = 13.5, .color = cx.c.text_2, .grow = 1, .width = .fill });
+        ui.text(t("This app is end-to-end encrypted, so the server cannot read messages for an AI. Turn encryption off in Customize to use an assistant."), .{ .font_size = 14, .color = cx.c.text_2, .grow = 1, .width = .fill });
         ui.end();
     }
     kit.button(cx, t("Create an assistant"), msg(.new_bot), .{ .small = true, .icon = icons.plus });
@@ -840,8 +840,8 @@ fn aiTab(cx: Cx, av: j.Value) void {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 56 }, .{ .key = key(.{ "devbot", id }) });
         kit.avatar(cx, .{ .name = j.strOr(b, "name", "?"), .color = 4, .image = j.str(b, "avatar"), .icon = if (j.str(b, "avatar") == null) icons.sparkles else null, .size = 42 }, 0);
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(j.strOr(b, "name", ""), .{ .font_size = 15, .weight = 600, .color = cx.c.text, .max_lines = 1 });
-        ui.text(j.strOr(b, "model", ""), .{ .font_size = 12.5, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
+        ui.text(j.strOr(b, "name", ""), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
+        ui.text(j.strOr(b, "model", ""), .{ .font_size = 12, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
         ui.end();
         if (std.mem.eql(u8, id, current)) kit.badge(cx, t("in widget"), false) else kit.button(cx, t("Use in widget"), msg(.{ .use_bot = Id.of(id) }), .{ .small = true, .kind = .secondary });
         kit.iconButton(cx, icons.edit, msg(.{ .edit_bot = Id.of(id) }), .{ .size = 36 });
@@ -877,7 +877,7 @@ pub fn secretSheet(cx: Cx) void {
     const s = cx.s;
     views.sheet(cx, t("Secret key"));
     cx.ui.begin(.{ .padding = .xy(12, 4), .gap = 10 }, .{});
-    cx.ui.text(s.dev.secret_title.get(), .{ .font_size = 14.5, .color = cx.c.text_2, .line_height = 1.5 });
+    cx.ui.text(s.dev.secret_title.get(), .{ .font_size = 14, .color = cx.c.text_2, .line_height = 1.5 });
     code(cx, s.dev.secret.get());
     cx.ui.begin(.{ .direction = .row, .justify = .end, .gap = 8, .padding = .{ .bottom = 8 } }, .{});
     kit.button(cx, t("Copy"), msg(.copy_secret), .{ .kind = .secondary, .icon = icons.copy });

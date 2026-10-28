@@ -164,7 +164,7 @@ pub fn section(cx: Cx, c: *const data.Chat) void {
     for ([_]Tab{ .photo, .file, .link, .voice, .audio }) |tab| {
         const on = sh.tab == tab;
         ui.begin(.{ .height = .{ .px = 32 }, .padding = .xy(13, 0), .radius = 11, .justify = .center, .background = if (on) cx.c.text else cx.c.surface_2 }, .{ .on_press = msgOf(.{ .tab = tab }), .key = key(.{ "stab", @intFromEnum(tab) }) });
-        ui.text(label(tab), .{ .font_size = 13.5, .weight = 650, .color = if (on) cx.c.surface else cx.c.text_2, .max_lines = 1 });
+        ui.text(label(tab), .{ .font_size = 13, .weight = 500, .color = if (on) cx.c.surface else cx.c.text_2, .max_lines = 1 });
         ui.end();
     }
     ui.end();
@@ -188,8 +188,8 @@ pub fn section(cx: Cx, c: *const data.Chat) void {
                         ui.image(th, .{ .width = .{ .px = cell }, .height = .{ .px = cell }, .fit = .cover }, key(.{ "smgt", id }));
                     } else ui.icon(if (std.mem.eql(u8, j.strOr(it, "kind", ""), "photo")) icons.image else icons.video, 22, cx.c.text_3, .{}, 0);
                     if (j.field(it, "duration")) |d| if (d == .float or d == .integer) {
-                        ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 4, .end = 4 }, .padding = .xy(5, 1), .radius = 6, .background = Color.hex("#00000088") }, .{});
-                        ui.text(fmt.duration(a, j.floatOr(it, "duration", 0)), .{ .font_size = 11, .weight = 650, .color = Color.white });
+                        ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 4, .end = 4 }, .padding = .xy(5, 1), .radius = 6, .background = cx.c.shade.withAlpha(0.53) }, .{});
+                        ui.text(fmt.duration(a, j.floatOr(it, "duration", 0)), .{ .font_size = 12, .weight = 500, .color = cx.c.on_shade });
                         ui.end();
                     };
                     ui.end();

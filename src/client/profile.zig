@@ -219,7 +219,7 @@ pub fn usernameHint(cx: Cx) void {
     const p = cx.s.profile;
     const hint = if (p.username_hint.get().len > 0) p.username_hint.get() else t("People can find you by this name. Use a-z, 0-9 and underscores.");
     cx.ui.begin(.{ .padding = .{ .top = 0, .bottom = 12 } }, .{});
-    cx.ui.text(hint, .{ .font_size = 12.5, .color = if (p.username_hint.get().len == 0) cx.c.text_3 else if (p.username_ok) cx.c.accent else cx.c.danger, .line_height = 1.45 });
+    cx.ui.text(hint, .{ .font_size = 12, .color = if (p.username_hint.get().len == 0) cx.c.text_3 else if (p.username_ok) cx.c.accent else cx.c.danger, .line_height = 1.45 });
     cx.ui.end();
 }
 
@@ -253,8 +253,8 @@ pub fn tourSheet(cx: Cx) void {
         ui.begin(.{ .direction = .row, .gap = 14, .padding = .xy(12, 10) }, .{ .key = kit.key(.{ "tour", i }) });
         ui.icon(it.ic, 22, cx.c.accent, .{}, 0);
         ui.begin(.{ .grow = 1, .width = .fill, .gap = 2 }, .{});
-        ui.text(t(it.title), .{ .font_size = 15, .weight = 650, .color = cx.c.text });
-        ui.text(t(it.text), .{ .font_size = 13.5, .color = cx.c.text_2, .line_height = 1.5 });
+        ui.text(t(it.title), .{ .font_size = 16, .weight = 500, .color = cx.c.text });
+        ui.text(t(it.text), .{ .font_size = 14, .color = cx.c.text_2, .line_height = 1.5 });
         ui.end();
         ui.end();
     }

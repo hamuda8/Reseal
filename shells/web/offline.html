@@ -9,17 +9,24 @@
   <link rel="manifest" href="/manifest.json">
   <!-- Shown by the service worker when a page that was never opened on this device is requested offline. -->
   <style>
+    @font-face { font-family: "Wufour Sans"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/WufourSansGolden-Regular.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Sans"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/WufourSansGolden-Medium.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Sans"; font-weight: 700; font-style: normal; font-display: swap; src: url("/fonts/WufourSansGolden-Bold.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Arabic"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/WufourArabicGolden-Regular.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Arabic"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/WufourArabicGolden-Medium.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Arabic"; font-weight: 700; font-style: normal; font-display: swap; src: url("/fonts/WufourArabicGolden-Bold.woff2") format("woff2"); }
     :root { color-scheme: light dark; }
     html, body { margin: 0; height: 100%; }
     body { display: flex; align-items: center; justify-content: center; padding: 28px 24px; box-sizing: border-box;
-      font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Arabic", Tahoma, sans-serif; background: #e9ebf3; color: #12141c; }
+      font: 15px/1.6 'Wufour Sans', 'Wufour Arabic', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #e9ebf3; color: #12141c; }
+    :root[dir="rtl"] body { font-family: 'Wufour Arabic', 'Wufour Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; line-height: 1.85; }
     @media (prefers-color-scheme: dark) { body { background: #07080d; color: #eceef5; } p { color: #9097a8 !important; } }
     .card { max-width: 360px; text-align: center; }
     img { width: 64px; height: 64px; margin-bottom: 22px; }
-    h1 { margin: 0 0 10px; font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
+    h1 { margin: 0 0 10px; font-size: 26px; font-weight: 700; }
     p { margin: 0 0 26px; color: #5f6678; }
-    a { display: inline-flex; align-items: center; justify-content: center; height: 52px; padding: 0 28px; border-radius: 16px;
-      background: #5e74ff; color: #fff; font-weight: 650; text-decoration: none; width: 100%; box-sizing: border-box; }
+    a { display: inline-flex; align-items: center; justify-content: center; height: 52px; padding: 0 28px; border-radius: 12px;
+      background: #6c5cff; color: #fff; font-weight: 700; text-decoration: none; width: 100%; box-sizing: border-box; }
   </style>
 </head>
 <body>

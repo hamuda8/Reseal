@@ -43,7 +43,7 @@ pub fn settingsRoot(cx: Cx) void {
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 14, .padding = .xy(12, 10), .radius = 18, .pressed_background = cx.c.active }, .{ .on_press = .{ .push_pane = .profile } });
     kit.avatar(cx, .{ .name = me.s("displayName") orelse "", .color = me.i("color") orelse 0, .image = me.s("avatar"), .size = 64 }, key(.{"set-av"}));
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 2 }, .{});
-    ui.text(me.s("displayName") orelse "", .{ .font_size = 19, .weight = 750, .color = cx.c.text, .max_lines = 1 });
+    ui.text(me.s("displayName") orelse "", .{ .font_size = 19, .weight = 700, .color = cx.c.text, .max_lines = 1 });
     ui.text(if (me.s("username")) |u| std.fmt.allocPrint(cx.a(), "@{s}", .{u}) catch "" else t("No username yet"), .{ .font_size = 14, .color = cx.c.text_2 });
     ui.text(t("online"), .{ .font_size = 13, .color = cx.c.accent });
     ui.end();
@@ -212,11 +212,11 @@ fn protection(cx: Cx) void {
     kit.sectionTitle(cx, t("Encryption"));
     ui.begin(.{ .direction = .row, .gap = 14, .padding = .all(14), .radius = 18, .background = if (advanced) c.accent_soft else c.surface_2, .align_items = .start }, .{});
     ui.begin(.{ .width = .{ .px = 40 }, .height = .{ .px = 40 }, .radius = 13, .background = c.brand, .align_items = .center, .justify = .center }, .{});
-    ui.icon(if (advanced) icons.key else icons.shieldCheck, 22, Color.white, .{}, 0);
+    ui.icon(if (advanced) icons.key else icons.shieldCheck, 22, c.on_accent, .{}, 0);
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 4 }, .{});
-    ui.text(if (advanced) t("Advanced protection is on") else t("Your chats are encrypted"), .{ .font_size = 15, .weight = 700, .color = c.text });
-    ui.text(if (advanced) t("Your keys are locked with a passcode only you know. Reseal cannot restore them; you need the passcode or recovery key on new devices.") else t("Messages are encrypted on your devices. Your keys are backed up securely, so signing in on a new device just works. You will be told when that happens."), .{ .font_size = 13.5, .color = c.text_2, .line_height = 1.5 });
+    ui.text(if (advanced) t("Advanced protection is on") else t("Your chats are encrypted"), .{ .font_size = 16, .weight = 700, .color = c.text });
+    ui.text(if (advanced) t("Your keys are locked with a passcode only you know. Reseal cannot restore them; you need the passcode or recovery key on new devices.") else t("Messages are encrypted on your devices. Your keys are backed up securely, so signing in on a new device just works. You will be told when that happens."), .{ .font_size = 14, .color = c.text_2, .line_height = 1.5 });
     ui.end();
     ui.end();
     if (advanced) {
@@ -237,37 +237,31 @@ fn appearance(cx: Cx) void {
     body(cx, "appearance");
     kit.sectionTitle(cx, t("Theme"));
     ui.begin(.{ .direction = .row, .gap = 10, .padding = .xy(12, 4) }, .{});
+    // The previews: each mode's own derived canvas and card colours; System shows the depth.
+    const lt = theme.colors(false, null);
+    const dk = theme.colors(true, null);
     const cards = [_]struct { th: app.Theme, label: []const u8, bg: Color, a: Color }{
-        .{ .th = .light, .label = "Light", .bg = Color.hex("#e7ecf3"), .a = Color.white },
-        .{ .th = .dark, .label = "Dark", .bg = Color.hex("#0b0e12"), .a = Color.hex("#1b2028") },
-        .{ .th = .auto, .label = "System", .bg = Color.hex("#7d848f"), .a = Color.white },
+        .{ .th = .light, .label = "Light", .bg = lt.canvas, .a = lt.surface },
+        .{ .th = .dark, .label = "Dark", .bg = dk.canvas, .a = dk.surface },
+        .{ .th = .auto, .label = "System", .bg = c.d, .a = c.surface },
     };
     for (cards) |card| {
         const on = s.prefs.theme == card.th;
         ui.begin(.{ .grow = 1, .width = .fill, .gap = 8, .align_items = .center }, .{ .on_press = .{ .set_theme = card.th }, .key = key(.{ "theme", @intFromEnum(card.th) }) });
-        ui.begin(.{ .width = .fill, .height = .{ .px = 72 }, .radius = 14, .background = card.bg, .padding = .all(10), .gap = 6, .border_width = if (on) 2 else 1, .border_color = if (on) c.accent else c.border }, .{});
+        ui.begin(.{ .width = .fill, .height = .{ .px = 72 }, .radius = 12, .background = card.bg, .padding = .all(10), .gap = 6, .border_width = if (on) 2 else 1, .border_color = if (on) c.accent else c.border }, .{});
         ui.begin(.{ .width = .{ .px = 50 }, .height = .{ .px = 12 }, .radius = 6, .background = card.a }, .{});
         ui.end();
         ui.begin(.{ .width = .{ .px = 40 }, .height = .{ .px = 12 }, .radius = 6, .background = c.accent, .align_self = .end }, .{});
         ui.end();
         ui.end();
-        ui.text(t(card.label), .{ .font_size = 13.5, .weight = 600, .color = if (on) c.accent else c.text_2 });
-        ui.end();
-    }
-    ui.end();
-    kit.sectionTitle(cx, t("Accent color"));
-    ui.begin(.{ .direction = .row, .gap = 10, .padding = .xy(12, 4) }, .{});
-    for (theme.accents, 0..) |ac, i| {
-        const on = s.prefs.accent == i;
-        ui.begin(.{ .width = .{ .px = 34 }, .height = .{ .px = 34 }, .radius = 17, .background = ac[0], .align_items = .center, .justify = .center, .border_width = if (on) 3 else 0, .border_color = c.surface }, .{ .on_press = .{ .set_accent = @intCast(i) }, .key = key(.{ "acc", i }) });
-        if (on) ui.icon(icons.check, 18, Color.white, .{}, 0);
+        ui.text(t(card.label), .{ .font_size = 13, .weight = 500, .color = if (on) c.accent else c.text_2 });
         ui.end();
     }
     ui.end();
     kit.sectionTitle(cx, t("Text size"));
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .padding = .xy(12, 4) }, .{});
     kit.iconButton(cx, icons.minus, .{ .set_font = -1 }, .{ .soft = true });
-    ui.text(std.fmt.allocPrint(cx.a(), "{d}px", .{@as(u32, @intFromFloat(s.prefs.font))}) catch "", .{ .font_size = 15, .color = c.text, .grow = 1, .width = .fill, .text_align = .center });
+    ui.text(std.fmt.allocPrint(cx.a(), "{d}px", .{@as(u32, @intFromFloat(s.prefs.font))}) catch "", .{ .font_size = 16, .color = c.text, .grow = 1, .width = .fill, .text_align = .center });
     kit.iconButton(cx, icons.plus, .{ .set_font = 1 }, .{ .soft = true });
     ui.end();
     kit.sectionTitle(cx, t("Chats"));
@@ -286,8 +280,8 @@ fn language(cx: Cx) void {
     vlist.paneHeader(cx, t("Language"), true, false);
     vlist.endHeader(cx);
     body(cx, "lang");
-    kit.row(cx, "English", .{ .subtitle = "English", .value = if (s.lang == .en) "✓" else null, .on = .{ .set_lang = .en } });
-    kit.row(cx, "العربية", .{ .subtitle = "Arabic", .value = if (s.lang == .ar) "✓" else null, .on = .{ .set_lang = .ar } });
+    kit.row(cx, "English", .{ .subtitle = "English", .checked = s.lang == .en, .on = .{ .set_lang = .en } });
+    kit.row(cx, "العربية", .{ .subtitle = "Arabic", .checked = s.lang == .ar, .on = .{ .set_lang = .ar } });
     ui.end();
     ui.end();
 }
@@ -306,7 +300,7 @@ fn blocked(cx: Cx) void {
             const id = j.strOr(u, "id", "");
             ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .padding = .xy(12, 8) }, .{ .key = key(.{ "bl", id }) });
             kit.avatar(cx, .{ .name = j.strOr(u, "displayName", ""), .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 42 }, 0);
-            ui.text(j.strOr(u, "displayName", ""), .{ .font_size = 15, .weight = 550, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
+            ui.text(j.strOr(u, "displayName", ""), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
             kit.button(cx, t("Unblock"), .{ .menu = .{ .confirm = .{ .kind = .unblock, .target = Id.of(id) } } }, .{ .kind = .ghost, .small = true });
             ui.end();
         }
@@ -385,13 +379,13 @@ fn personRow(cx: Cx, u: j.Value, multi: bool, seen: *std.StringHashMap(void)) vo
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 56, .padding = .xy(12, 6), .radius = theme.radius, .pressed_background = cx.c.active }, .{ .on_press = if (on) .{ .unpick_user = Id.of(id) } else .{ .pick_user = Id.of(id) }, .key = key(.{ "pp", id }) });
     kit.avatar(cx, .{ .name = j.strOr(u, "displayName", ""), .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 44 }, 0);
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
-    ui.text(j.strOr(u, "displayName", ""), .{ .font_size = 15, .weight = 550, .color = cx.c.text, .max_lines = 1 });
+    ui.text(j.strOr(u, "displayName", ""), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
     const sub = if (j.str(u, "username")) |un| std.fmt.allocPrint(cx.a(), "@{s}", .{un}) catch "" else text.presenceText(j.field(u, "presence"));
     ui.text(sub, .{ .font_size = 13, .color = cx.c.text_2, .max_lines = 1 });
     ui.end();
     if (multi) {
         ui.begin(.{ .width = .{ .px = 22 }, .height = .{ .px = 22 }, .radius = 8, .border_width = if (on) 0 else 1.5, .border_color = cx.c.border_strong, .background = if (on) cx.c.brand else null, .align_items = .center, .justify = .center }, .{});
-        if (on) ui.icon(icons.check, 14, Color.white, .{}, 0);
+        if (on) ui.icon(icons.check, 14, cx.c.on_accent, .{}, 0);
         ui.end();
     }
     ui.end();
@@ -434,11 +428,11 @@ fn savedEdit(cx: Cx, id: Id) void {
     } else {
         // The default saved chat keeps its name (shown, not editable).
         ui.begin(.{ .gap = 6, .padding = .{ .bottom = 12 } }, .{});
-        ui.text(t("Name"), .{ .font_size = 13.5, .weight = 650, .color = cx.c.text_2 });
-        ui.begin(.{ .padding = .xy(14, 11), .radius = 14, .background = cx.c.surface_2, .opacity = 0.7 }, .{});
-        ui.text(s.store.title(c.?), .{ .font_size = 15, .color = cx.c.text });
+        ui.text(t("Name"), .{ .font_size = 14, .weight = 500, .color = cx.c.text_2 });
+        ui.begin(.{ .padding = .xy(14, 11), .radius = 12, .background = cx.c.surface_2, .opacity = 0.7 }, .{});
+        ui.text(s.store.title(c.?), .{ .font_size = 16, .color = cx.c.text });
         ui.end();
-        ui.text(t("Your default saved chat keeps its name."), .{ .font_size = 12.5, .color = cx.c.text_3 });
+        ui.text(t("Your default saved chat keeps its name."), .{ .font_size = 12, .color = cx.c.text_3 });
         ui.end();
     }
     kit.field(cx, .saved_about, .{ .multiline = true, .label = t("Purpose"), .placeholder = t("What will you keep here?"), .hint = t("Shown under the name, so you remember what goes here.") });
@@ -464,7 +458,7 @@ pub fn passcodeForm(cx: Cx, m: app.Modal) void {
     ui.begin(.{ .padding = .xy(12, 6) }, .{});
     if (note.len > 0) {
         ui.begin(.{ .padding = .{ .bottom = 12 } }, .{});
-        ui.text(note, .{ .font_size = 15, .color = cx.c.text_2, .line_height = 1.6 });
+        ui.text(note, .{ .font_size = 16, .color = cx.c.text_2, .line_height = 1.5 });
         ui.end();
     }
     switch (m) {
@@ -493,8 +487,8 @@ pub fn recoveryKey(cx: Cx) void {
     const c = cx.c;
     views.sheet(cx, t("Your recovery key"));
     ui.begin(.{ .padding = .xy(12, 6), .gap = 14 }, .{});
-    ui.text(t("If you forget your passcode, this key is the only way to unlock your chats. Save it somewhere safe, like a password manager."), .{ .font_size = 15, .color = c.text_2, .line_height = 1.6 });
-    ui.begin(.{ .padding = .all(16), .radius = 16, .background = c.surface_2, .align_items = .center }, .{});
+    ui.text(t("If you forget your passcode, this key is the only way to unlock your chats. Save it somewhere safe, like a password manager."), .{ .font_size = 16, .color = c.text_2, .line_height = 1.5 });
+    ui.begin(.{ .padding = .all(16), .radius = 18, .background = c.surface_2, .align_items = .center }, .{});
     ui.text(s.recovery_shown.get(), .{ .font_size = 17, .weight = 700, .mono = true, .color = c.text, .text_align = .center, .line_height = 1.6 });
     ui.end();
     ui.begin(.{ .direction = .row, .gap = 8 }, .{});
@@ -510,7 +504,7 @@ pub fn fingerprint(cx: Cx) void {
     const s = cx.s;
     views.sheet(cx, t("My key fingerprint"));
     ui.begin(.{ .padding = .xy(12, 6), .gap = 14 }, .{});
-    ui.text(t("This fingerprint identifies your encryption keys. It changes only if you reset them."), .{ .font_size = 15, .color = cx.c.text_2, .line_height = 1.6 });
+    ui.text(t("This fingerprint identifies your encryption keys. It changes only if you reset them."), .{ .font_size = 16, .color = cx.c.text_2, .line_height = 1.5 });
     if (keys.myPublic(s)) |p| {
         const fp = crypto.fingerprint(cx.a(), p.enc, p.sig) catch return;
         const hex = std.fmt.bytesToHex(fp[0..16].*, .upper);
@@ -524,13 +518,13 @@ pub fn fingerprint(cx: Cx) void {
 fn grid(cx: Cx, chars: []const u8, group: usize, per_row: usize) void {
     const ui = cx.ui;
     var i: usize = 0;
-    ui.begin(.{ .gap = 8, .padding = .all(14), .radius = 16, .background = cx.c.surface_2, .align_items = .center }, .{});
+    ui.begin(.{ .gap = 8, .padding = .all(14), .radius = 18, .background = cx.c.surface_2, .align_items = .center }, .{});
     while (i < chars.len) {
         ui.begin(.{ .direction = .row, .gap = 14, .no_mirror = true }, .{});
         var n: usize = 0;
         while (n < per_row and i < chars.len) : (n += 1) {
             const end = @min(chars.len, i + group);
-            ui.text(cx.a().dupe(u8, chars[i..end]) catch "", .{ .font_size = 17, .weight = 650, .mono = true, .color = cx.c.text });
+            ui.text(cx.a().dupe(u8, chars[i..end]) catch "", .{ .font_size = 17, .weight = 500, .mono = true, .color = cx.c.text });
             i = end;
         }
         ui.end();
@@ -548,7 +542,7 @@ pub fn safety(cx: Cx, user_id: []const u8) void {
     const mine = keys.myPublic(s);
     if (u != null and mine != null and u.?.s("keys.enc") != null) {
         const sn = crypto.safetyNumber(cx.a(), mine.?.enc, mine.?.sig, u.?.s("keys.enc").?, u.?.s("keys.sig") orelse "") catch return;
-        ui.text(fmt.tf("Compare these numbers with {name}, in person or on a call. If they match, your chat is end-to-end encrypted with the right keys.", .{ .name = s.store.userName(u.?) }), .{ .font_size = 15, .color = cx.c.text_2, .line_height = 1.6 });
+        ui.text(fmt.tf("Compare these numbers with {name}, in person or on a call. If they match, your chat is end-to-end encrypted with the right keys.", .{ .name = s.store.userName(u.?) }), .{ .font_size = 16, .color = cx.c.text_2, .line_height = 1.5 });
         var digits: std.ArrayList(u8) = .empty;
         for (sn.groups) |g| digits.appendSlice(cx.a(), &g) catch {};
         grid(cx, digits.items, 5, 4);
@@ -558,7 +552,7 @@ pub fn safety(cx: Cx, user_id: []const u8) void {
         ui.text(em.items, .{ .font_size = 28, .line_height = 1.3 });
         ui.end();
         @import("userinfo.zig").verifyRow(cx, u.?);
-    } else ui.text(t("This person has not set up encryption yet."), .{ .font_size = 15, .color = cx.c.text_2 });
+    } else ui.text(t("This person has not set up encryption yet."), .{ .font_size = 16, .color = cx.c.text_2 });
     ui.end();
     views.endSheet(cx);
 }

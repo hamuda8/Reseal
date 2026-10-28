@@ -118,7 +118,7 @@ pub fn sheet(cx: Cx) void {
                 .camera => icons.video,
                 .speaker => icons.volume,
             }, 19, cx.c.text_2, .{}, 0);
-            ui.text(nameOf(x, n), .{ .font_size = 14.5, .weight = 550, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
+            ui.text(nameOf(x, n), .{ .font_size = 14, .weight = 500, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
             if (x.current) ui.icon(icons.check, 18, cx.c.accent, .{}, 0);
             ui.end();
         }

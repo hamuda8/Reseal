@@ -46,6 +46,14 @@ Build options (defaults are staging): `-Dserver=https://reseal.wreseal.com`,
 Push on Android reads `..\secrets\reseal-google-services.json` (outside the repo, never
 committed). Google's `firebase-messaging` client is the one third-party library allowed.
 
+Fonts: the phone apps draw with Wufour Sans and Wufour Arabic from zig-core's `shells/fonts/`
+(`zui/font.zig` has the rule: weight 400/500/700, Arabic text in the Arabic face with the Sans
+filling in, the system font when a file is missing). The APK gets them on its own
+(`assets/fonts/`). On iOS `zig build ios` puts them in `zig-out/ios/fonts/`; the bundle needs those
+six files next to `Info.plist` (listed there under `UIAppFonts`) and the app links `CoreText`. To
+refresh them, copy `..\WufourType\dist\golden\*.ttf` into `..\zig-core\shells\fonts\`, then point
+`build.zig.zon` at the new zig-core commit (or build with `--fork=C:/MProjects/zig-core`).
+
 ## Server configuration
 
 Same variable names as Reseal-js. Environment variables win; otherwise `RESEAL_ENV_FILE`, or the

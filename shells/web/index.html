@@ -13,11 +13,21 @@
   <meta name="apple-mobile-web-app-title" content="Reseal">
   <title>Reseal</title>
   <style>
-    /* Fonts zui uses for text (Reseal-js's stack). Everything else is drawn by zui. */
+    /* Wufour's own faces, self-hosted (WufourType dist/golden): Wufour Sans carries Latin, Wufour Arabic
+       carries Arabic, each falling through to the other for the letters it lacks. Arabic pages put the
+       Arabic face first so shared glyphs (digits, punctuation) come from it. Everything else is drawn by zui. */
+    @font-face { font-family: "Wufour Sans"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/WufourSansGolden-Regular.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Sans"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/WufourSansGolden-Medium.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Sans"; font-weight: 700; font-style: normal; font-display: swap; src: url("/fonts/WufourSansGolden-Bold.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Arabic"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/WufourArabicGolden-Regular.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Arabic"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/WufourArabicGolden-Medium.woff2") format("woff2"); }
+    @font-face { font-family: "Wufour Arabic"; font-weight: 700; font-style: normal; font-display: swap; src: url("/fonts/WufourArabicGolden-Bold.woff2") format("woff2"); }
     :root {
-      --zui-font: "Inter", system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+      --zui-font: 'Wufour Sans', 'Wufour Arabic', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
       --zui-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
     }
+    /* The page, or the widget's mount when embedded (zui sets its dir from the app's language). */
+    [dir="rtl"] { --zui-font: 'Wufour Arabic', 'Wufour Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
     html, body { margin: 0; height: 100%; background: #ffffff; }
     body { font-family: var(--zui-font); -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; overflow: hidden; }
     @media (prefers-color-scheme: dark) { html, body { background: #11131b; } }

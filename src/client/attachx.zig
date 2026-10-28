@@ -185,7 +185,7 @@ pub fn sheet(cx: Cx) void {
         const show_visual = at.compress and visual(kind);
         const size: f32 = if (single) @min(cx.w - 64, 380) else 112;
         if (show_visual) {
-            ui.begin(.{ .width = .{ .px = size }, .height = .{ .px = if (single) size * 0.75 else size }, .radius = 14, .clip = true, .background = cx.c.surface_2, .align_items = .center, .justify = .center }, .{ .key = key(.{ "att", x.seq }) });
+            ui.begin(.{ .width = .{ .px = size }, .height = .{ .px = if (single) size * 0.75 else size }, .radius = 12, .clip = true, .background = cx.c.surface_2, .align_items = .center, .justify = .center }, .{ .key = key(.{ "att", x.seq }) });
             if (std.mem.eql(u8, kind, "photo") or std.mem.eql(u8, kind, "gif")) {
                 ui.imageBytes(x.bytes, std.fmt.allocPrint(cx.a(), "att-{d}", .{x.seq}) catch "att", .{ .width = .fill, .height = .fill, .fit = .cover }, key(.{ "atti", x.seq }));
             } else if (x.thumb) |th| {
@@ -194,11 +194,11 @@ pub fn sheet(cx: Cx) void {
             removeButton(cx, x.seq);
             ui.end();
         } else {
-            ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .padding = .xy(10, 8), .radius = 14, .background = cx.c.surface_2, .width = .fill }, .{ .key = key(.{ "attf", x.seq }) });
+            ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .padding = .xy(10, 8), .radius = 12, .background = cx.c.surface_2, .width = .fill }, .{ .key = key(.{ "attf", x.seq }) });
             ui.icon(icons.file, 24, cx.c.accent, .{}, 0);
             ui.begin(.{ .grow = 1, .width = .fill }, .{});
-            ui.text(x.name, .{ .font_size = 14.5, .weight = 600, .color = cx.c.text, .max_lines = 1 });
-            ui.text(fmt.fileSize(cx.a(), @intCast(x.bytes.len)), .{ .font_size = 12.5, .color = cx.c.text_2 });
+            ui.text(x.name, .{ .font_size = 14, .weight = 500, .color = cx.c.text, .max_lines = 1 });
+            ui.text(fmt.fileSize(cx.a(), @intCast(x.bytes.len)), .{ .font_size = 12, .color = cx.c.text_2 });
             ui.end();
             kit.iconButton(cx, icons.close, msgOf(.{ .remove = x.seq }), .{ .size = 32 });
             ui.end();
@@ -214,8 +214,8 @@ pub fn sheet(cx: Cx) void {
         kit.row(cx, t("Hide with spoiler"), .{ .icon = icons.eyeOff, .switch_on = at.spoiler, .on = msgOf(.spoiler) });
     }
     ui.begin(.{ .padding = .xy(12, 6) }, .{});
-    ui.begin(.{ .padding = .xy(14, 10), .radius = 14, .background = cx.c.surface_2 }, .{});
-    ui.input(.{ .key = zui.key("attach_caption"), .value = s.fields.get(.attach_caption).get(), .placeholder = t("Add a caption…"), .on_change = app.onField(.attach_caption), .multiline = true, .style = .{ .width = .fill, .font_size = 15, .color = cx.c.text } });
+    ui.begin(.{ .padding = .xy(14, 10), .radius = 12, .background = cx.c.surface_2 }, .{});
+    ui.input(.{ .key = zui.key("attach_caption"), .value = s.fields.get(.attach_caption).get(), .placeholder = t("Add a caption…"), .on_change = app.onField(.attach_caption), .multiline = true, .style = .{ .width = .fill, .font_size = 16, .color = cx.c.text } });
     ui.end();
     ui.end();
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .{ .top = 8, .bottom = 8, .start = 8, .end = 8 } }, .{});
@@ -230,6 +230,6 @@ pub fn sheet(cx: Cx) void {
 
 fn removeButton(cx: Cx, seq: u32) void {
     cx.ui.begin(.{ .position = .absolute, .inset = .{ .top = 6, .end = 6 } }, .{});
-    kit.iconButton(cx, icons.close, msgOf(.{ .remove = seq }), .{ .size = 28, .color = Color.white, .background = Color.hex("#0a0c1499") });
+    kit.iconButton(cx, icons.close, msgOf(.{ .remove = seq }), .{ .size = 28, .color = cx.c.on_shade, .background = cx.c.shade.withAlpha(0.6) });
     cx.ui.end();
 }

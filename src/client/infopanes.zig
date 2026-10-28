@@ -64,16 +64,16 @@ fn head(cx: Cx, c: *const data.Chat, name: []const u8, status: []const u8) void 
     const ui = cx.ui;
     ui.begin(.{ .align_items = .center, .gap = 6, .padding = .{ .top = 12, .bottom = 14 } }, .{});
     vlist.chatAvatar(cx, c, 96);
-    ui.text(name, .{ .font_size = 22, .weight = 800, .color = cx.c.text, .text_align = .center });
+    ui.text(name, .{ .font_size = 22, .weight = 700, .color = cx.c.text, .text_align = .center });
     ui.text(status, .{ .font_size = 14, .color = cx.c.text_2, .text_align = .center });
     ui.end();
 }
 
 fn stat(cx: Cx, n: ?i64, label: []const u8) void {
     const ui = cx.ui;
-    ui.begin(.{ .grow = 1, .width = .fill, .align_items = .center, .gap = 2, .padding = .xy(8, 10), .radius = 14, .background = cx.c.surface_2 }, .{ .key = key(.{ "stat", label }) });
-    ui.text(if (n) |x| fmt.number(cx.a(), x) else "…", .{ .font_size = 18, .weight = 800, .color = cx.c.text });
-    ui.text(label, .{ .font_size = 12.5, .color = cx.c.text_2 });
+    ui.begin(.{ .grow = 1, .width = .fill, .align_items = .center, .gap = 2, .padding = .xy(8, 10), .radius = 12, .background = cx.c.surface_2 }, .{ .key = key(.{ "stat", label }) });
+    ui.text(if (n) |x| fmt.number(cx.a(), x) else "…", .{ .font_size = 18, .weight = 700, .color = cx.c.text });
+    ui.text(label, .{ .font_size = 12, .color = cx.c.text_2 });
     ui.end();
 }
 
@@ -104,9 +104,9 @@ pub fn teamBody(cx: Cx, c: *const data.Chat) void {
     head(cx, c, j.strOr(c.o.v, "team.name", s.store.title(c)), if (about.len > 0) about else t("Your messages reach the whole team"));
     const muted = c.isMuted();
     ui.begin(.{ .direction = .row, .justify = .center, .padding = .{ .bottom = 10 } }, .{});
-    ui.begin(.{ .align_items = .center, .gap = 4, .min_width = 76, .padding = .xy(10, 8), .radius = 14, .background = cx.c.surface_2, .pressed_background = cx.c.active }, .{ .on_press = .{ .chat_action = .{ .what = if (muted) .unmute else .mute, .chat = Id.of(c.id()) } }, .key = key(.{"team-mute"}) });
+    ui.begin(.{ .align_items = .center, .gap = 4, .min_width = 76, .padding = .xy(10, 8), .radius = 12, .background = cx.c.surface_2, .pressed_background = cx.c.active }, .{ .on_press = .{ .chat_action = .{ .what = if (muted) .unmute else .mute, .chat = Id.of(c.id()) } }, .key = key(.{"team-mute"}) });
     ui.icon(if (muted) icons.bell else icons.bellOff, 21, cx.c.accent, .{}, 0);
-    ui.text(if (muted) t("Unmute") else t("Mute"), .{ .font_size = 12.5, .weight = 600, .color = cx.c.text, .max_lines = 1 });
+    ui.text(if (muted) t("Unmute") else t("Mute"), .{ .font_size = 12, .weight = 500, .color = cx.c.text, .max_lines = 1 });
     ui.end();
     ui.end();
     if (c.encrypted()) kit.row(cx, t("Messages are end-to-end encrypted"), .{ .icon = icons.shieldCheck, .subtitle = t("Encryption") }) else kit.row(cx, t("Messages are stored encrypted on the server, not end-to-end"), .{ .icon = icons.globe, .subtitle = t("Encryption") });

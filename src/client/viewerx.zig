@@ -134,7 +134,7 @@ pub fn act(s: *State, a: Act) void {
 }
 
 fn topButton(cx: Cx, ic: zui.Icon, msg: Msg) void {
-    kit.iconButton(cx, ic, msg, .{ .color = Color.white, .background = Color.hex("#ffffff1f") });
+    kit.iconButton(cx, ic, msg, .{ .color = cx.c.on_shade, .background = cx.c.on_shade.withAlpha(0.12) });
 }
 
 pub fn view(cx: Cx) void {
@@ -144,7 +144,7 @@ pub fn view(cx: Cx) void {
     const c = s.store.chat(s.open_chat.str());
     const protected = if (c) |ch| ch.o.b("protectedContent") else false;
     const l = list(s, cx.a());
-    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .background = Color.hex("#0a0b14f2"), .align_items = .center, .justify = .center }, .{});
+    ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .bottom = 0, .start = 0, .end = 0 }, .background = cx.c.shade.withAlpha(0.95), .align_items = .center, .justify = .center }, .{});
     var shown_any = false;
     var failed = false;
     var current: ?*data.Message = null;
@@ -180,7 +180,7 @@ pub fn view(cx: Cx) void {
         }
     };
     if (failed) {
-        ui.text(t("Could not load this file."), .{ .font_size = 15, .color = Color.white, .opacity = 0.8 });
+        ui.text(t("Could not load this file."), .{ .font_size = 16, .color = cx.c.on_shade, .opacity = 0.8, .line_height = 1.5 });
     } else if (!shown_any) kit.spinner(cx);
 
     // Top: who and when (and where in the list), then the actions.
@@ -191,10 +191,10 @@ pub fn view(cx: Cx) void {
         const u = if (sender.len > 0) s.store.user(sender) else null;
         kit.avatar(cx, .{ .name = name, .color = if (u) |uu| uu.i("color") orelse 0 else 0, .image = if (u) |uu| uu.s("avatar") else null, .size = 36 }, key(.{"vwho"}));
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(name, .{ .font_size = 14.5, .weight = 700, .color = Color.white, .max_lines = 1 });
+        ui.text(name, .{ .font_size = 14, .weight = 700, .color = cx.c.on_shade, .max_lines = 1 });
         const when = fmt.fullDate(cx.a(), m.at);
         const sub = if (l.items.len > 1) std.fmt.allocPrint(cx.a(), "{s} · {d} / {d}", .{ when, l.at + 1, l.items.len }) catch when else when;
-        ui.text(sub, .{ .font_size = 12.5, .color = Color.white, .opacity = 0.75, .max_lines = 1 });
+        ui.text(sub, .{ .font_size = 12, .color = cx.c.on_shade, .opacity = 0.75, .max_lines = 1 });
         ui.end();
     } else {
         ui.begin(.{ .grow = 1 }, .{});
@@ -227,8 +227,8 @@ pub fn view(cx: Cx) void {
     // The caption.
     if (current) |m| if (m.text().len > 0) {
         ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 18, .start = 16, .end = 16 }, .align_items = .center }, .{});
-        ui.begin(.{ .padding = .xy(14, 8), .radius = 12, .background = Color.hex("#00000080"), .max_width = 640 }, .{});
-        ui.text(m.text(), .{ .font_size = 14.5, .color = Color.white, .line_height = 1.45, .max_lines = 4 });
+        ui.begin(.{ .padding = .xy(14, 8), .radius = 12, .background = cx.c.shade.withAlpha(0.5), .max_width = 640 }, .{});
+        ui.text(m.text(), .{ .font_size = 14, .color = cx.c.on_shade, .line_height = 1.45, .max_lines = 4 });
         ui.end();
         ui.end();
     };

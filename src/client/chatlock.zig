@@ -225,7 +225,7 @@ pub fn unlockSheet(cx: Cx, chat: Id, purpose: Purpose) void {
     ui.icon(icons.lock, 30, cx.c.accent, .{}, 0);
     ui.end();
     ui.end();
-    ui.text(if (purpose == .remove) fmt.tf("Confirm it is you to remove the lock from {name}.", .{ .name = name }) else fmt.tf("{name} is locked.", .{ .name = name }), .{ .font_size = 15, .color = cx.c.text_2, .text_align = .center, .line_height = 1.5 });
+    ui.text(if (purpose == .remove) fmt.tf("Confirm it is you to remove the lock from {name}.", .{ .name = name }) else fmt.tf("{name} is locked.", .{ .name = name }), .{ .font_size = 16, .color = cx.c.text_2, .text_align = .center, .line_height = 1.5 });
     codeField(cx, .lock_code, null, t("Chat lock code"), msg(.submit_unlock));
     if (s.lock.err.get().len > 0) ui.text(s.lock.err.get(), .{ .font_size = 13, .color = cx.c.danger });
     kit.button(cx, t("Unlock"), msg(.submit_unlock), .{ .block = true, .busy = s.lock.busy });
@@ -272,11 +272,11 @@ pub fn pane(cx: Cx) void {
     const s = cx.s;
     const ui = cx.ui;
     const on = hasCode(s);
-    ui.begin(.{ .direction = .row, .gap = 12, .padding = .all(14), .radius = 16, .background = cx.c.accent_soft }, .{});
+    ui.begin(.{ .direction = .row, .gap = 12, .padding = .all(14), .radius = 18, .background = cx.c.accent_soft }, .{});
     ui.icon(icons.lock, 26, cx.c.accent, .{}, 0);
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 4 }, .{});
-    ui.text(t("Lock the chats you want to keep to yourself"), .{ .font_size = 15, .weight = 700, .color = cx.c.text });
-    ui.text(t("A locked chat opens only with your chat lock code. The chat list and notifications do not show who wrote or what."), .{ .font_size = 13.5, .color = cx.c.text_2, .line_height = 1.5 });
+    ui.text(t("Lock the chats you want to keep to yourself"), .{ .font_size = 16, .weight = 700, .color = cx.c.text });
+    ui.text(t("A locked chat opens only with your chat lock code. The chat list and notifications do not show who wrote or what."), .{ .font_size = 14, .color = cx.c.text_2, .line_height = 1.5 });
     ui.end();
     ui.end();
     kit.sectionTitle(cx, t("Unlock with"));
@@ -290,7 +290,7 @@ pub fn pane(cx: Cx) void {
         any = true;
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52, .padding = .xy(12, 6) }, .{ .key = kit.key(.{ "locked", c.id() }) });
         vlist.chatAvatar(cx, c, 38);
-        ui.text(s.store.title(c), .{ .font_size = 15, .color = cx.c.text, .max_lines = 1, .grow = 1, .width = .fill });
+        ui.text(s.store.title(c), .{ .font_size = 16, .color = cx.c.text, .max_lines = 1, .grow = 1, .width = .fill });
         kit.button(cx, t("Remove lock"), msg(.{ .remove = Id.of(c.id()) }), .{ .small = true, .kind = .ghost });
         ui.end();
     }

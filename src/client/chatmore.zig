@@ -126,7 +126,7 @@ pub fn ttlSheet(cx: Cx, chat: Id) void {
     for (ttls) |x| {
         cx.ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 44, .padding = .xy(12, 6), .radius = 12, .pressed_background = cx.c.hover }, .{ .on_press = msg(.{ .set_ttl = .{ .chat = chat, .secs = x.secs } }), .key = kit.key(.{ "ttl", x.secs }) });
         cx.ui.icon(icons.timer, 19, cx.c.text_2, .{}, 0);
-        cx.ui.text(t(x.label), .{ .font_size = 14.5, .weight = 550, .color = cx.c.text, .grow = 1, .width = .fill });
+        cx.ui.text(t(x.label), .{ .font_size = 14, .weight = 500, .color = cx.c.text, .grow = 1, .width = .fill });
         if (cur == x.secs) cx.ui.icon(icons.check, 18, cx.c.accent, .{}, 0);
         cx.ui.end();
     }

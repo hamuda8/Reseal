@@ -97,7 +97,7 @@ pub fn pickerButton(cx: Cx, ic: zui.Icon, label: []const u8, m: Msg) void {
     const ui = cx.ui;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .grow = 1, .width = .fill, .height = .{ .px = 46 }, .padding = .xy(14, 0), .radius = theme.radius, .border_width = 1, .border_color = cx.c.border_strong, .background = cx.c.surface_2, .pressed_background = cx.c.active }, .{ .on_press = m });
     ui.icon(ic, 18, cx.c.text_2, .{}, 0);
-    ui.text(label, .{ .font_size = 15, .color = cx.c.text, .max_lines = 1 });
+    ui.text(label, .{ .font_size = 16, .color = cx.c.text, .max_lines = 1 });
     ui.end();
 }
 
@@ -114,7 +114,7 @@ fn pollSheet(cx: Cx) void {
     views.sheet(cx, if (p.poll_quiz) t("New quiz") else t("New poll"));
     ui.begin(.{ .padding = .{ .start = 12, .end = 12, .top = 4 } }, .{});
     kit.field(cx, .poll_question, .{ .label = t("Question"), .placeholder = t("Ask a question") });
-    ui.text(t("Options"), .{ .font_size = 13, .weight = 600, .color = cx.c.text_2 });
+    ui.text(t("Options"), .{ .font_size = 13, .weight = 500, .color = cx.c.text_2 });
     ui.begin(.{ .gap = 8, .padding = .{ .top = 7, .bottom = 8 } }, .{});
     inline for (compose.poll_fields, 0..) |f, i| {
         if (i < p.poll_options) {
@@ -122,11 +122,11 @@ fn pollSheet(cx: Cx) void {
             if (p.poll_quiz) {
                 const on = p.poll_correct == i;
                 ui.begin(.{ .width = .{ .px = 26 }, .height = .{ .px = 26 }, .radius = 13, .border_width = 2, .border_color = if (on) cx.c.success else cx.c.border_strong, .background = if (on) cx.c.success else null, .align_items = .center, .justify = .center }, .{ .on_press = act(.{ .poll_correct = i }) });
-                if (on) ui.icon(icons.check, 16, zui.Color.white, .{}, 0);
+                if (on) ui.icon(icons.check, 16, cx.c.onOf(cx.c.success), .{}, 0);
                 ui.end();
             }
             ui.begin(.{ .grow = 1, .width = .fill, .height = .{ .px = 44 }, .padding = .xy(14, 0), .radius = theme.radius, .border_width = 1, .border_color = cx.c.border_strong, .background = cx.c.surface_2, .justify = .center }, .{});
-            ui.input(.{ .key = zui.key(@tagName(f)), .value = s.fields.get(f).get(), .placeholder = fmt.tf("Option {n}", .{ .n = @as(i64, i + 1) }), .on_change = app.onField(f), .on_submit = act(.poll_more), .style = .{ .width = .fill, .font_size = 15, .color = cx.c.text } });
+            ui.input(.{ .key = zui.key(@tagName(f)), .value = s.fields.get(f).get(), .placeholder = fmt.tf("Option {n}", .{ .n = @as(i64, i + 1) }), .on_change = app.onField(f), .on_submit = act(.poll_more), .style = .{ .width = .fill, .font_size = 16, .color = cx.c.text } });
             ui.end();
             ui.end();
         }
@@ -196,7 +196,7 @@ fn emojiSheet(cx: Cx) void {
 fn tab(cx: Cx, label: []const u8, i: u8) void {
     const on = cx.s.compose.emoji_tab == i;
     cx.ui.begin(.{ .padding = .xy(11, 6), .radius = 10, .background = if (on) cx.c.accent_soft else cx.c.surface_2, .pressed_opacity = 0.8 }, .{ .on_press = act(.{ .emoji_tab = i }), .key = key(.{ "tab", i }) });
-    cx.ui.text(label, .{ .font_size = 12.5, .weight = 650, .color = if (on) cx.c.accent else cx.c.text_2, .max_lines = 1 });
+    cx.ui.text(label, .{ .font_size = 12, .weight = 500, .color = if (on) cx.c.accent else cx.c.text_2, .max_lines = 1 });
     cx.ui.end();
 }
 
@@ -255,8 +255,8 @@ fn scheduledSheet(cx: Cx) void {
         const at = sys_parse(j.strOr(m, "scheduledAt", ""));
         const when = if (j.truthy(m, "whenOnline")) (if (s.store.chat(s.open_chat.str())) |c| fmt.tf("When {name} comes online", .{ .name = s.store.title(c) }) else t("When online")) else if (at) |ms| fmt.fullDate(cx.a(), ms) else "";
         ui.begin(.{ .gap = 6, .padding = .xy(12, 10), .radius = theme.radius, .background = cx.c.surface_2 }, .{ .key = key(.{ "sched", id }) });
-        ui.text(when, .{ .font_size = 12.5, .weight = 650, .color = cx.c.accent });
-        ui.text(scheduledLine(cx, m), .{ .font_size = 14.5, .color = cx.c.text, .max_lines = 3 });
+        ui.text(when, .{ .font_size = 12, .weight = 500, .color = cx.c.accent });
+        ui.text(scheduledLine(cx, m), .{ .font_size = 14, .color = cx.c.text, .max_lines = 3 });
         ui.begin(.{ .direction = .row, .gap = 8 }, .{});
         kit.button(cx, t("Send now"), act(.{ .scheduled_send = Id.of(id) }), .{ .small = true, .kind = .secondary });
         kit.button(cx, t("Delete"), act(.{ .scheduled_delete = Id.of(id) }), .{ .small = true, .kind = .danger_ghost });
@@ -307,7 +307,7 @@ fn mentionBar(cx: Cx, c: *const data.Chat) void {
         if (shown == 0) ui.begin(.{ .padding = .{ .top = 6, .start = 6, .end = 6 } }, .{ .key = zui.key("mentions") });
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .padding = .xy(8, 5), .radius = 12, .pressed_background = cx.c.hover }, .{ .on_press = act(.{ .mention = Id.of(uid) }), .key = key(.{ "mention", uid }) });
         kit.avatar(cx, .{ .name = name, .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 30 }, key(.{ "mav", uid }));
-        ui.text(name, .{ .font_size = 14, .weight = 600, .color = cx.c.text, .max_lines = 1 });
+        ui.text(name, .{ .font_size = 14, .weight = 500, .color = cx.c.text, .max_lines = 1 });
         if (un.len > 0) ui.text(std.fmt.allocPrint(cx.a(), "@{s}", .{un}) catch "", .{ .font_size = 13, .color = cx.c.text_3, .max_lines = 1 });
         ui.end();
         shown += 1;
@@ -325,7 +325,7 @@ fn previewBar(cx: Cx) void {
     ui.icon(icons.link, 20, cx.c.accent, .{}, 0);
     ui.begin(.{ .grow = 1, .width = .fill, .padding = .{ .start = 9 } }, .{});
     ui.text(p.s("title") orelse p.s("siteName") orelse p.s("url") orelse "", .{ .font_size = 13, .weight = 700, .color = cx.c.accent, .max_lines = 1 });
-    ui.text(p.s("description") orelse p.s("url") orelse "", .{ .font_size = 13.5, .color = cx.c.text_2, .max_lines = 1 });
+    ui.text(p.s("description") orelse p.s("url") orelse "", .{ .font_size = 14, .color = cx.c.text_2, .max_lines = 1 });
     ui.end();
     kit.iconButton(cx, icons.close, act(.dismiss_preview), .{ .size = 32 });
     ui.end();

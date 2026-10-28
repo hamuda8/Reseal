@@ -248,7 +248,7 @@ pub fn editor(cx: Cx) void {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 48, .padding = .xy(12, 4), .radius = 12, .pressed_background = cx.c.active }, .{ .on_press = msg(.{ .toggle_chat = Id.of(c.id()) }), .key = key(.{ "fchat", c.id() }) });
         box(cx, on);
         vlist.chatAvatar(cx, c, 34);
-        ui.text(s.store.title(c), .{ .font_size = 15, .color = cx.c.text, .max_lines = 1, .grow = 1, .width = .fill });
+        ui.text(s.store.title(c), .{ .font_size = 16, .color = cx.c.text, .max_lines = 1, .grow = 1, .width = .fill });
         ui.end();
     }
     kit.sectionTitle(cx, t("Exclude"));
@@ -275,7 +275,7 @@ pub fn pickSheet(cx: Cx, chat: Id) void {
         const in = hasStr(j.arr(f, "chatIds"), chat.str());
         cx.ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 44, .padding = .xy(12, 6), .radius = 12, .pressed_background = cx.c.hover }, .{ .on_press = msg(.{ .toggle_in = .{ .folder = Id.of(id), .chat = chat } }), .key = key(.{ "fp", id }) });
         cx.ui.icon(icons.folder, 19, cx.c.text_2, .{}, 0);
-        cx.ui.text(j.strOr(f, "name", ""), .{ .font_size = 14.5, .weight = 550, .color = cx.c.text, .grow = 1, .width = .fill });
+        cx.ui.text(j.strOr(f, "name", ""), .{ .font_size = 14, .weight = 500, .color = cx.c.text, .grow = 1, .width = .fill });
         if (in) cx.ui.icon(icons.check, 18, cx.c.accent, .{}, 0);
         cx.ui.end();
     }
@@ -292,6 +292,6 @@ fn box(cx: Cx, on: bool) void {
 fn check(cx: Cx, label: []const u8, on: bool, m: Msg, k: u64) void {
     cx.ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 44, .padding = .xy(12, 4), .radius = 12, .pressed_background = cx.c.active }, .{ .on_press = m, .key = k });
     box(cx, on);
-    cx.ui.text(label, .{ .font_size = 15, .color = cx.c.text });
+    cx.ui.text(label, .{ .font_size = 16, .color = cx.c.text });
     cx.ui.end();
 }

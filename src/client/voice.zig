@@ -353,7 +353,7 @@ pub fn recordingBar(cx: Cx) void {
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 50, .padding = .xy(14, 3), .grow = 1, .width = .fill }, .{ .key = zui.key("recording") });
     ui.begin(.{ .width = .{ .px = 10 }, .height = .{ .px = 10 }, .radius = 5, .background = cx.c.danger }, .{});
     ui.end();
-    ui.text(fmt.duration(cx.a(), @as(f64, @floatFromInt(v.elapsed_ms)) / 1000), .{ .font_size = 15, .weight = 650, .color = cx.c.text, .min_width = 44 });
+    ui.text(fmt.duration(cx.a(), @as(f64, @floatFromInt(v.elapsed_ms)) / 1000), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .min_width = 44 });
     // The last levels, as bars.
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 2, .grow = 1, .width = .fill, .height = .{ .px = 28 }, .clip = true, .justify = .end }, .{});
     const n = v.levels.items.len;
@@ -373,7 +373,7 @@ pub fn roundPreview(cx: Cx) void {
     if (!v.recording or v.mode != .round or v.recorder == 0) return;
     const ui = cx.ui;
     ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 90 }, .width = .fill, .align_items = .center }, .{});
-    ui.begin(.{ .width = .{ .px = 220 }, .height = .{ .px = 220 }, .radius = 110, .clip = true, .background = Color.black, .border_width = 3, .border_color = cx.c.danger }, .{});
+    ui.begin(.{ .width = .{ .px = 220 }, .height = .{ .px = 220 }, .radius = 110, .clip = true, .background = cx.c.shade, .border_width = 3, .border_color = cx.c.danger }, .{});
     ui.video(v.recorder, .{ .mirror = true, .cover = true }, .{ .width = .fill, .height = .fill }, key(.{"round-preview"}));
     ui.end();
     ui.end();
@@ -395,7 +395,7 @@ pub fn voiceBubble(cx: Cx, m: *const data.Message, item: j.Value, index: u8, fg:
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_width = 230, .padding = .xy(0, 3) }, .{});
     const press: ?Msg = if (m.local_id == 0) msg(.{ .play = .{ .msg = Id.of(m.id()), .index = index } }) else null;
     ui.begin(.{ .width = .{ .px = 44 }, .height = .{ .px = 44 }, .radius = 22, .background = accent, .align_items = .center, .justify = .center, .pressed_opacity = 0.8 }, .{ .on_press = press });
-    if (mine and v.waiting) ui.spinner(20, Color.white, .{}, 0) else ui.icon(if (playing) icons.pause else icons.play, 20, Color.white, .{}, 0);
+    if (mine and v.waiting) ui.spinner(20, cx.c.onOf(accent), .{}, 0) else ui.icon(if (playing) icons.pause else icons.play, 20, cx.c.onOf(accent), .{}, 0);
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 4 }, .{});
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 1, .height = .{ .px = 26 } }, .{});
@@ -411,12 +411,12 @@ pub fn voiceBubble(cx: Cx, m: *const data.Message, item: j.Value, index: u8, fg:
     ui.end();
     const shown_ms: f64 = if (mine and v.position_ms > 0) @floatFromInt(v.position_ms) else total_ms;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
-    ui.text(fmt.duration(a, shown_ms / 1000), .{ .font_size = 12.5, .color = fg, .opacity = 0.75 });
+    ui.text(fmt.duration(a, shown_ms / 1000), .{ .font_size = 12, .color = fg, .opacity = 0.75 });
     // The speed, while this one plays (player.js).
     if (mine and v.player != 0) {
         const sp = if (v.speed == 0) 100 else v.speed;
         ui.begin(.{ .padding = .xy(7, 1), .radius = 8, .background = fg.withAlpha(0.15), .pressed_opacity = 0.7 }, .{ .on_press = msg(.speed), .key = key(.{"vspeed"}), .label = t("Speed") });
-        ui.text(if (sp == 150) "1.5×" else if (sp == 200) "2×" else "1×", .{ .font_size = 11.5, .weight = 750, .color = fg });
+        ui.text(if (sp == 150) "1.5×" else if (sp == 200) "2×" else "1×", .{ .font_size = 12, .weight = 700, .color = fg });
         ui.end();
     }
     ui.end();
@@ -435,16 +435,16 @@ pub fn roundBubble(cx: Cx, m: *const data.Message, item: j.Value, index: u8) voi
     if (mine and v.player != 0) {
         ui.video(v.player, .{ .cover = true }, .{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = size }, .height = .{ .px = size } }, key(.{ "rv", j.strOr(item, "id", "") }));
     } else if (mine and v.waiting) {
-        ui.spinner(28, Color.white, .{}, 0);
+        ui.spinner(28, cx.c.on_shade, .{}, 0);
     } else {
-        ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 27, .background = Color.hex("#0a0c1473"), .align_items = .center, .justify = .center }, .{});
-        ui.icon(icons.play, 26, Color.white, .{}, 0);
+        ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 27, .background = cx.c.shade.withAlpha(0.45), .align_items = .center, .justify = .center }, .{});
+        ui.icon(icons.play, 26, cx.c.on_shade, .{}, 0);
         ui.end();
     }
     const secs: f64 = if (mine and v.position_ms > 0) @as(f64, @floatFromInt(v.position_ms)) / 1000 else j.floatOr(item, "duration", 0);
     ui.begin(.{ .position = .absolute, .inset = .{ .bottom = 14, .start = 0, .end = 0 }, .align_items = .center }, .{});
-    ui.begin(.{ .padding = .xy(8, 2), .radius = 9, .background = Color.hex("#0a0c1473") }, .{});
-    ui.text(fmt.duration(cx.a(), secs), .{ .font_size = 12, .weight = 600, .color = Color.white });
+    ui.begin(.{ .padding = .xy(8, 2), .radius = 9, .background = cx.c.shade.withAlpha(0.45) }, .{});
+    ui.text(fmt.duration(cx.a(), secs), .{ .font_size = 12, .weight = 500, .color = cx.c.on_shade });
     ui.end();
     ui.end();
     ui.end();

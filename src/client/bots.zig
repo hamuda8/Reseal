@@ -292,7 +292,7 @@ fn botRow(cx: Cx, b: j.Value, editable: bool) void {
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 60, .padding = .xy(12, 6), .radius = theme.radius, .pressed_background = cx.c.active, .hover_background = cx.c.hover }, .{ .on_press = msg(.{ .chat = Id.of(id) }), .key = key(.{ "bot", id, editable }) });
     kit.avatar(cx, .{ .name = j.strOr(b, "name", "?"), .color = 4, .image = j.str(b, "avatar"), .icon = if (j.str(b, "avatar") == null) icons.sparkles else null, .size = 46 }, 0);
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
-    ui.text(j.strOr(b, "name", ""), .{ .font_size = 15, .weight = 600, .color = cx.c.text, .max_lines = 1 });
+    ui.text(j.strOr(b, "name", ""), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
     ui.text(j.str(b, "description") orelse j.strOr(b, "model", ""), .{ .font_size = 13, .color = cx.c.text_2, .max_lines = 1 });
     ui.end();
     if (editable) kit.iconButton(cx, icons.edit, msg(.{ .edit = Id.of(id) }), .{ .size = 36 });
@@ -312,12 +312,12 @@ pub fn editPane(cx: Cx) void {
     kit.field(cx, .bot_username, .{ .label = t("Username"), .placeholder = "travel_planner_bot", .hint = t("Must end in “bot”. Lets people find it and mention it in groups.") });
     kit.field(cx, .bot_description, .{ .label = t("Description"), .placeholder = t("What does it help with?"), .multiline = true });
     ui.begin(.{ .gap = 7, .padding = .{ .bottom = 16 } }, .{});
-    ui.text(t("Model"), .{ .font_size = 13, .weight = 600, .color = cx.c.text_2 });
+    ui.text(t("Model"), .{ .font_size = 13, .weight = 500, .color = cx.c.text_2 });
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .height = .{ .px = 46 }, .padding = .xy(14, 0), .radius = theme.radius, .border_width = 1, .border_color = cx.c.border_strong, .background = cx.c.surface_2, .pressed_background = cx.c.active }, .{ .on_press = msg(.pick_model) });
     ui.text(b.model.str(), .{ .font_size = 14, .mono = true, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
     ui.icon(icons.chevronDown, 18, cx.c.text_3, .{}, 0);
     ui.end();
-    ui.text(t("Any model on OpenRouter. Free models are marked."), .{ .font_size = 12.5, .color = cx.c.text_3 });
+    ui.text(t("Any model on OpenRouter. Free models are marked."), .{ .font_size = 12, .color = cx.c.text_3 });
     ui.end();
     kit.field(cx, .bot_prompt, .{ .label = t("Instructions (system prompt)"), .hint = t("Tell the assistant who it is, what it knows and how to answer."), .multiline = true });
     kit.field(cx, .bot_greeting, .{ .label = t("Greeting"), .placeholder = t("First message when someone starts a chat (optional)"), .multiline = true });
@@ -326,9 +326,9 @@ pub fn editPane(cx: Cx) void {
     kit.field(cx, .bot_key, .{ .label = t("OpenRouter API key"), .placeholder = if (b.own_key) t("Key saved") else "sk-or-v1-…", .hint = if (has_platform) t("Optional: this server provides a default key. Your key is encrypted at rest.") else t("Get a key at openrouter.ai/keys. It is encrypted at rest and never shown again.") });
     kit.sectionTitle(cx, t("Advanced"));
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8, .padding = .xy(12, 6) }, .{});
-    ui.text(t("Creativity (temperature)"), .{ .font_size = 15, .color = cx.c.text, .grow = 1, .width = .fill });
+    ui.text(t("Creativity (temperature)"), .{ .font_size = 16, .color = cx.c.text, .grow = 1, .width = .fill });
     kit.iconButton(cx, icons.minus, msg(.temp_down), .{ .size = 34, .soft = true });
-    ui.text(std.fmt.allocPrint(cx.a(), "{d:.1}", .{@as(f32, @floatFromInt(b.temperature)) / 10}) catch "", .{ .font_size = 15, .weight = 650, .color = cx.c.text, .min_width = 34, .text_align = .center });
+    ui.text(std.fmt.allocPrint(cx.a(), "{d:.1}", .{@as(f32, @floatFromInt(b.temperature)) / 10}) catch "", .{ .font_size = 16, .weight = 500, .color = cx.c.text, .min_width = 34, .text_align = .center });
     kit.iconButton(cx, icons.plus, msg(.temp_up), .{ .size = 34, .soft = true });
     ui.end();
     ui.begin(.{ .direction = .row, .gap = 10 }, .{});
@@ -381,8 +381,8 @@ pub fn modelSheet(cx: Cx) void {
         if (shown > 120) break;
         const on = std.mem.eql(u8, id, s.bots.model.str());
         ui.begin(.{ .gap = 3, .padding = .xy(12, 8), .radius = 12, .background = if (on) cx.c.accent_soft else null, .pressed_background = cx.c.hover }, .{ .on_press = msg(.{ .model = @intCast(i) }), .key = key(.{ "model", id }) });
-        ui.text(name, .{ .font_size = 14.5, .weight = 600, .color = cx.c.text, .max_lines = 1 });
-        ui.text(id, .{ .font_size = 12.5, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
+        ui.text(name, .{ .font_size = 14, .weight = 500, .color = cx.c.text, .max_lines = 1 });
+        ui.text(id, .{ .font_size = 12, .mono = true, .color = cx.c.text_2, .max_lines = 1 });
         var tags: std.ArrayList(u8) = .empty;
         if (free) tags.appendSlice(cx.a(), t("free")) catch {};
         if (vision) tags.print(cx.a(), "{s}{s}", .{ if (tags.items.len > 0) " · " else "", t("vision") }) catch {};

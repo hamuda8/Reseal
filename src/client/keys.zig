@@ -308,7 +308,19 @@ pub fn onAnswer(s: *State, op: app.Op, r: zui.Response) bool {
         .keys_restore => {
             if (!r.ok()) {
                 zui.log("key restore failed: {d} {s}", .{ r.status, r.body[0..@min(r.body.len, 200)] });
-                s.phase = .locked;
+                // Only advanced protection needs the passcode; anything else (too many requests,
+                // the server unreachable) is tried again later, not a reason to ask for it.
+                if (std.mem.eql(u8, app.apiError(r).code, "advanced")) {
+                    s.phase = .locked;
+                    return true;
+                }
+                s.keys.recovering = false;
+                if (s.phase == .ready) {
+                    app.toastError(s, app.apiError(r).message);
+                } else {
+                    s.phase = .cannot_reach;
+                    s.boot_error.set(app.apiError(r).message);
+                }
                 return true;
             }
             const box = boxOf(v, "escrow") orelse {
@@ -1070,7 +1082,9 @@ pub fn onKey(s: *State, r: zui.keys.Result) void {
         if (r.status == .missing) recover(s);
         return;
     }
-    if (r.status == .missing) recover(s);
+    // An unwrap decrypts with "reseal:unwrap", which its ECDH makes: when that ECDH failed (a bad
+    // wrap) the decrypt answers .missing, and that is not this device losing its own keys.
+    if (r.status == .missing and !s.keys.unwraps.contains(r.id)) recover(s);
     if (s.keys.unwraps.fetchRemove(r.id)) |kv| {
         const chat = kv.value.chat.str();
         if (r.ok() and r.data.len == 32) remember(s, chat, kv.value.epoch, r.data[0..32].*) else zui.log("Could not unwrap key {s}#{d}", .{ chat, kv.value.epoch });

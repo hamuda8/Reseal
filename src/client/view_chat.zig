@@ -137,7 +137,7 @@ fn header(cx: Cx, c: *const data.Chat) void {
     if (s.selecting) return selectionBar(cx, c);
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .height = .{ .px = theme.header_h }, .padding = .{ .start = if (cx.phone) 6 else 16, .end = 12 }, .background = col.surface }, .{});
     if (cx.phone) kit.iconButton(cx, icons.back, .close_chat, .{ .rtl = icons.back_rtl });
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .grow = 1, .width = .fill, .padding = .xy(8, 5), .radius = 14, .pressed_background = col.hover }, .{ .on_press = .{ .open_info = Id.of(c.id()) } });
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .grow = 1, .width = .fill, .padding = .xy(8, 5), .radius = 12, .pressed_background = col.hover }, .{ .on_press = .{ .open_info = Id.of(c.id()) } });
     vlist.chatAvatar(cx, c, 42);
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6 }, .{});
@@ -146,7 +146,7 @@ fn header(cx: Cx, c: *const data.Chat) void {
     if (c.is("bot")) ui.icon(icons.sparkles, 14, col.text_2, .{}, 0);
     ui.end();
     const st = status(cx, c);
-    ui.text(st.text, .{ .font_size = 13, .weight = if (st.accent) 550 else 400, .color = if (st.accent) col.accent else col.text_2, .max_lines = 1 });
+    ui.text(st.text, .{ .font_size = 13, .weight = if (st.accent) 500 else 400, .color = if (st.accent) col.accent else col.text_2, .max_lines = 1 });
     ui.end();
     ui.end();
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 4 }, .{});
@@ -222,9 +222,9 @@ fn topBars(cx: Cx, c: *const data.Chat) void {
     if (call == null and pinned.len == 0 and !bot) return;
     ui.begin(.{ .gap = 8, .padding = .{ .start = 14, .end = 14, .top = 8 } }, .{});
     if (call) |cl| {
-        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 50, .padding = .{ .start = 14, .end = 10, .top = 7, .bottom = 7 }, .radius = 16, .background = col.surface_2 }, .{});
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 50, .padding = .{ .start = 14, .end = 10, .top = 7, .bottom = 7 }, .radius = 12, .background = col.surface_2 }, .{});
         ui.icon(icons.phone, 18, col.success, .{}, 0);
-        ui.text(std.fmt.allocPrint(cx.a(), "{s} · {s}", .{ if (j.truthy(cl, "video")) t("Video chat") else t("Voice chat"), fmt.tn(cx.a(), j.intOr(cl, "count", 0), "{n} participant", "{n} participants") }) catch "", .{ .font_size = 14, .weight = 650, .color = col.success, .grow = 1, .width = .fill });
+        ui.text(std.fmt.allocPrint(cx.a(), "{s} · {s}", .{ if (j.truthy(cl, "video")) t("Video chat") else t("Voice chat"), fmt.tn(cx.a(), j.intOr(cl, "count", 0), "{n} participant", "{n} participants") }) catch "", .{ .font_size = 14, .weight = 500, .color = col.success, .grow = 1, .width = .fill });
         kit.button(cx, t("Join"), .{ .call = .{ .join = Id.of(c.id()) } }, .{ .small = true });
         ui.end();
     }
@@ -236,7 +236,7 @@ fn topBars(cx: Cx, c: *const data.Chat) void {
         if (s.store.existingTimeline(c.id())) |tl| if (tl.find(pid)) |m| {
             line = if (m.deleted()) t("Deleted message") else text.summary(s, m, true);
         };
-        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 50, .padding = .{ .start = 14, .end = 6, .top = 7, .bottom = 7 }, .radius = 16, .background = col.surface_2 }, .{});
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_height = 50, .padding = .{ .start = 14, .end = 6, .top = 7, .bottom = 7 }, .radius = 12, .background = col.surface_2 }, .{});
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .grow = 1, .width = .fill, .pressed_opacity = 0.85 }, .{ .on_press = .{ .extras = .{ .pin_tap = Id.of(pid) } }, .key = key(.{"pinbar"}) });
         // Up to four lines, the current one lit.
         ui.begin(.{ .gap = 2, .height = .{ .px = 34 }, .justify = .center }, .{});
@@ -248,7 +248,7 @@ fn topBars(cx: Cx, c: *const data.Chat) void {
         }
         ui.end();
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(if (pinned.len > 1) fmt.tf("Pinned message #{n}", .{ .n = @as(i64, @intCast(idx + 1)) }) else t("Pinned message"), .{ .font_size = 12.5, .weight = 700, .color = col.accent });
+        ui.text(if (pinned.len > 1) fmt.tf("Pinned message #{n}", .{ .n = @as(i64, @intCast(idx + 1)) }) else t("Pinned message"), .{ .font_size = 12, .weight = 700, .color = col.accent });
         ui.text(line, .{ .font_size = 14, .color = col.text, .max_lines = 1 });
         ui.end();
         ui.end();
@@ -256,7 +256,7 @@ fn topBars(cx: Cx, c: *const data.Chat) void {
         ui.end();
     }
     if (bot) {
-        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .padding = .xy(14, 8), .radius = 16, .background = col.surface_2 }, .{});
+        ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .padding = .xy(14, 8), .radius = 12, .background = col.surface_2 }, .{});
         ui.icon(icons.info, 18, col.warning, .{}, 0);
         ui.text(t("Chats with AI assistants are not end-to-end encrypted. The assistant's provider processes your messages."), .{ .font_size = 13, .color = col.text_2, .grow = 1, .width = .fill });
         ui.end();
@@ -335,7 +335,7 @@ fn unreadLine(cx: Cx) void {
     flipped(cx);
     ui.begin(.{ .align_items = .center, .padding = .xy(0, 12) }, .{});
     ui.begin(.{ .padding = .xy(14, 5), .radius = 10, .background = cx.c.accent_soft }, .{});
-    ui.text(t("Unread messages"), .{ .font_size = 12.5, .weight = 700, .color = cx.c.accent });
+    ui.text(t("Unread messages"), .{ .font_size = 12, .weight = 700, .color = cx.c.accent });
     ui.end();
     ui.end();
     ui.end();
@@ -364,9 +364,9 @@ fn intro(cx: Cx, c: *const data.Chat) void {
     ui.begin(.{ .align_items = .center, .padding = .{ .top = 24, .bottom = 22 } }, .{});
     ui.begin(.{ .max_width = 360, .align_items = .center, .gap = 6, .padding = .{ .top = 24, .bottom = 20, .start = 24, .end = 24 }, .radius = 24, .background = col.surface_2 }, .{});
     ui.begin(.{ .width = .{ .px = 44 }, .height = .{ .px = 44 }, .radius = 15, .background = col.brand, .align_items = .center, .justify = .center }, .{});
-    ui.icon(if (bot) icons.sparkles else if (c.is("saved")) icons.bookmark else if (c.encrypted()) icons.shieldCheck else icons.chat, 24, Color.white, .{}, 0);
+    ui.icon(if (bot) icons.sparkles else if (c.is("saved")) icons.bookmark else if (c.encrypted()) icons.shieldCheck else icons.chat, 24, col.on_accent, .{}, 0);
     ui.end();
-    const body: zui.Style = .{ .font_size = 13.5, .color = col.text_2, .text_align = .center, .line_height = 1.6 };
+    const body: zui.Style = .{ .font_size = 14, .color = col.text_2, .text_align = .center, .line_height = 1.6 };
     if (bot) {
         ui.text(s.store.title(c), .{ .font_size = 17, .weight = 700, .color = col.text, .text_align = .center });
         const about = if (peer) |p| (p.s("bio") orelse p.s("bot.description")) else null;
@@ -374,8 +374,8 @@ fn intro(cx: Cx, c: *const data.Chat) void {
         if (!mine) if (peer) |p| if (p.get("bot")) |b| {
             ui.begin(.{ .direction = .row, .wrap = true, .justify = .center, .gap = 6, .padding = .{ .top = 8 } }, .{});
             for (j.arr(b, "starters"), 0..) |st, i| if (st == .string and i < 8) {
-                ui.begin(.{ .padding = .xy(12, 7), .radius = 14, .background = col.surface, .border_width = 1, .border_color = col.border, .pressed_background = col.active }, .{ .on_press = .{ .chat_more = .{ .starter = .{ .chat = Id.of(c.id()), .i = @intCast(i) } } }, .key = key(.{ "starter", i }) });
-                ui.text(st.string, .{ .font_size = 13.5, .color = col.text });
+                ui.begin(.{ .padding = .xy(12, 7), .radius = 12, .background = col.surface, .border_width = 1, .border_color = col.border, .pressed_background = col.active }, .{ .on_press = .{ .chat_more = .{ .starter = .{ .chat = Id.of(c.id()), .i = @intCast(i) } } }, .key = key(.{ "starter", i }) });
+                ui.text(st.string, .{ .font_size = 14, .color = col.text });
                 ui.end();
             };
             ui.end();
@@ -389,7 +389,7 @@ fn intro(cx: Cx, c: *const data.Chat) void {
         ui.text(t("Messages, files and calls in this chat are encrypted on your devices before they are sent."), body);
         const verify: Msg = if (c.is("private") and peer != null) .{ .menu = .{ .safety = Id.of(peer.?.s("id") orelse "") } } else .{ .open_info = Id.of(c.id()) };
         ui.begin(.{ .padding = .xy(8, 4), .radius = 8, .pressed_opacity = 0.7 }, .{ .on_press = verify, .key = key(.{"verify-code"}) });
-        ui.text(t("Verify the security code"), .{ .font_size = 13.5, .weight = 650, .color = col.accent });
+        ui.text(t("Verify the security code"), .{ .font_size = 14, .weight = 500, .color = col.accent });
         ui.end();
     } else {
         ui.text(t("No messages here yet"), .{ .font_size = 17, .weight = 700, .color = col.text, .text_align = .center });
@@ -414,7 +414,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     const k = if (m.local_id != 0) key(.{ "local", m.local_id }) else key(.{ "m", m.id() });
     if (m.isService()) {
         ui.begin(.{ .width = .fill, .align_items = .center, .padding = .xy(0, 8) }, .{ .key = k });
-        ui.text(text.serviceText(s, m), .{ .font_size = 12.5, .weight = 550, .color = col.text_3, .text_align = .center, .max_width = 520 });
+        ui.text(text.serviceText(s, m), .{ .font_size = 12, .weight = 500, .color = col.text_3, .text_align = .center, .max_width = 520 });
         ui.end();
         return;
     }
@@ -459,7 +459,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     ui.begin(.{ .max_width = max_w, .min_width = 60, .padding = if (media_only) .{} else .{ .top = 8, .bottom = 8, .start = 13, .end = 13 }, .radius = big, .background = bg, .gap = 2, .clip = media_only }, .{ .on_press = tap, .on_long_press = if (m.local_id == 0 and !s.selecting) Msg{ .message_action = .{ .what = .select, .msg = Id.of(m.id()) } } else null, .on_context = tap });
     if (group_names and run_start) {
         const u = s.store.user(m.senderId());
-        ui.text(if (u) |x| s.store.userName(x) else "…", .{ .font_size = 13.5, .weight = 700, .color = theme.nameColor(if (u) |x| x.i("color") orelse 0 else 0, col.dark), .max_lines = 1 });
+        ui.text(if (u) |x| s.store.userName(x) else "…", .{ .font_size = 13, .weight = 700, .color = theme.nameColor(&col, if (u) |x| x.i("color") orelse 0 else 0), .max_lines = 1 });
     }
     if (m.deleted()) {
         ui.text(t("Deleted message"), .{ .font_size = cx.fs, .color = fg });
@@ -474,7 +474,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
             ui.begin(.{ .direction = .row, .gap = 8, .padding = .{ .bottom = 2 } }, .{});
             ui.begin(.{ .width = .{ .px = 3 }, .radius = 2, .background = fg.withAlpha(0.55) }, .{});
             ui.end();
-            ui.text(t("Replied to a glimpse"), .{ .font_size = 13, .weight = 600, .color = fg, .opacity = 0.85 });
+            ui.text(t("Replied to a glimpse"), .{ .font_size = 13, .weight = 500, .color = fg, .opacity = 0.85 });
             ui.end();
         }
         if (j.str(m.o.v, "replyTo.id")) |rid| {
@@ -513,7 +513,7 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
             for (if (row == .array) row.array.items else &[_]j.Value{}, 0..) |b, bi| {
                 if (ri > 15 or bi > 15) break;
                 ui.begin(.{ .grow = 1, .width = .fill, .direction = .row, .gap = 5, .align_items = .center, .justify = .center, .padding = .xy(10, 8), .radius = 10, .background = fg.withAlpha(0.1), .pressed_background = fg.withAlpha(0.2) }, .{ .on_press = if (m.local_id == 0) Msg{ .chat_more = .{ .button = .{ .msg = Id.of(m.id()), .row = @intCast(ri), .col = @intCast(bi) } } } else null, .key = key(.{ "ib", m.id(), ri, bi }) });
-                ui.text(j.strOr(b, "text", ""), .{ .font_size = 13.5, .weight = 650, .color = fg, .max_lines = 1 });
+                ui.text(j.strOr(b, "text", ""), .{ .font_size = 14, .weight = 500, .color = fg, .max_lines = 1 });
                 if (j.str(b, "url") != null) ui.icon(icons.external, 13, fg, .{}, 0);
                 ui.end();
             }
@@ -530,8 +530,8 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
     reactions(cx, c, m, out);
     if (m.state == .failed) {
         ui.begin(.{ .direction = .row, .gap = 8, .align_items = .center, .padding = .{ .top = 6 } }, .{});
-        ui.icon(icons.alertCircle, 16, if (out) Color.white else col.danger, .{}, 0);
-        ui.text(m.err orelse t("Not sent"), .{ .font_size = 13, .color = if (out) Color.white else col.danger });
+        ui.icon(icons.alertCircle, 16, if (out) col.bubble_out_text else col.danger, .{}, 0);
+        ui.text(m.err orelse t("Not sent"), .{ .font_size = 13, .color = if (out) col.bubble_out_text else col.danger });
         ui.end();
     }
     ui.end();
@@ -542,11 +542,11 @@ fn messageRow(cx: Cx, c: *const data.Chat, m: *data.Message, older: ?*data.Messa
 fn card(cx: Cx, ic: zui.Icon, title: []const u8, sub: []const u8, fg: Color) void {
     const ui = cx.ui;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .min_width = 220, .padding = .xy(0, 3) }, .{});
-    ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 14, .background = fg.withAlpha(0.1), .align_items = .center, .justify = .center }, .{});
+    ui.begin(.{ .width = .{ .px = 46 }, .height = .{ .px = 46 }, .radius = 12, .background = fg.withAlpha(0.1), .align_items = .center, .justify = .center }, .{});
     ui.icon(ic, 24, fg, .{}, 0);
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 1 }, .{});
-    ui.text(title, .{ .font_size = 14.5, .weight = 650, .color = fg, .max_lines = 2 });
+    ui.text(title, .{ .font_size = 14, .weight = 500, .color = fg, .max_lines = 2 });
     if (sub.len > 0) ui.text(sub, .{ .font_size = 13, .color = fg, .opacity = 0.75, .max_lines = 1 });
     ui.end();
     ui.end();
@@ -559,8 +559,8 @@ fn linkCard(cx: Cx, p: j.Value, fg: Color) void {
     ui.begin(.{ .width = .{ .px = 3 }, .radius = 2, .background = fg.withAlpha(0.55) }, .{});
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 2, .padding = .{ .start = 4 } }, .{});
-    if (j.str(p, "siteName")) |x| ui.text(x, .{ .font_size = 12.5, .weight = 700, .color = fg, .opacity = 0.8, .max_lines = 1 });
-    if (j.str(p, "title")) |x| ui.text(x, .{ .font_size = 14, .weight = 650, .color = fg, .max_lines = 2 });
+    if (j.str(p, "siteName")) |x| ui.text(x, .{ .font_size = 12, .weight = 700, .color = fg, .opacity = 0.8, .max_lines = 1 });
+    if (j.str(p, "title")) |x| ui.text(x, .{ .font_size = 14, .weight = 500, .color = fg, .max_lines = 2 });
     if (j.str(p, "description")) |x| ui.text(x, .{ .font_size = 13, .color = fg, .opacity = 0.85, .max_lines = 3 });
     ui.end();
     ui.end();
@@ -602,12 +602,12 @@ fn replyQuote(cx: Cx, c: *const data.Chat, rid: []const u8, out: bool) void {
         name = if (target.senderId().len > 0) s.store.displayName(target.senderId()) else t("Channel");
         line = text.summary(s, target, true);
     };
-    ui.begin(.{ .direction = .row, .gap = 8, .padding = .{ .top = 6, .bottom = 7, .start = 10, .end = 10 }, .radius = 12, .background = if (out) Color.hex("#ffffff29") else col.accent.mix(0.09, Color.transparent) }, .{});
-    ui.begin(.{ .width = .{ .px = 3 }, .radius = 2, .background = if (out) Color.hex("#ffffffd9") else col.accent, .align_self = .stretch }, .{});
+    ui.begin(.{ .direction = .row, .gap = 8, .padding = .{ .top = 6, .bottom = 7, .start = 10, .end = 10 }, .radius = 12, .background = if (out) col.bubble_out_text.withAlpha(0.16) else col.accent.withAlpha(0.09) }, .{});
+    ui.begin(.{ .width = .{ .px = 3 }, .radius = 2, .background = if (out) col.bubble_out_text.withAlpha(0.85) else col.accent, .align_self = .stretch }, .{});
     ui.end();
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
-    if (name.len > 0) ui.text(name, .{ .font_size = 13, .weight = 700, .color = if (out) Color.white else col.accent, .max_lines = 1 });
-    ui.text(line, .{ .font_size = 13.5, .color = if (out) col.bubble_out_text else col.bubble_in_text, .max_lines = 1, .opacity = 0.85 });
+    if (name.len > 0) ui.text(name, .{ .font_size = 13, .weight = 700, .color = if (out) col.bubble_out_text else col.accent, .max_lines = 1 });
+    ui.text(line, .{ .font_size = 14, .color = if (out) col.bubble_out_text else col.bubble_in_text, .max_lines = 1, .opacity = 0.85 });
     ui.end();
     ui.end();
 }
@@ -629,8 +629,8 @@ fn visualTile(cx: Cx, m: *const data.Message, item: j.Value, i: usize, w: f32, h
                 ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h } }, .{ .on_press = .{ .voice = .{ .play = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } });
                 ui.end();
             } else {
-                ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1473"), .align_items = .center, .justify = .center }, .{ .on_press = if (m.local_id == 0) Msg{ .voice = .{ .play = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } else null });
-                if (s.voice.waiting and s.voice.playing_msg.eql(m.id())) ui.spinner(24, Color.white, .{}, 0) else ui.icon(icons.play, 26, Color.white, .{}, 0);
+                ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = col.shade.withAlpha(0.45), .align_items = .center, .justify = .center }, .{ .on_press = if (m.local_id == 0) Msg{ .voice = .{ .play = .{ .msg = Id.of(m.id()), .index = @intCast(i) } } } else null });
+                if (s.voice.waiting and s.voice.playing_msg.eql(m.id())) ui.spinner(24, col.on_shade, .{}, 0) else ui.icon(icons.play, 26, col.on_shade, .{}, 0);
                 ui.end();
             }
         } else if (f) |file| {
@@ -640,12 +640,12 @@ fn visualTile(cx: Cx, m: *const data.Message, item: j.Value, i: usize, w: f32, h
         if (j.truthy(item, "spoiler") and !s.isRevealed(m.id())) {
             ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .start = 0 }, .width = .{ .px = w }, .height = .{ .px = h }, .background = col.surface_3, .align_items = .center, .justify = .center, .gap = 6 }, .{ .on_press = if (m.local_id == 0) Msg{ .message_action = .{ .what = .reveal, .msg = Id.of(m.id()) } } else null, .key = key(.{ "spl", j.strOr(item, "id", ""), i }) });
             ui.icon(icons.eyeOff, 26, col.text_2, .{}, 0);
-            ui.text(t("Spoiler"), .{ .font_size = 13, .weight = 650, .color = col.text_2 });
+            ui.text(t("Spoiler"), .{ .font_size = 13, .weight = 500, .color = col.text_2 });
             ui.end();
         }
         if (m.local_id != 0 and m.state == .sending) {
-            ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = Color.hex("#0a0c1480"), .align_items = .center, .justify = .center }, .{});
-            ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{@as(u32, @intFromFloat(m.progress * 100))}) catch "", .{ .font_size = 12, .weight = 700, .color = Color.white });
+            ui.begin(.{ .width = .{ .px = 54 }, .height = .{ .px = 54 }, .radius = 18, .background = col.shade.withAlpha(0.5), .align_items = .center, .justify = .center }, .{});
+            ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{@as(u32, @intFromFloat(m.progress * 100))}) catch "", .{ .font_size = 12, .weight = 700, .color = col.on_shade });
             ui.end();
         }
         ui.end();
@@ -666,7 +666,7 @@ fn album(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32) void {
         idx[n] = i;
         n += 1;
     };
-    ui.begin(.{ .gap = 3, .width = .{ .px = total }, .radius = 16, .clip = true }, .{});
+    ui.begin(.{ .gap = 3, .width = .{ .px = total }, .radius = 18, .clip = true }, .{});
     var k: usize = 0;
     if (n % 2 == 1) {
         const it = items[idx[0]];
@@ -701,7 +701,7 @@ fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out:
         const kind = j.strOr(item, "kind", "file");
         const vc = @import("voice.zig");
         if (std.mem.eql(u8, kind, "voice")) {
-            vc.voiceBubble(cx, m, item, @intCast(i), if (out) col.bubble_out_text else col.bubble_in_text, if (out) Color.hex("#ffffff38") else col.brand);
+            vc.voiceBubble(cx, m, item, @intCast(i), if (out) col.bubble_out_text else col.bubble_in_text, if (out) col.bubble_out_text.withAlpha(0.22) else col.brand);
             continue;
         }
         if (std.mem.eql(u8, kind, "round")) {
@@ -720,12 +720,12 @@ fn mediaBlock(cx: Cx, m: *const data.Message, items: []j.Value, max_w: f32, out:
             // A file card.
             const name = j.strOr(item, "name", t("File"));
             ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .padding = .xy(if (m.text().len > 0) 0 else 13, if (m.text().len > 0) 3 else 9), .min_width = 220 }, .{});
-            ui.begin(.{ .width = .{ .px = 48 }, .height = .{ .px = 48 }, .radius = 15, .background = if (out) Color.hex("#ffffff38") else col.brand, .align_items = .center, .justify = .center }, .{});
-            ui.icon(if (std.mem.eql(u8, kind, "audio") or std.mem.eql(u8, kind, "voice")) icons.music else icons.file, 22, Color.white, .{}, 0);
+            ui.begin(.{ .width = .{ .px = 48 }, .height = .{ .px = 48 }, .radius = 15, .background = if (out) col.bubble_out_text.withAlpha(0.22) else col.brand, .align_items = .center, .justify = .center }, .{});
+            ui.icon(if (std.mem.eql(u8, kind, "audio") or std.mem.eql(u8, kind, "voice")) icons.music else icons.file, 22, if (out) col.bubble_out_text else col.on_accent, .{}, 0);
             ui.end();
             ui.begin(.{ .grow = 1, .width = .fill }, .{});
-            ui.text(name, .{ .font_size = 14.5, .weight = 650, .color = if (out) col.bubble_out_text else col.bubble_in_text, .max_lines = 1 });
-            ui.text(fmt.fileSize(cx.a(), j.intOr(item, "size", 0)), .{ .font_size = 12.5, .color = if (out) col.bubble_out_text else col.bubble_in_text, .opacity = 0.72 });
+            ui.text(name, .{ .font_size = 14, .weight = 500, .color = if (out) col.bubble_out_text else col.bubble_in_text, .max_lines = 1 });
+            ui.text(fmt.fileSize(cx.a(), j.intOr(item, "size", 0)), .{ .font_size = 12, .color = if (out) col.bubble_out_text else col.bubble_in_text, .opacity = 0.72 });
             ui.end();
             ui.end();
         }
@@ -749,9 +749,9 @@ fn pollBlock(cx: Cx, m: *const data.Message, p: j.Value, fg: Color) void {
     const pollx = @import("pollx.zig");
     const can_vote = !show and !closed and m.local_id == 0 and !cx.s.selecting;
     ui.begin(.{ .gap = 6, .min_width = 260, .padding = .xy(0, 3) }, .{});
-    ui.text(j.strOr(p, "question", ""), .{ .font_size = 15, .weight = 700, .color = fg });
+    ui.text(j.strOr(p, "question", ""), .{ .font_size = 16, .weight = 700, .color = fg });
     const kind = if (closed) t("Final results") else if (quiz) (if (anonymous) t("Anonymous quiz") else t("Quiz")) else if (anonymous) t("Anonymous poll") else t("Public poll");
-    ui.text(kind, .{ .font_size = 12.5, .color = fg, .opacity = 0.7 });
+    ui.text(kind, .{ .font_size = 12, .color = fg, .opacity = 0.7 });
     const counts = j.arr(state, "counts");
     for (j.arr(p, "options"), 0..) |o, i| {
         const label = if (o == .string) o.string else j.strOr(o, "text", "");
@@ -766,20 +766,20 @@ fn pollBlock(cx: Cx, m: *const data.Message, p: j.Value, fg: Color) void {
         ui.begin(.{ .gap = 5, .padding = .xy(10, 8), .radius = 12, .background = fg.withAlpha(0.07), .pressed_background = fg.withAlpha(0.14) }, .{ .on_press = if (can_vote) pollx.msgOf(.{ .tap = .{ .msg = Id.of(m.id()), .option = @intCast(@min(i, 255)), .multiple = multiple } }) else null, .key = key(.{ "popt", m.id(), i }) });
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
         if (show) {
-            ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{pct}) catch "", .{ .font_size = 13, .weight = 750, .color = fg, .min_width = 36 });
+            ui.text(std.fmt.allocPrint(cx.a(), "{d}%", .{pct}) catch "", .{ .font_size = 13, .weight = 700, .color = fg, .min_width = 36 });
         } else {
             ui.begin(.{ .width = .{ .px = 18 }, .height = .{ .px = 18 }, .radius = if (multiple) 5 else 9, .border_width = if (ticked) 0 else 1.5, .border_color = fg.withAlpha(0.45), .background = if (ticked) col.accent else null, .align_items = .center, .justify = .center }, .{});
-            if (ticked) ui.icon(icons.check, 12, Color.white, .{}, 0);
+            if (ticked) ui.icon(icons.check, 12, col.on_accent, .{}, 0);
             ui.end();
         }
-        ui.text(label, .{ .font_size = 14.5, .color = fg, .grow = 1, .width = .fill });
+        ui.text(label, .{ .font_size = 14, .color = fg, .grow = 1, .width = .fill });
         if (right) ui.icon(icons.check, 17, col.success, .{}, 0) else if (wrong) ui.icon(icons.close, 17, col.danger, .{}, 0) else if (mine) ui.icon(icons.check, 17, fg, .{}, 0);
         ui.end();
         if (show) {
             // The bar: a filled part and the rest, in proportion.
             ui.begin(.{ .direction = .row, .height = .{ .px = 4 }, .radius = 2, .background = fg.withAlpha(0.12), .clip = true }, .{});
             if (pct > 0) {
-                ui.begin(.{ .grow = @floatFromInt(pct), .height = .{ .px = 4 }, .transition = .{ .duration_ms = 350 }, .background = if (right) col.success else if (wrong) col.danger else fg.withAlpha(0.7) }, .{});
+                ui.begin(.{ .grow = @floatFromInt(pct), .height = .{ .px = 4 }, .transition = .{ .duration_ms = 240 }, .background = if (right) col.success else if (wrong) col.danger else fg.withAlpha(0.7) }, .{});
                 ui.end();
             }
             if (pct < 100) {
@@ -791,7 +791,7 @@ fn pollBlock(cx: Cx, m: *const data.Message, p: j.Value, fg: Color) void {
         ui.end();
     }
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 8 }, .{});
-    ui.text(if (total > 0) fmt.tn(cx.a(), total, "{n} vote", "{n} votes") else t("No votes yet"), .{ .font_size = 12.5, .color = fg, .opacity = 0.7, .grow = 1, .width = .fill });
+    ui.text(if (total > 0) fmt.tn(cx.a(), total, "{n} vote", "{n} votes") else t("No votes yet"), .{ .font_size = 12, .color = fg, .opacity = 0.7, .grow = 1, .width = .fill });
     if (can_vote and multiple and pollx.anyChosen(cx.s, m.id())) pollButton(cx, t("Vote"), pollx.msgOf(.{ .vote = Id.of(m.id()) }), fg);
     if (!anonymous and total > 0 and show) pollButton(cx, t("View votes"), pollx.msgOf(.{ .voters = Id.of(m.id()) }), fg);
     ui.end();
@@ -815,8 +815,8 @@ fn metaRow(cx: Cx, c: *const data.Chat, m: *const data.Message, out: bool, overl
     const ui = cx.ui;
     const s = cx.s;
     const col = cx.c;
-    const color = if (overlay) Color.white else if (out) col.bubble_meta_out else col.bubble_meta_in;
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 3, .align_self = .end, .padding = if (overlay) .{ .top = 2, .bottom = 2, .start = 8, .end = 8 } else .{}, .radius = 9, .background = if (overlay) Color.hex("#0a0c1473") else null, .position = if (overlay) .absolute else .flow, .inset = if (overlay) .{ .bottom = 8, .end = 8 } else .{} }, .{});
+    const color = if (overlay) col.on_shade else if (out) col.bubble_meta_out else col.bubble_meta_in;
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 3, .align_self = .end, .padding = if (overlay) .{ .top = 2, .bottom = 2, .start = 8, .end = 8 } else .{}, .radius = 9, .background = if (overlay) col.shade.withAlpha(0.45) else null, .position = if (overlay) .absolute else .flow, .inset = if (overlay) .{ .bottom = 8, .end = 8 } else .{} }, .{});
     if (j.intOr(m.o.v, "ttl", 0) > 0) ui.icon(icons.timer, 13, color, .{}, 0);
     for (m.media()) |it| if (j.str(it, "key") != null) {
         ui.icon(icons.lockSmall, 12, color, .{}, 0);
@@ -825,12 +825,12 @@ fn metaRow(cx: Cx, c: *const data.Chat, m: *const data.Message, out: bool, overl
     const views_n = j.intOr(m.o.v, "views", 0);
     if (views_n > 0) {
         ui.icon(icons.eye, 13, color, .{}, 0);
-        ui.text(fmt.compact(cx.a(), views_n), .{ .font_size = 11.5, .color = color });
+        ui.text(fmt.compact(cx.a(), views_n), .{ .font_size = 12, .color = color });
     }
-    if (j.str(m.o.v, "editedAt") != null) ui.text(t("edited"), .{ .font_size = 11.5, .color = color });
+    if (j.str(m.o.v, "editedAt") != null) ui.text(t("edited"), .{ .font_size = 12, .color = color });
     // Channels that sign posts: the author's name.
-    if (c.is("channel") and c.o.b("signMessages") and m.authorId().len > 0) ui.text(s.store.displayName(m.authorId()), .{ .font_size = 11.5, .color = color, .max_lines = 1 });
-    ui.text(fmt.time(cx.a(), if (m.at > 0) m.at else sys.now()), .{ .font_size = 11.5, .color = color });
+    if (c.is("channel") and c.o.b("signMessages") and m.authorId().len > 0) ui.text(s.store.displayName(m.authorId()), .{ .font_size = 12, .color = color, .max_lines = 1 });
+    ui.text(fmt.time(cx.a(), if (m.at > 0) m.at else sys.now()), .{ .font_size = 12, .color = color });
     if (s.store.isMe(m.authorId()) and !c.is("channel") and !c.is("saved")) {
         switch (m.state) {
             .sending => ui.icon(icons.clock, 16, color, .{}, 0),
@@ -858,8 +858,8 @@ fn reactions(cx: Cx, c: *const data.Chat, m: *const data.Message, out: bool) voi
     ui.begin(.{ .direction = .row, .wrap = true, .gap = 5, .padding = .{ .top = 7 } }, .{});
     for (list, 0..) |r, i| {
         const me = j.truthy(r, "me");
-        const bg = if (out) (if (me) Color.white else Color.hex("#ffffff2e")) else if (me) col.accent_soft else col.surface;
-        const fg = if (out) (if (me) col.accent else Color.white) else if (me) col.accent else col.text;
+        const bg = if (out) (if (me) col.bubble_out_text else col.bubble_out_text.withAlpha(0.18)) else if (me) col.accent_soft else col.surface;
+        const fg = if (out) (if (me) col.accent else col.bubble_out_text) else if (me) col.accent else col.text;
         const recent = j.arr(r, "recent");
         const count = j.intOr(r, "count", 0);
         var names: std.ArrayList(u8) = .empty;
@@ -965,7 +965,7 @@ fn blocked(cx: Cx, ic: ?zui.Icon, msg: Msg, label: []const u8) void {
 
 fn note(cx: Cx, s: []const u8) void {
     cx.ui.begin(.{ .align_items = .center }, .{});
-    cx.ui.begin(.{ .padding = .xy(20, 12), .radius = 16, .background = cx.c.surface_2 }, .{});
+    cx.ui.begin(.{ .padding = .xy(20, 12), .radius = 12, .background = cx.c.surface_2 }, .{});
     cx.ui.text(s, .{ .font_size = 14, .color = cx.c.text_2, .text_align = .center });
     cx.ui.end();
     cx.ui.end();
@@ -987,7 +987,7 @@ fn replyBar(cx: Cx, c: *const data.Chat) void {
     ui.icon(if (editing) icons.edit else icons.reply, 20, col.accent, .{}, 0);
     ui.begin(.{ .grow = 1, .width = .fill, .padding = .{ .start = 9 }, .border_width = 0 }, .{});
     ui.text(title, .{ .font_size = 13, .weight = 700, .color = col.accent, .max_lines = 1 });
-    ui.text(line, .{ .font_size = 13.5, .color = col.text_2, .max_lines = 1 });
+    ui.text(line, .{ .font_size = 14, .color = col.text_2, .max_lines = 1 });
     ui.end();
     kit.iconButton(cx, icons.close, .cancel_reply, .{ .size = 32 });
     ui.end();
@@ -1123,7 +1123,7 @@ fn searchSheet(cx: Cx, target: Id) void {
             ui.begin(.{ .direction = .row, .align_items = .center, .gap = 10, .padding = .xy(12, 8) }, .{});
             ui.text(t("Older messages are still being indexed on this device."), .{ .font_size = 13, .color = cx.c.text_2, .grow = 1, .width = .fill });
             if (st.running) {
-                ui.text(if (st.count > 0) fmt.tf("Indexing… {n}", .{ .n = @as(i64, @intCast(st.count)) }) else t("Indexing…"), .{ .font_size = 13, .weight = 650, .color = cx.c.accent });
+                ui.text(if (st.count > 0) fmt.tf("Indexing… {n}", .{ .n = @as(i64, @intCast(st.count)) }) else t("Indexing…"), .{ .font_size = 13, .weight = 500, .color = cx.c.accent });
             } else kit.button(cx, t("Search everything"), .{ .chat_index = .start }, .{ .small = true, .kind = .secondary });
             ui.end();
         }
@@ -1142,7 +1142,7 @@ fn hitRow(cx: Cx, name: []const u8, body: []const u8, at: i64, id: []const u8) v
     const ui = cx.ui;
     ui.begin(.{ .padding = .xy(12, 8), .radius = 12, .gap = 2, .pressed_background = cx.c.hover }, .{ .on_press = .{ .message_tap = Id.of(id) }, .key = key(.{ "hit", id }) });
     ui.begin(.{ .direction = .row, .gap = 6 }, .{});
-    ui.text(name, .{ .font_size = 14, .weight = 650, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
+    ui.text(name, .{ .font_size = 14, .weight = 500, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
     ui.text(fmt.shortDate(cx.a(), at), .{ .font_size = 12, .color = cx.c.text_3 });
     ui.end();
     ui.text(fmt.plain(cx.a(), body, 140), .{ .font_size = 14, .color = cx.c.text_2, .max_lines = 2 });
@@ -1295,7 +1295,7 @@ pub fn infoPanel(cx: Cx) void {
         kit.iconButton(cx, icons.back, .{ .group = .{ .page = if (s.group.page == .admins or s.group.page == .banned) .edit else .main } }, .{ .rtl = icons.back_rtl });
     } else kit.iconButton(cx, icons.close, .close_info, .{});
     const ptitle = if (gchat) |c| vgroup.pageTitle(s, c) orelse t("Info") else if (s.user_info.isSet()) (if (s.store.user(s.user_info.str())) |u| (if (u.b("isBot")) t("Bot info") else t("User info")) else t("Info")) else if (s.store.chat(s.info.str())) |c| @import("infopanes.zig").title(s, c) else t("Info");
-    ui.text(ptitle, .{ .font_size = 20, .weight = 750, .color = col.text, .grow = 1, .width = .fill, .max_lines = 1 });
+    ui.text(ptitle, .{ .font_size = 20, .weight = 700, .color = col.text, .grow = 1, .width = .fill, .max_lines = 1 });
     ui.end();
     ui.beginScroll(.{ .grow = 1, .width = .fill, .height = .fill, .padding = .{ .start = 8, .end = 8, .bottom = 24 } }, key(.{"info"}));
     if (s.user_info.isSet()) {

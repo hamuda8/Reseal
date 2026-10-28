@@ -33,6 +33,15 @@
     <string>Reseal uses the microphone for calls.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Reseal uses your location only when you choose to share it in a chat.</string>
+    <key>UIAppFonts</key>
+    <array>
+        <string>WufourSansGolden-Regular.ttf</string>
+        <string>WufourSansGolden-Medium.ttf</string>
+        <string>WufourSansGolden-Bold.ttf</string>
+        <string>WufourArabicGolden-Regular.ttf</string>
+        <string>WufourArabicGolden-Medium.ttf</string>
+        <string>WufourArabicGolden-Bold.ttf</string>
+    </array>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIApplicationSceneManifest</key>

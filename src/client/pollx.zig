@@ -112,7 +112,7 @@ pub fn votersSheet(cx: Cx) void {
             if (n == .integer and n.integer == @as(i64, @intCast(i))) who += 1;
         };
         ui.begin(.{ .padding = .{ .top = 12, .bottom = 4, .start = 12, .end = 12 } }, .{});
-        ui.text(std.fmt.allocPrint(cx.a(), "{s} — {d}", .{ label, who }) catch "", .{ .font_size = 13.5, .weight = 700, .color = cx.c.text_2 });
+        ui.text(std.fmt.allocPrint(cx.a(), "{s} — {d}", .{ label, who }) catch "", .{ .font_size = 14, .weight = 700, .color = cx.c.text_2 });
         ui.end();
         for (j.arr(res.v, "voters")) |x| for (j.arr(x, "options")) |n| {
             if (n != .integer or n.integer != @as(i64, @intCast(i))) continue;
@@ -120,7 +120,7 @@ pub fn votersSheet(cx: Cx) void {
             ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 48, .padding = .xy(12, 4) }, .{ .key = key(.{ "pv", i, uid }) });
             const u = s.store.user(uid);
             kit.avatar(cx, .{ .name = s.store.displayName(uid), .color = if (u) |uu| uu.i("color") orelse 0 else 0, .image = if (u) |uu| uu.s("avatar") else null, .size = 36 }, key(.{ "pva", i, uid }));
-            ui.text(s.store.displayName(uid), .{ .font_size = 15, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
+            ui.text(s.store.displayName(uid), .{ .font_size = 16, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
             ui.end();
         };
     }

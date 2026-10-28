@@ -914,7 +914,7 @@ fn radio(cx: Cx, label: []const u8, on: bool, m: Msg, k: u64) void {
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 42, .padding = .xy(12, 4), .radius = theme.radius, .pressed_background = cx.c.active }, .{ .on_press = m, .key = k });
     ui.begin(.{ .width = .{ .px = 20 }, .height = .{ .px = 20 }, .radius = 10, .border_width = if (on) 6 else 1.5, .border_color = if (on) cx.c.brand else cx.c.border_strong }, .{});
     ui.end();
-    ui.text(label, .{ .font_size = 15, .color = cx.c.text });
+    ui.text(label, .{ .font_size = 16, .color = cx.c.text });
     ui.end();
 }
 
@@ -967,7 +967,7 @@ pub fn progressSheet(cx: Cx) void {
         .files => .{ t("Downloading files…"), if (r.items.items.len == 0) 1 else @as(f32, @floatFromInt(r.cur)) / @as(f32, @floatFromInt(r.items.items.len)), std.fmt.allocPrint(a, "{d} / {d}", .{ r.cur, r.items.items.len }) catch "" },
         .packing => .{ t("Packing…"), 1, "" },
     };
-    ui.text(status, .{ .font_size = 15, .weight = 600, .color = cx.c.text });
+    ui.text(status, .{ .font_size = 16, .weight = 500, .color = cx.c.text });
     ui.begin(.{ .direction = .row, .height = .{ .px = 6 }, .radius = 3, .background = cx.c.surface_3, .clip = true }, .{});
     const pct: f32 = @max(0, @min(1, frac)) * 100;
     if (pct > 0) {

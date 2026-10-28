@@ -114,9 +114,9 @@ pub fn sheet(cx: Cx) void {
     if (s.fwd.chosen.items.len > 0) {
         ui.begin(.{ .direction = .row, .wrap = true, .gap = 6, .padding = .xy(10, 4) }, .{});
         for (s.fwd.chosen.items) |id| if (s.store.chat(id.str())) |c| {
-            ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .padding = .{ .start = 3, .end = 6, .top = 3, .bottom = 3 }, .radius = 16, .background = cx.c.surface_2, .pressed_opacity = 0.8 }, .{ .on_press = msgOf(.{ .remove = id }), .key = key(.{ "fwchip", id.str() }) });
+            ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .padding = .{ .start = 3, .end = 6, .top = 3, .bottom = 3 }, .radius = 15, .background = cx.c.surface_2, .pressed_opacity = 0.8 }, .{ .on_press = msgOf(.{ .remove = id }), .key = key(.{ "fwchip", id.str() }) });
             vlist.chatAvatar(cx, c, 24);
-            ui.text(s.store.title(c), .{ .font_size = 13.5, .color = cx.c.text, .max_lines = 1 });
+            ui.text(s.store.title(c), .{ .font_size = 14, .color = cx.c.text, .max_lines = 1 });
             ui.icon(icons.close, 14, cx.c.text_2, .{}, 0);
             ui.end();
         };
@@ -136,11 +136,11 @@ pub fn sheet(cx: Cx) void {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52, .padding = .xy(12, 4), .radius = 12, .pressed_background = cx.c.active }, .{ .on_press = msgOf(.{ .toggle = Id.of(c.id()) }), .key = key(.{ "fwd", c.id() }) });
         vlist.chatAvatar(cx, c, 40);
         ui.begin(.{ .grow = 1, .width = .fill }, .{});
-        ui.text(s.store.title(c), .{ .font_size = 15, .weight = 550, .color = cx.c.text, .max_lines = 1 });
+        ui.text(s.store.title(c), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
         ui.text(subtitle(s, c), .{ .font_size = 13, .color = cx.c.text_2, .max_lines = 1 });
         ui.end();
         ui.begin(.{ .width = .{ .px = 22 }, .height = .{ .px = 22 }, .radius = 11, .border_width = if (on) 0 else 1.5, .border_color = cx.c.border_strong, .background = if (on) cx.c.brand else null, .align_items = .center, .justify = .center }, .{});
-        if (on) ui.icon(icons.check, 14, Color.white, .{}, 0);
+        if (on) ui.icon(icons.check, 14, cx.c.on_accent, .{}, 0);
         ui.end();
         ui.end();
     };

@@ -187,9 +187,9 @@ fn tabbar(cx: Cx) void {
         if (n.sec == .contacts) continue;
         const active = s.section == n.sec;
         const col = if (active) c.accent else c.text_3;
-        ui.begin(.{ .grow = 1, .width = .fill, .align_items = .center, .gap = 2, .padding = .xy(0, 6), .radius = 14 }, .{ .on_press = .{ .nav = n.sec }, .key = key(.{ "tab", @intFromEnum(n.sec) }) });
+        ui.begin(.{ .grow = 1, .width = .fill, .align_items = .center, .gap = 2, .padding = .xy(0, 6), .radius = 12 }, .{ .on_press = .{ .nav = n.sec }, .key = key(.{ "tab", @intFromEnum(n.sec) }) });
         ui.icon(n.icon, 24, col, .{}, 0);
-        ui.text(t(n.label), .{ .font_size = 11, .weight = 650, .color = col });
+        ui.text(t(n.label), .{ .font_size = 12, .weight = 500, .color = col, .text_align = .center });
         const count = if (n.sec == .chats) totals.unread else if (n.sec == .saved) totals.saved_unread else 0;
         if (count > 0) {
             ui.begin(.{ .position = .absolute, .inset = .{ .top = 0, .start = 0, .end = 0 }, .align_items = .center }, .{});
@@ -229,12 +229,12 @@ pub fn paneHeader(cx: Cx, title: []const u8, back: bool, large: bool) void {
     const ui = cx.ui;
     if (large) {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .padding = .{ .top = 20, .bottom = 10, .start = 20, .end = 14 } }, .{});
-        ui.text(title, .{ .font_size = 27, .weight = 800, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
+        ui.text(title, .{ .font_size = 27, .weight = 700, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
         return;
     }
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .height = .{ .px = theme.header_h }, .padding = .xy(14, 0) }, .{});
     if (back) kit.iconButton(cx, icons.back, .pop_pane, .{ .rtl = icons.back_rtl });
-    ui.text(title, .{ .font_size = 20, .weight = 750, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
+    ui.text(title, .{ .font_size = 20, .weight = 700, .color = cx.c.text, .grow = 1, .width = .fill, .max_lines = 1 });
 }
 
 pub fn endHeader(cx: Cx) void {
@@ -251,14 +251,14 @@ fn emptyMain(cx: Cx) void {
     views.logo(cx, 96);
     ui.end();
     const title = if (embed) (if (s.embed.app) |a| a.s("theme.title") orelse a.s("name") orelse t("Chats") else t("Chats")) else t("Reseal");
-    ui.text(title, .{ .font_size = 30, .weight = 800, .color = c.text, .text_align = .center });
-    ui.text(if (embed) t("Pick a conversation to read and reply.") else t("Pick a conversation, or start something new. Your chats are encrypted on your devices."), .{ .font_size = 15, .color = c.text_2, .text_align = .center, .max_width = 380, .line_height = 1.6 });
+    ui.text(title, .{ .font_size = 30, .weight = 700, .color = c.text, .text_align = .center });
+    ui.text(if (embed) t("Pick a conversation to read and reply.") else t("Pick a conversation, or start something new. Your chats are encrypted on your devices."), .{ .font_size = 16, .color = c.text_2, .text_align = .center, .max_width = 380, .line_height = 1.5 });
     if (!embed) {
         ui.begin(.{ .direction = .row, .gap = 10, .padding = .{ .top = 18 } }, .{});
         quickAction(cx, icons.compose, t("New chat"), .{ .push_pane = .{ .picker = .new_message } }, c.brand);
-        quickAction(cx, icons.users, t("New group"), .{ .push_pane = .{ .picker = .new_group } }, Color.hex("#1fb3a0"));
-        quickAction(cx, icons.bookmark, t("Saved"), .{ .nav = .saved }, Color.hex("#f37861"));
-        quickAction(cx, icons.sparkles, t("Ask AI"), .{ .nav = .ai }, Color.hex("#8b5cf6"));
+        quickAction(cx, icons.users, t("New group"), .{ .push_pane = .{ .picker = .new_group } }, c.v);
+        quickAction(cx, icons.bookmark, t("Saved"), .{ .nav = .saved }, c.p);
+        quickAction(cx, icons.sparkles, t("Ask AI"), .{ .nav = .ai }, c.o);
         ui.end();
     }
     ui.begin(.{ .direction = .row, .gap = 7, .align_items = .center, .padding = .{ .top = 22 } }, .{});
@@ -272,9 +272,9 @@ fn quickAction(cx: Cx, ic: zui.Icon, label: []const u8, msg: Msg, col: Color) vo
     const ui = cx.ui;
     ui.begin(.{ .width = .{ .px = 150 }, .gap = 10, .padding = .all(16), .radius = 20, .background = cx.c.surface_2, .pressed_background = cx.c.surface_3 }, .{ .on_press = msg });
     ui.begin(.{ .width = .{ .px = 40 }, .height = .{ .px = 40 }, .radius = 13, .background = col, .align_items = .center, .justify = .center }, .{});
-    ui.icon(ic, 22, Color.white, .{}, 0);
+    ui.icon(ic, 22, cx.c.onOf(col), .{}, 0);
     ui.end();
-    ui.text(label, .{ .font_size = 14, .weight = 650, .color = cx.c.text });
+    ui.text(label, .{ .font_size = 14, .weight = 500, .color = cx.c.text });
     ui.end();
 }
 
@@ -355,10 +355,10 @@ pub fn chatItem(cx: Cx, c: *const data.Chat, msg: Msg) void {
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6 }, .{});
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 5, .grow = 1, .width = .fill }, .{});
     if (titleIcon(c)) |ic| ui.icon(ic, 15, col.text_3, .{}, 0);
-    ui.text(s.store.title(c), .{ .font_size = 15, .weight = 650, .color = col.text, .max_lines = 1 });
+    ui.text(s.store.title(c), .{ .font_size = 16, .weight = 500, .color = col.text, .max_lines = 1 });
     if (s.store.isTeamStaff(c)) {
         ui.begin(.{ .padding = .xy(7, 1), .radius = 999, .background = col.surface_3 }, .{});
-        ui.text(j.strOr(c.o.v, "team.name", ""), .{ .font_size = 11.5, .weight = 600, .color = col.text_3, .max_lines = 1 });
+        ui.text(j.strOr(c.o.v, "team.name", ""), .{ .font_size = 12, .weight = 500, .color = col.text_3, .max_lines = 1 });
         ui.end();
     }
     if (c.meBool("locked")) ui.icon(icons.lock, 14, col.text_3, .{}, 0);
@@ -468,10 +468,10 @@ fn chip(cx: Cx, label: []const u8, n: i64, active: bool, msg: Msg) void {
     // Long press or right click: "Mark all as read" for the chats it shows.
     const menu: ?Msg = if (msg == .filter) @import("listextras.zig").chipMsg(msg.filter) else null;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .height = .{ .px = 32 }, .padding = .xy(13, 0), .radius = 11, .background = if (active) c.text else c.surface_2 }, .{ .on_press = msg, .on_long_press = menu, .on_context = menu, .key = key(.{ "chip", label }) });
-    ui.text(label, .{ .font_size = 13.5, .weight = 650, .color = if (active) c.surface else c.text_2, .max_lines = 1 });
+    ui.text(label, .{ .font_size = 13, .weight = 500, .color = if (active) c.surface else c.text_2, .max_lines = 1 });
     if (n > 0) {
         ui.begin(.{ .min_width = 18, .height = .{ .px = 18 }, .padding = .xy(5, 0), .radius = 6, .background = if (active) c.surface else c.accent, .align_items = .center, .justify = .center }, .{});
-        ui.text(fmt.number(cx.a(), n), .{ .font_size = 11.5, .weight = 700, .color = if (active) c.text else Color.white, .line_height = 1.2 });
+        ui.text(fmt.number(cx.a(), n), .{ .font_size = 12, .weight = 700, .color = if (active) c.text else c.on_accent, .line_height = 1.2 });
         ui.end();
     }
     ui.end();
@@ -554,11 +554,11 @@ fn embedHeader(cx: Cx) void {
 
 fn entry(cx: Cx, title: []const u8, sub: []const u8, ic: zui.Icon, msg: Msg) void {
     const ui = cx.ui;
-    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .padding = .xy(14, 10), .radius = 16, .pressed_background = cx.c.active }, .{ .on_press = msg, .key = key(.{ "entry", title }) });
+    ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .padding = .xy(14, 10), .radius = 12, .pressed_background = cx.c.active }, .{ .on_press = msg, .key = key(.{ "entry", title }) });
     kit.avatar(cx, .{ .icon = ic, .color = 4, .size = 44 }, 0);
     ui.begin(.{ .grow = 1, .width = .fill }, .{});
-    ui.text(title, .{ .font_size = 15, .weight = 700, .color = cx.c.text });
-    ui.text(sub, .{ .font_size = 13.5, .color = cx.c.text_2 });
+    ui.text(title, .{ .font_size = 16, .weight = 700, .color = cx.c.text });
+    ui.text(sub, .{ .font_size = 14, .color = cx.c.text_2 });
     ui.end();
     ui.icon(if (cx.s.lang == .ar) icons.chevronRight_rtl else icons.chevronRight, 20, cx.c.text_3, .{}, 0);
     ui.end();
@@ -572,7 +572,7 @@ fn chatsPane(cx: Cx) void {
         embedHeader(cx);
     } else if (!s.searching) {
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 6, .padding = .{ .top = 20, .bottom = 10, .start = 20, .end = 14 } }, .{});
-        ui.text(t("Chats"), .{ .font_size = 27, .weight = 800, .color = cx.c.text, .grow = 1, .width = .fill });
+        ui.text(t("Chats"), .{ .font_size = 27, .weight = 700, .color = cx.c.text, .grow = 1, .width = .fill });
         kit.iconButton(cx, icons.compose, .{ .menu = .{ .menu = .{ .kind = .compose } } }, .{ .soft = true });
         // Phones have no rail: the picture (the account menu) ends the header.
         if (cx.phone) accountPicture(cx, 38);
@@ -615,7 +615,7 @@ fn chatList(cx: Cx) void {
                 ui.icon(icons.archive, 18, cx.c.text_2, .{}, 0);
                 ui.end();
                 ui.end();
-                ui.text(std.fmt.allocPrint(cx.a(), "{s} · {s}", .{ t("Archived"), fmt.number(cx.a(), n) }) catch "", .{ .font_size = 14, .weight = 650, .color = cx.c.text, .grow = 1, .width = .fill });
+                ui.text(std.fmt.allocPrint(cx.a(), "{s} · {s}", .{ t("Archived"), fmt.number(cx.a(), n) }) catch "", .{ .font_size = 14, .weight = 500, .color = cx.c.text, .grow = 1, .width = .fill });
                 const au = s.store.totals().archived_unread;
                 if (au > 0) kit.badge(cx, fmt.number(cx.a(), au), true);
                 ui.end();
@@ -645,12 +645,12 @@ fn personRow(cx: Cx, name: []const u8, sub: []const u8, color: i64, image: ?[]co
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 13, .height = .{ .px = 70 }, .padding = .xy(10, 0), .radius = 18, .pressed_background = cx.c.active }, .{ .on_press = msg, .key = k });
     kit.avatar(cx, .{ .name = name, .color = color, .image = image, .size = 50 }, 0);
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 3 }, .{});
-    ui.text(name, .{ .font_size = 15, .weight = 650, .color = cx.c.text, .max_lines = 1 });
+    ui.text(name, .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
     if (sub.len > 0) ui.text(sub, .{ .font_size = 14, .color = cx.c.text_2, .max_lines = 1 });
     ui.end();
     if (tag) |tg| {
         ui.begin(.{ .padding = .xy(8, 2), .radius = 7, .background = cx.c.accent_soft }, .{});
-        ui.text(tg, .{ .font_size = 11.5, .weight = 700, .color = cx.c.accent });
+        ui.text(tg, .{ .font_size = 12, .weight = 700, .color = cx.c.accent });
         ui.end();
     }
     ui.end();
@@ -686,9 +686,9 @@ fn searchResults(cx: Cx) void {
             if (!(c.is("private") or c.is("bot"))) continue;
             if (n == 10) break;
             n += 1;
-            ui.begin(.{ .width = .{ .px = 74 }, .align_items = .center, .gap = 6, .padding = .xy(0, 8), .radius = 16, .pressed_background = cx.c.hover }, .{ .on_press = .{ .open_chat = Id.of(c.id()) }, .key = key(.{ "recent", c.id() }) });
+            ui.begin(.{ .width = .{ .px = 74 }, .align_items = .center, .gap = 6, .padding = .xy(0, 8), .radius = 12, .pressed_background = cx.c.hover }, .{ .on_press = .{ .open_chat = Id.of(c.id()) }, .key = key(.{ "recent", c.id() }) });
             chatAvatar(cx, c, 52);
-            ui.text(fmt.firstName(s.store.title(c)), .{ .font_size = 12.5, .color = cx.c.text, .max_lines = 1, .max_width = 66 });
+            ui.text(fmt.firstName(s.store.title(c)), .{ .font_size = 12, .color = cx.c.text, .max_lines = 1, .max_width = 66 });
             ui.end();
         }
         if (people > 0) ui.end();
@@ -784,7 +784,7 @@ fn messageHit(cx: Cx, c: *const data.Chat, body: []const u8, at: i64, k: u64) vo
     chatAvatar(cx, c, 50);
     ui.begin(.{ .grow = 1, .width = .fill, .gap = 3 }, .{});
     ui.begin(.{ .direction = .row, .gap = 6 }, .{});
-    ui.text(cx.s.store.title(c), .{ .font_size = 15, .weight = 650, .color = cx.c.text, .max_lines = 1, .grow = 1, .width = .fill });
+    ui.text(cx.s.store.title(c), .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1, .grow = 1, .width = .fill });
     if (at > 0) ui.text(fmt.shortDate(cx.a(), at), .{ .font_size = 12, .color = cx.c.text_3 });
     ui.end();
     ui.text(fmt.plain(cx.a(), body, 120), .{ .font_size = 14, .color = cx.c.text_2, .max_lines = 1 });
@@ -867,8 +867,8 @@ fn contactsPane(cx: Cx) void {
             ui.begin(.{ .direction = .row, .align_items = .center, .gap = 14, .min_height = 52, .padding = .xy(12, 8), .radius = theme.radius, .pressed_background = cx.c.active }, .{ .on_press = .{ .start_global = Id.of(id) }, .key = key(.{ "ct", id }) });
             kit.avatar(cx, .{ .name = name, .color = j.intOr(u, "color", 0), .image = j.str(u, "avatar"), .size = 46, .online = std.mem.eql(u8, j.strOr(presence, "status", ""), "online") }, 0);
             ui.begin(.{ .grow = 1, .width = .fill }, .{});
-            ui.text(name, .{ .font_size = 15, .weight = 550, .color = cx.c.text, .max_lines = 1 });
-            ui.text(text.presenceText(presence), .{ .font_size = 13.5, .color = cx.c.text_2, .max_lines = 1 });
+            ui.text(name, .{ .font_size = 16, .weight = 500, .color = cx.c.text, .max_lines = 1 });
+            ui.text(text.presenceText(presence), .{ .font_size = 14, .color = cx.c.text_2, .max_lines = 1 });
             ui.end();
             ui.end();
         }
@@ -902,10 +902,10 @@ fn callsPane(cx: Cx) void {
             ui.begin(.{ .direction = .row, .align_items = .center, .gap = 14, .min_height = 60, .padding = .xy(12, 8), .radius = theme.radius, .pressed_background = cx.c.active, .grow = 1, .width = .fill }, .{ .on_press = .{ .open_chat = Id.of(c.id()) }, .key = key(.{ "cl", i }) });
             chatAvatar(cx, c, 46);
             ui.begin(.{ .grow = 1, .width = .fill, .gap = 2 }, .{});
-            ui.text(s.store.title(c), .{ .font_size = 15, .weight = 550, .color = if (missed) cx.c.danger else cx.c.text, .max_lines = 1 });
+            ui.text(s.store.title(c), .{ .font_size = 16, .weight = 500, .color = if (missed) cx.c.danger else cx.c.text, .max_lines = 1 });
             ui.begin(.{ .direction = .row, .gap = 4, .align_items = .center }, .{});
             ui.icon(if (outgoing) icons.callOut else icons.callIn, 14, cx.c.text_2, .{}, 0);
-            ui.text(sub.items, .{ .font_size = 13.5, .color = cx.c.text_2, .max_lines = 1 });
+            ui.text(sub.items, .{ .font_size = 14, .color = cx.c.text_2, .max_lines = 1 });
             ui.end();
             ui.end();
             ui.end();

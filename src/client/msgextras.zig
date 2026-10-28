@@ -244,7 +244,7 @@ pub fn seenBySheet(cx: Cx) void {
         const name = if (user) |x| s.store.userName(x) else "…";
         ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 52, .padding = .xy(12, 6), .radius = 12, .pressed_background = cx.c.active }, .{ .on_press = .{ .open_user = Id.of(u.string) }, .key = key(.{ "seen", u.string }) });
         kit.avatar(cx, .{ .name = name, .color = if (user) |x| x.i("color") orelse 0 else 0, .image = if (user) |x| x.s("avatar") else null, .size = 40 }, 0);
-        ui.text(name, .{ .font_size = 15, .color = cx.c.text, .max_lines = 1 });
+        ui.text(name, .{ .font_size = 16, .color = cx.c.text, .max_lines = 1 });
         ui.end();
     };
     views.endSheet(cx);
@@ -253,8 +253,8 @@ pub fn seenBySheet(cx: Cx) void {
 fn detailRow(cx: Cx, label: []const u8, value: []const u8) void {
     const ui = cx.ui;
     ui.begin(.{ .gap = 2, .padding = .xy(12, 8) }, .{});
-    ui.text(label, .{ .font_size = 12.5, .weight = 600, .color = cx.c.text_2 });
-    ui.text(value, .{ .font_size = 15, .color = cx.c.text });
+    ui.text(label, .{ .font_size = 12, .weight = 500, .color = cx.c.text_2 });
+    ui.text(value, .{ .font_size = 16, .color = cx.c.text });
     ui.end();
 }
 
@@ -281,13 +281,13 @@ pub fn pinSheet(cx: Cx) void {
     const ui = cx.ui;
     views.sheet(cx, t("Pin message"));
     ui.begin(.{ .padding = .xy(12, 6), .gap = 12 }, .{});
-    ui.text(t("Pin this message at the top of the chat?"), .{ .font_size = 15, .color = cx.c.text_2, .line_height = 1.5 });
+    ui.text(t("Pin this message at the top of the chat?"), .{ .font_size = 16, .color = cx.c.text_2, .line_height = 1.5 });
     const on = s.extras.pin_notify;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 12, .min_height = 44 }, .{ .on_press = msg(.pin_notify) });
     ui.begin(.{ .width = .{ .px = 22 }, .height = .{ .px = 22 }, .radius = 8, .border_width = if (on) 0 else 1.5, .border_color = cx.c.border_strong, .background = if (on) cx.c.brand else null, .align_items = .center, .justify = .center }, .{});
-    if (on) ui.icon(icons.check, 14, zui.Color.white, .{}, 0);
+    if (on) ui.icon(icons.check, 14, cx.c.on_accent, .{}, 0);
     ui.end();
-    ui.text(t("Notify all members"), .{ .font_size = 15, .color = cx.c.text });
+    ui.text(t("Notify all members"), .{ .font_size = 16, .color = cx.c.text });
     ui.end();
     ui.begin(.{ .direction = .row, .justify = .end, .gap = 8, .padding = .{ .top = 8, .bottom = 8 } }, .{});
     kit.button(cx, t("Cancel"), .close_modal, .{ .kind = .ghost });

@@ -332,10 +332,10 @@ pub fn render(cx: Cx, m: *const data.Message, fg: Color, link: Color, font_size:
             .code => {
                 ui.begin(.{ .padding = .xy(10, 8), .radius = 10, .background = fg.withAlpha(0.08), .width = .fill, .gap = 4 }, .{});
                 ui.begin(.{ .direction = .row, .align_items = .center }, .{});
-                ui.text(b.lang, .{ .font_size = 11.5, .weight = 700, .color = fg, .opacity = 0.65, .grow = 1, .width = .fill });
+                ui.text(b.lang, .{ .font_size = 12, .weight = 700, .color = fg, .opacity = 0.65, .grow = 1, .width = .fill });
                 if (id.len > 0) {
                     ui.begin(.{ .padding = .xy(8, 3), .radius = 8, .pressed_background = fg.withAlpha(0.15) }, .{ .on_press = msgOf(.{ .copy_code = .{ .msg = Id.of(id), .block = @intCast(@min(bi, 65535)) } }), .key = key(.{ "aicopy", id, bi }) });
-                    ui.text(t("Copy"), .{ .font_size = 12, .weight = 650, .color = fg, .opacity = 0.8 });
+                    ui.text(t("Copy"), .{ .font_size = 12, .weight = 500, .color = fg, .opacity = 0.8 });
                     ui.end();
                 }
                 ui.end();
@@ -401,7 +401,7 @@ fn button(cx: Cx, ic: zui.Icon, label: []const u8, msg: Msg, fg: Color) void {
     const ui = cx.ui;
     ui.begin(.{ .direction = .row, .align_items = .center, .gap = 5, .padding = .xy(9, 5), .radius = 9, .background = fg.withAlpha(0.08), .pressed_background = fg.withAlpha(0.18) }, .{ .on_press = msg, .key = key(.{ "aiact", label }) });
     ui.icon(ic, 14, fg, .{}, 0);
-    ui.text(label, .{ .font_size = 12.5, .weight = 650, .color = fg });
+    ui.text(label, .{ .font_size = 12, .weight = 500, .color = fg });
     ui.end();
 }
 

@@ -184,8 +184,21 @@ fn cspFor(q: *Req, frame_ancestors: []const u8, html: []const u8) ![]const u8 {
         const tag_end = std.mem.indexOfScalarPos(u8, rest, open, '>') orelse break;
         const close = std.mem.indexOfPos(u8, rest, tag_end, "</script>") orelse break;
         if (std.mem.indexOf(u8, rest[open..tag_end], " src=") == null) {
+            // Browsers hash the script as parsed, where CRLF and lone CR are LF (a page checked
+            // out on Windows has CRLF).
+            var h = std.crypto.hash.sha2.Sha256.init(.{});
+            const body = rest[tag_end + 1 .. close];
+            var i: usize = 0;
+            while (i < body.len) : (i += 1) {
+                if (body[i] != '\r') {
+                    h.update(body[i .. i + 1]);
+                    continue;
+                }
+                h.update("\n");
+                if (i + 1 < body.len and body[i + 1] == '\n') i += 1;
+            }
             var digest: [32]u8 = undefined;
-            std.crypto.hash.sha2.Sha256.hash(rest[tag_end + 1 .. close], &digest, .{});
+            h.final(&digest);
             var b64: [44]u8 = undefined;
             try scripts.print(q.r.a, " 'sha256-{s}'", .{std.base64.standard.Encoder.encode(&b64, &digest)});
         }
@@ -371,7 +384,9 @@ fn staticFile(q: *Req) !bool {
     const revalidate = for ([_][]const u8{ ".js", ".css", ".html", ".json", ".webmanifest" }) |e| {
         if (std.mem.endsWith(u8, rel, e)) break true;
     } else false;
-    try q.setHeader("cache-control", if (revalidate) "no-cache" else "public, max-age=86400");
+    // Font files carry their version in the name, so they may be kept for a year.
+    const font = std.mem.endsWith(u8, rel, ".woff2");
+    try q.setHeader("cache-control", if (revalidate) "no-cache" else if (font) "public, max-age=31536000, immutable" else "public, max-age=86400");
     if (std.mem.endsWith(u8, rel, ".html")) try q.setHeader("content-security-policy", try csp(q, "'none'"));
     try q.setHeader("etag", etag);
     try q.setHeader("accept-ranges", "bytes");
